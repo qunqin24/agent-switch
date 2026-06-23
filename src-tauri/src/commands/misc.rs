@@ -2092,17 +2092,13 @@ fn anchored_official_update_command(tool: &str, bin_path: &str) -> Option<String
 
 /// 哪些工具的"官方 self-update"优先于包管理器升级（生成 `<tool> update || <pkg-mgr>`）。
 ///
-/// **codex 刻意不在此列**：`codex update` 在 npm 安装上只是裸 `npm install -g
-/// @openai/codex`（无 `@latest` / `--include=optional` / 不先卸载），却只检查 exit code、
-/// 无条件打印 “Update ran successfully”。当 npm 把平台二进制 optional 依赖
-/// `@openai/codex-<triple>` 漏装时它仍 **exit 0 假成功**，使外层 `||` 兜底被短路、损坏被
-/// 成功 toast 掩盖（用户报告的 “Missing optional dependency” 即源于此）。因此 codex 一律走
-/// npm 锚定升级；真正损坏（`runnable=false`）时由 `installs_anchored_command` 的门控改用
-/// `codex_repair_command` 的 uninstall+install 自愈，而非交给 codex 自身的 self-update。
+/// Codex 的健康安装也优先走 `codex update`；真正损坏（`runnable=false`）时由
+/// `installs_anchored_command` 的门控先改用 `codex_repair_command` 的 uninstall+install
+/// 自愈，避免把已经跑不起来的 CLI 交给 self-update。
 fn prefers_official_update(tool: &str, shell: LifecycleCommandShell) -> bool {
     match shell {
         LifecycleCommandShell::Posix => {
-            matches!(tool, "claude" | "opencode" | "openclaw")
+            matches!(tool, "claude" | "codex" | "opencode" | "openclaw")
         }
         LifecycleCommandShell::WindowsBatch => {
             matches!(
@@ -2111,7 +2107,7 @@ fn prefers_official_update(tool: &str, shell: LifecycleCommandShell) -> bool {
                 // 安装方式探测失败弹交互 prompt（spawn npm.cmd 没传 shell:true）；静默
                 // lifecycle 没有 stdin 会挂死，Windows 先锚到包管理器路径，等上游修了
                 // 再把 opencode 加回这里。
-                "claude" | "openclaw"
+                "claude" | "codex" | "openclaw"
             )
         }
     }
@@ -2169,6 +2165,30 @@ fn codex_repair_command(bin_path: &str, real: &str) -> Option<String> {
 #[cfg(target_os = "windows")]
 fn codex_repair_command(_bin_path: &str, _real: &str) -> Option<String> {
     None
+}
+
+/// `codex_broken_package_command` 是 `installs_anchored_command` 在 codex
+/// `runnable=false` 分支里、`codex_repair_command` 之后接续的第二级兜底。它复用
+/// `package_manager_anchored_command_from_paths`，对**会锚定到各自包管理器的来源**
+/// 走 source-specific 的锚定命令：Homebrew formula → `brew upgrade codex`、Volta →
+/// `volta install @openai/codex`、Bun → `bun add -g`、nvm/fnm/mise/homebrew-npm →
+/// 锚到 sibling npm 跑 `npm i -g`（与 runnable=true 的健康升级同一套锚定，只是此处
+/// codex 跑不起来、不能走 `codex update`）。
+///
+/// **为什么 broken 分支走 pkg-mgr 锚定而非 self-update**：`runnable=false` 意味着
+/// `codex --version` 已非 0 退出，把 `codex update` 交给一个跑不起来的 CLI 等于
+/// 调用必然失败；而包管理器侧（brew/volta/bun/sibling npm）的升级不依赖 codex 自身
+/// 可运行——它们直接重写主包 + 平台二进制，是 broken 状态下仍能修复的写回路径。
+/// system / 未知来源没有可靠的 sibling 包管理器可锚定，本函数返回 None，交回上游
+/// `anchored_command_from_paths` 走官方 CLI 自升级（见 `installs_anchored_command` 兜底）。
+#[cfg(not(target_os = "windows"))]
+fn codex_broken_package_command(bin_path: &str, real: &str) -> Option<String> {
+    package_manager_anchored_command_from_paths("codex", bin_path, real)
+}
+
+#[cfg(target_os = "windows")]
+fn codex_broken_package_command(bin_path: &str, _real: &str) -> Option<String> {
+    package_manager_anchored_command_from_paths("codex", bin_path)
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -2361,13 +2381,22 @@ fn installs_anchored_command(tool: &str, installs: &[ToolInstallation]) -> Optio
     // Codex 平台分发包损坏自愈：主包在但平台二进制缺失时 codex 跑不起来
     // （runnable=false），此时正常锚定的 `npm i -g @latest` 是 no-op 修不好——改用
     // uninstall+install 重装补回平台二进制。**但仅限会锚定到 sibling npm 的 node 管理器
-    // 来源**（codex_repair_command 内按 source/real 收窄，brew/volta/bun/system 交回下方
-    // source-specific 锚定，避免误用 npm 重装）。runnable=true 的正常升级也走下方普通锚定
-    // 路径（且因 codex 不在 prefers_official_update，不会再跑会假成功掩盖损坏的 `codex update`）。
+    // 来源**（codex_repair_command 内按 source/real 收窄，brew/volta/bun/system 交给
+    // codex_broken_package_command 做 source-specific 锚定，避免误用 npm 重装，也避免对
+    // 已经跑不起来的 CLI 执行 `codex update`）。runnable=true 的正常升级走下方普通锚定
+    // 路径，并优先使用 `codex update`。
     if tool == "codex" && !inst.runnable {
         if let Some(cmd) = codex_repair_command(&inst.path, &real) {
             return Some(cmd);
         }
+        if let Some(cmd) = codex_broken_package_command(&inst.path, &real) {
+            return Some(cmd);
+        }
+        // system / 未知来源两级 anchor 都返回 None：没有可靠的 sibling npm 可锚定，
+        // 不能像 runnable=false 的兜底旧实现那样无来源约束地裸跑 `npm i -g`（违背
+        // "必须绝对路径、不依赖 PATH"不变量，也和 system 安装的真实写回处脱节）。
+        // 继续走下方 `anchored_command_from_paths`：它会锚到 codex CLI 自身跑官方
+        // `codex update`——与该来源健康升级同一条路径（系统级 codex 的官方自升级）。
     }
     anchored_command_from_paths(tool, &inst.path, &real)
 }
@@ -4206,6 +4235,9 @@ mod tests {
                 cmd,
                 "claude update || npm i -g @anthropic-ai/claude-code@latest"
             );
+            let codex =
+                wsl_tool_action_shell_command("codex", ToolLifecycleAction::Update).unwrap();
+            assert_eq!(codex, "codex update || npm i -g @openai/codex@latest");
         }
     }
 
@@ -4356,10 +4388,10 @@ mod tests {
         }
 
         #[test]
-        fn codex_nvm_anchors_to_that_npm() {
-            // Codex 不走 self-update（`codex update` 在 npm 安装上只是裸 `npm install -g`，
-            // 却会假成功掩盖平台二进制漏装）——直接锚定到同一个 node 的 npm，而非 PATH
-            // 第一个 npm。损坏时的 uninstall+install 自愈见 codex_missing_platform_binary_*。
+        fn codex_nvm_prefers_cli_update_with_npm_fallback() {
+            // 健康 Codex 优先走命令行命中的那份 `codex update`，失败再锚定到同一个
+            // node 的 npm，而非 PATH 第一个 npm。损坏时的 uninstall+install 自愈见
+            // codex_missing_platform_binary_*。
             let cmd = anchored_command_from_paths(
                 "codex",
                 "/Users/me/.nvm/versions/node/v22.14.0/bin/codex",
@@ -4367,7 +4399,7 @@ mod tests {
             );
             assert_eq!(
                 cmd.as_deref(),
-                Some("/Users/me/.nvm/versions/node/v22.14.0/bin/npm i -g @openai/codex@latest")
+                Some("/Users/me/.nvm/versions/node/v22.14.0/bin/codex update || /Users/me/.nvm/versions/node/v22.14.0/bin/npm i -g @openai/codex@latest")
             );
         }
 
@@ -4390,8 +4422,7 @@ mod tests {
         fn volta_self_update_chain_anchors_to_volta() {
             // `~/.volta/bin` 通常不在 GUI 非登录 `bash -c` 的 PATH 里,且用户可能
             // PATH 上还有另一份 volta → 必须绝对路径锚定到命令行命中的这一份。
-            // 用 openclaw（仍在 prefers_official_update）覆盖 volta 分支的 self-update 链;
-            // codex 已改为不 self-update（见 codex_volta_anchors_to_volta_install）。
+            // 用 openclaw 覆盖 volta 分支的 self-update 链。
             let cmd = anchored_command_from_paths(
                 "openclaw",
                 "/Users/me/.volta/bin/openclaw",
@@ -4404,8 +4435,8 @@ mod tests {
         }
 
         #[test]
-        fn codex_volta_anchors_to_volta_install() {
-            // codex 锚定到命令行命中的那份 volta，但不 self-update：纯 `volta install`。
+        fn codex_volta_prefers_cli_update_with_volta_fallback() {
+            // codex 锚定到命令行命中的那份 CLI，失败再回到同一份 Volta。
             let cmd = anchored_command_from_paths(
                 "codex",
                 "/Users/me/.volta/bin/codex",
@@ -4413,7 +4444,7 @@ mod tests {
             );
             assert_eq!(
                 cmd.as_deref(),
-                Some("/Users/me/.volta/bin/volta install @openai/codex")
+                Some("/Users/me/.volta/bin/codex update || /Users/me/.volta/bin/volta install @openai/codex")
             );
         }
 
@@ -4441,7 +4472,7 @@ mod tests {
             );
             assert_eq!(
                 cmd.as_deref(),
-                Some("'/Users/my name/.volta/bin/volta' install @openai/codex")
+                Some("'/Users/my name/.volta/bin/codex' update || '/Users/my name/.volta/bin/volta' install @openai/codex")
             );
         }
 
@@ -4500,7 +4531,7 @@ mod tests {
 
         #[test]
         fn fnm_install_anchors_to_that_npm() {
-            // fnm 是自带同级 npm 的 node 管理器 → 锚定到那处的 npm。
+            // fnm 是自带同级 npm 的 node 管理器 → update 失败后锚定到那处的 npm。
             let cmd = anchored_command_from_paths(
                 "codex",
                 "/Users/me/.local/share/fnm_multishells/12345_abc/bin/codex",
@@ -4509,7 +4540,7 @@ mod tests {
             assert_eq!(
                 cmd.as_deref(),
                 Some(
-                    "/Users/me/.local/share/fnm_multishells/12345_abc/bin/npm i -g @openai/codex@latest"
+                    "/Users/me/.local/share/fnm_multishells/12345_abc/bin/codex update || /Users/me/.local/share/fnm_multishells/12345_abc/bin/npm i -g @openai/codex@latest"
                 )
             );
         }
@@ -4523,7 +4554,7 @@ mod tests {
             );
             assert_eq!(
                 cmd.as_deref(),
-                Some("'/Users/my name/.nvm/versions/node/v22/bin/npm' i -g @openai/codex@latest")
+                Some("'/Users/my name/.nvm/versions/node/v22/bin/codex' update || '/Users/my name/.nvm/versions/node/v22/bin/npm' i -g @openai/codex@latest")
             );
         }
 
@@ -4635,14 +4666,14 @@ mod tests {
         }
 
         #[test]
-        fn codex_runnable_uses_plain_npm_not_self_heal() {
-            // 正常（runnable=true）的 codex 升级：锚定 npm，既不重装、也不跑会假成功
-            // 掩盖损坏的 `codex update`。
+        fn codex_runnable_uses_cli_update_not_self_heal() {
+            // 正常（runnable=true）的 codex 升级：优先 `codex update`，失败再锚定 npm；
+            // 只有 runnable=false 才走重装自愈。
             let healthy = inst("/Users/me/.nvm/versions/node/v22.14.0/bin/codex", true);
             let cmd = installs_anchored_command("codex", &[healthy]);
             assert_eq!(
                 cmd.as_deref(),
-                Some("/Users/me/.nvm/versions/node/v22.14.0/bin/npm i -g @openai/codex@latest")
+                Some("/Users/me/.nvm/versions/node/v22.14.0/bin/codex update || /Users/me/.nvm/versions/node/v22.14.0/bin/npm i -g @openai/codex@latest")
             );
             assert!(!cmd.unwrap().contains("uninstall"));
         }
@@ -4690,6 +4721,19 @@ mod tests {
                 Some("/Users/me/.bun/bin/bun add -g @openai/codex@latest")
             );
             assert!(!cmd.unwrap().contains("npm"));
+        }
+
+        #[test]
+        fn codex_broken_system_install_uses_anchored_cli_update() {
+            // system / 未知来源没有可靠 sibling npm 或专属包管理器时，仍必须使用
+            // 已探测到的绝对 codex 路径；不能退回裸 `codex update || npm ...`。
+            let mut broken = inst("/usr/local/bin/codex", true);
+            broken.runnable = false;
+
+            assert_eq!(
+                installs_anchored_command("codex", &[broken]).as_deref(),
+                Some("/usr/local/bin/codex update")
+            );
         }
 
         #[test]
@@ -4819,9 +4863,8 @@ mod tests {
             );
             assert_eq!(
                 static_fallback_command("codex"),
-                "npm i -g @openai/codex@latest"
+                "codex update || npm i -g @openai/codex@latest"
             );
-            assert!(!static_fallback_command("codex").contains("codex update"));
             assert_eq!(
                 static_fallback_command("gemini"),
                 "npm i -g @google/gemini-cli@latest"

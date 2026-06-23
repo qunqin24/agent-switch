@@ -228,7 +228,11 @@
       "tooltip": {
         "active": "Claude Desktop 本地路由已开启 - {{address}}:{{port}}",
         "inactive": "开启 Claude Desktop 本地路由，用于需要模型映射或格式转换的供应商。当前配置地址：{{address}}:{{port}}"
-      }
+      },
+      "stopConfirmTitle": "确认停止本地路由？",
+      "stopConfirmMessage": "其它应用仍在使用代理接管。继续停止会同时恢复这些应用的接管配置，并关闭本地路由。\n\n确认仍要停止吗？",
+      "stopConfirmConfirm": "仍然停止",
+      "stopConfirmCancel": "保持开启"
     }
   },
   "notifications": {

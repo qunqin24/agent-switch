@@ -228,7 +228,11 @@
       "tooltip": {
         "active": "Claude Desktop local routing is running - {{address}}:{{port}}",
         "inactive": "Turn on Claude Desktop local routing for providers that need model mapping or format conversion. Configured address: {{address}}:{{port}}"
-      }
+      },
+      "stopConfirmTitle": "Stop local routing?",
+      "stopConfirmMessage": "Other apps are still using proxy takeover. Continuing will restore those apps' takeover configs and stop local routing.\n\nStop anyway?",
+      "stopConfirmConfirm": "Stop anyway",
+      "stopConfirmCancel": "Keep running"
     }
   },
   "notifications": {
