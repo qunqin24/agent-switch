@@ -18,6 +18,7 @@ const DATA_SOURCE_ICONS: Record<string, React.ReactNode> = {
   codex_session: <FileText className="h-3.5 w-3.5" />,
   gemini_session: <FileText className="h-3.5 w-3.5" />,
   opencode_session: <FileText className="h-3.5 w-3.5" />,
+  grok_session: <FileText className="h-3.5 w-3.5" />,
 };
 
 export function DataSourceBar({ refreshIntervalMs }: DataSourceBarProps) {
@@ -44,6 +45,14 @@ export function DataSourceBar({ refreshIntervalMs }: DataSourceBarProps) {
           }),
         );
         // Refresh all usage data
+        queryClient.invalidateQueries({ queryKey: usageKeys.all });
+      } else if (result.updated > 0) {
+        toast.success(
+          t("usage.sessionSync.updated", {
+            count: result.updated,
+            defaultValue: "Updated {{count}} records from session logs",
+          }),
+        );
         queryClient.invalidateQueries({ queryKey: usageKeys.all });
       } else {
         toast.info(

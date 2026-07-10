@@ -31,14 +31,14 @@ export function SessionTocSidebar({
   if (items.length <= 2) return null;
 
   return (
-    <div className="w-64 border-l border-zinc-100 dark:border-zinc-800 shrink-0 hidden lg:block">
+    <div className="w-64 h-full min-h-0 flex flex-col border-l border-zinc-100 dark:border-zinc-800 shrink-0 hidden lg:flex">
       <div className="p-3 border-b border-zinc-100 dark:border-zinc-900">
         <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
           <List className="size-3.5" />
           <span>{t("sessionManager.tocTitle")}</span>
         </div>
       </div>
-      <ScrollArea className="h-[calc(100%-40px)]">
+      <ScrollArea className="min-h-0 flex-1">
         <div className="p-2 space-y-0.5">
           {items.map((item, tocIndex) => (
             <button

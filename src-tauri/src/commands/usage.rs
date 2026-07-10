@@ -170,6 +170,23 @@ pub fn get_model_pricing(state: State<'_, AppState>) -> Result<Vec<ModelPricingI
     Ok(pricing)
 }
 
+/// 获取模型定价远端元数据同步状态
+#[tauri::command]
+pub fn get_model_pricing_metadata_sync_status(
+    state: State<'_, AppState>,
+) -> Result<crate::services::pricing_metadata::PricingMetadataSyncStatus, AppError> {
+    crate::services::pricing_metadata::get_pricing_metadata_sync_status(&state.db)
+}
+
+/// 手动刷新模型定价远端元数据
+#[tauri::command]
+pub async fn refresh_model_pricing_metadata(
+    state: State<'_, AppState>,
+) -> Result<crate::services::pricing_metadata::PricingMetadataSyncResult, AppError> {
+    let db = state.db.clone();
+    crate::services::pricing_metadata::refresh_pricing_metadata(&db, true).await
+}
+
 /// 更新模型定价
 #[tauri::command]
 pub fn update_model_pricing(
@@ -238,6 +255,11 @@ pub fn update_model_pricing(
             ],
         )
         .map_err(|e| AppError::Database(format!("更新模型定价失败: {e}")))?;
+        conn.execute(
+            "DELETE FROM model_pricing_remote_suppressions WHERE model_id = ?1",
+            rusqlite::params![model_id],
+        )
+        .map_err(|e| AppError::Database(format!("恢复模型远端同步失败: {e}")))?;
     }
 
     if let Err(e) = db.backfill_missing_usage_costs_for_model(&model_id) {
@@ -268,6 +290,12 @@ pub fn delete_model_pricing(state: State<'_, AppState>, model_id: String) -> Res
         rusqlite::params![model_id],
     )
     .map_err(|e| AppError::Database(format!("删除模型定价失败: {e}")))?;
+    conn.execute(
+        "INSERT OR REPLACE INTO model_pricing_remote_suppressions (model_id, deleted_at)
+         VALUES (?1, ?2)",
+        rusqlite::params![model_id, chrono::Utc::now().timestamp()],
+    )
+    .map_err(|e| AppError::Database(format!("阻止模型远端重新导入失败: {e}")))?;
 
     log::info!("已删除模型定价: {model_id}");
     Ok(())
@@ -285,6 +313,7 @@ pub fn sync_session_usage(
     match crate::services::session_usage_codex::sync_codex_usage(&state.db) {
         Ok(codex_result) => {
             result.imported += codex_result.imported;
+            result.updated += codex_result.updated;
             result.skipped += codex_result.skipped;
             result.files_scanned += codex_result.files_scanned;
             result.errors.extend(codex_result.errors);
@@ -298,6 +327,7 @@ pub fn sync_session_usage(
     match crate::services::session_usage_gemini::sync_gemini_usage(&state.db) {
         Ok(gemini_result) => {
             result.imported += gemini_result.imported;
+            result.updated += gemini_result.updated;
             result.skipped += gemini_result.skipped;
             result.files_scanned += gemini_result.files_scanned;
             result.errors.extend(gemini_result.errors);
@@ -311,12 +341,27 @@ pub fn sync_session_usage(
     match crate::services::session_usage_opencode::sync_opencode_usage(&state.db) {
         Ok(opencode_result) => {
             result.imported += opencode_result.imported;
+            result.updated += opencode_result.updated;
             result.skipped += opencode_result.skipped;
             result.files_scanned += opencode_result.files_scanned;
             result.errors.extend(opencode_result.errors);
         }
         Err(e) => {
             result.errors.push(format!("OpenCode 同步失败: {e}"));
+        }
+    }
+
+    // 同步 Grok Build 使用数据
+    match crate::services::session_usage_grok::sync_grok_usage(&state.db) {
+        Ok(grok_result) => {
+            result.imported += grok_result.imported;
+            result.updated += grok_result.updated;
+            result.skipped += grok_result.skipped;
+            result.files_scanned += grok_result.files_scanned;
+            result.errors.extend(grok_result.errors);
+        }
+        Err(e) => {
+            result.errors.push(format!("Grok 同步失败: {e}"));
         }
     }
 

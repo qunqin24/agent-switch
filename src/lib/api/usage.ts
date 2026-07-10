@@ -8,6 +8,8 @@ import type {
   RequestLog,
   LogFilters,
   ModelPricing,
+  PricingMetadataSyncResult,
+  PricingMetadataSyncStatus,
   ProviderLimitStatus,
   PaginatedLogs,
   SessionSyncResult,
@@ -144,6 +146,15 @@ export const usageApi = {
 
   getModelPricing: async (): Promise<ModelPricing[]> => {
     return invoke("get_model_pricing");
+  },
+
+  getModelPricingMetadataSyncStatus:
+    async (): Promise<PricingMetadataSyncStatus> => {
+      return invoke("get_model_pricing_metadata_sync_status");
+    },
+
+  refreshModelPricingMetadata: async (): Promise<PricingMetadataSyncResult> => {
+    return invoke("refresh_model_pricing_metadata");
   },
 
   updateModelPricing: async (

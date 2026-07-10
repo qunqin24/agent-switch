@@ -100,7 +100,12 @@ pub async fn get_skills_migration_result() -> Result<Option<SkillsMigrationPaylo
 pub struct ToolVersion {
     name: String,
     version: Option<String>,
-    latest_version: Option<String>, // 新增字段：最新版本
+    /// 可由当前安装渠道实际升级到的最新版本。
+    latest_version: Option<String>,
+    /// `latest_version` 的渠道标识。未指定时沿用工具的默认发布源。
+    latest_version_source: Option<String>,
+    /// 当前安装渠道滞后于官方发布时，保留官方发布版本供 UI 说明原因。
+    upstream_latest_version: Option<String>,
     error: Option<String>,
     /// 已定位到可执行文件、但 `--version` 报错退出（装了却跑不起来，如 Node 版本不达标）。
     /// 供前端区分"未安装"与"已安装·无法运行"，无需匹配 error 文案反推语义。
@@ -111,8 +116,8 @@ pub struct ToolVersion {
     wsl_distro: Option<String>,
 }
 
-const VALID_TOOLS: [&str; 6] = [
-    "claude", "codex", "gemini", "opencode", "openclaw", "hermes",
+const VALID_TOOLS: [&str; 7] = [
+    "claude", "codex", "gemini", "opencode", "openclaw", "hermes", "grok",
 ];
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -440,6 +445,10 @@ const CLAUDE_INSTALL_UNIX: &str =
     "bash -c 'tmp=$(mktemp) && curl -fsSL https://claude.ai/install.sh -o $tmp && bash $tmp; status=$?; rm -f $tmp; exit $status'";
 const OPENCODE_INSTALL_UNIX: &str =
     "bash -c 'tmp=$(mktemp) && curl -fsSL https://opencode.ai/install -o $tmp && bash $tmp; status=$?; rm -f $tmp; exit $status'";
+const GROK_INSTALL_UNIX: &str =
+    "bash -c 'tmp=$(mktemp) && curl -fsSL https://x.ai/cli/install.sh -o $tmp && bash $tmp; status=$?; rm -f $tmp; exit $status'";
+const GROK_UPDATE_UNIX: &str =
+    "grok update || bash -c 'tmp=$(mktemp) && curl -fsSL https://x.ai/cli/install.sh -o $tmp && bash $tmp; status=$?; rm -f $tmp; exit $status'";
 
 /// Hermes 官方安装器会自带/选择合适的 Python 运行时。不要再用
 /// `python3 -m pip ... || python -m pip ...`:Hermes PyPI 包要求 Python >=3.11,
@@ -453,6 +462,8 @@ const HERMES_UPDATE_UNIX: &str =
 #[cfg(target_os = "windows")]
 const HERMES_INSTALL_WINDOWS_SCRIPT: &str =
     "irm https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.ps1 | iex";
+#[cfg(target_os = "windows")]
+const GROK_INSTALL_WINDOWS_SCRIPT: &str = "irm https://x.ai/cli/install.ps1 | iex";
 
 #[cfg(target_os = "windows")]
 fn powershell_encoded_command(script: &str) -> String {
@@ -480,6 +491,19 @@ fn hermes_update_windows_command() -> String {
     format!("hermes update || {}", hermes_install_windows_command())
 }
 
+#[cfg(target_os = "windows")]
+fn grok_install_windows_command() -> String {
+    format!(
+        "powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand {}",
+        powershell_encoded_command(GROK_INSTALL_WINDOWS_SCRIPT)
+    )
+}
+
+#[cfg(target_os = "windows")]
+fn grok_update_windows_command() -> String {
+    format!("grok update || {}", grok_install_windows_command())
+}
+
 #[derive(Debug, Clone, Copy)]
 enum LifecycleCommandShell {
     Posix,
@@ -500,7 +524,7 @@ fn npm_install_command_for(tool: &str) -> Option<&'static str> {
 
 fn official_update_args(tool: &str) -> Option<&'static str> {
     match tool {
-        "claude" | "codex" | "hermes" => Some("update"),
+        "claude" | "codex" | "hermes" | "grok" => Some("update"),
         "openclaw" => Some("update --yes"),
         "opencode" => Some("upgrade"),
         _ => None,
@@ -544,6 +568,26 @@ fn tool_action_shell_command_for_shell(
                 #[cfg(target_os = "windows")]
                 (ToolLifecycleAction::Update, LifecycleCommandShell::WindowsBatch) => {
                     return Some(hermes_update_windows_command());
+                }
+                #[cfg(not(target_os = "windows"))]
+                (_, LifecycleCommandShell::WindowsBatch) => return None,
+            }
+            .to_string(),
+        );
+    }
+
+    if tool == "grok" {
+        return Some(
+            match (action, shell) {
+                (ToolLifecycleAction::Install, LifecycleCommandShell::Posix) => GROK_INSTALL_UNIX,
+                (ToolLifecycleAction::Update, LifecycleCommandShell::Posix) => GROK_UPDATE_UNIX,
+                #[cfg(target_os = "windows")]
+                (ToolLifecycleAction::Install, LifecycleCommandShell::WindowsBatch) => {
+                    return Some(grok_install_windows_command());
+                }
+                #[cfg(target_os = "windows")]
+                (ToolLifecycleAction::Update, LifecycleCommandShell::WindowsBatch) => {
+                    return Some(grok_update_windows_command());
                 }
                 #[cfg(not(target_os = "windows"))]
                 (_, LifecycleCommandShell::WindowsBatch) => return None,
@@ -753,37 +797,115 @@ async fn get_single_tool_version_impl(
         ShellProbe::NotFound(e) => (None, Some(e), false),
     };
 
-    // 2. 获取远程最新版本（npm 工具在本地领先 latest 时会按预发布通道补查，见
-    //    fetch_npm_latest_for_tool / npm_prerelease_tags）
+    // 2. 获取远程最新版本。Homebrew Cask 是独立发布渠道；若仍拿 npm 的版本比较，
+    // Cask 已是渠道最新版时会被错误标成“可升级”。
     let local = local_version.as_deref();
-    let latest_version = match tool {
-        "claude" => {
-            fetch_npm_latest_for_tool(&client, "@anthropic-ai/claude-code", tool, local).await
-        }
-        "codex" => fetch_npm_latest_for_tool(&client, "@openai/codex", tool, local).await,
-        "gemini" => fetch_npm_latest_for_tool(&client, "@google/gemini-cli", tool, local).await,
-        "opencode" => {
-            if let Some(version) =
-                fetch_npm_latest_for_tool(&client, "opencode-ai", tool, local).await
-            {
-                Some(version)
-            } else {
-                fetch_github_latest_version(&client, "anomalyco/opencode").await
-            }
-        }
-        "openclaw" => fetch_npm_latest_for_tool(&client, "openclaw", tool, local).await,
-        "hermes" => fetch_pypi_latest_version(&client, "hermes-agent").await,
-        _ => None,
+    let upstream_latest_version = fetch_upstream_latest_version(&client, tool, local).await;
+    let cask_token = if wsl_distro.is_none() {
+        homebrew_cask_token_for_path_default(tool)
+    } else {
+        None
     };
+    let (latest_version, latest_version_source, upstream_latest_version) =
+        if let Some(cask_token) = cask_token {
+            resolve_homebrew_cask_latest_version(
+                fetch_homebrew_cask_latest_version(&client, &cask_token).await,
+                upstream_latest_version,
+            )
+        } else {
+            (upstream_latest_version, None, None)
+        };
 
     ToolVersion {
         name: tool.to_string(),
         version: local_version,
         latest_version,
+        latest_version_source,
+        upstream_latest_version,
         error: local_error,
         installed_but_broken,
         env_type,
         wsl_distro,
+    }
+}
+
+/// 查询工具默认发布源的最新版本。npm 工具在本地领先 latest 时会按预发布通道补查，
+/// 见 `fetch_npm_latest_for_tool` / `npm_prerelease_tags`。
+async fn fetch_upstream_latest_version(
+    client: &reqwest::Client,
+    tool: &str,
+    local_version: Option<&str>,
+) -> Option<String> {
+    match tool {
+        "claude" => {
+            fetch_npm_latest_for_tool(client, "@anthropic-ai/claude-code", tool, local_version)
+                .await
+        }
+        "codex" => fetch_npm_latest_for_tool(client, "@openai/codex", tool, local_version).await,
+        "gemini" => {
+            fetch_npm_latest_for_tool(client, "@google/gemini-cli", tool, local_version).await
+        }
+        "opencode" => {
+            if let Some(version) =
+                fetch_npm_latest_for_tool(client, "opencode-ai", tool, local_version).await
+            {
+                Some(version)
+            } else {
+                fetch_github_latest_version(client, "anomalyco/opencode").await
+            }
+        }
+        "openclaw" => fetch_npm_latest_for_tool(client, "openclaw", tool, local_version).await,
+        "hermes" => fetch_pypi_latest_version(client, "hermes-agent").await,
+        // xAI's changelog is protected by Cloudflare for non-browser clients. Its official
+        // npm distribution provides the same stable release through a public `latest` tag.
+        "grok" => {
+            fetch_npm_latest_for_tool(client, "@xai-official/grok", tool, local_version).await
+        }
+        _ => None,
+    }
+}
+
+/// 从 Homebrew Formulae API 取得 Cask 的当前发布版本。
+async fn fetch_homebrew_cask_latest_version(
+    client: &reqwest::Client,
+    cask_token: &str,
+) -> Option<String> {
+    let url = format!("https://formulae.brew.sh/api/cask/{cask_token}.json");
+    let response = client.get(url).send().await.ok()?;
+    if !response.status().is_success() {
+        return None;
+    }
+
+    response
+        .json::<serde_json::Value>()
+        .await
+        .ok()?
+        .get("version")?
+        .as_str()
+        .map(str::trim)
+        .filter(|version| !version.is_empty())
+        .map(str::to_string)
+}
+
+const LATEST_VERSION_SOURCE_HOMEBREW_CASK: &str = "homebrew_cask";
+
+/// Cask 元数据可用时，版本比较必须以 Cask 为准；官方版本仅作为“渠道滞后”的说明。
+/// 元数据请求失败时保守回退既有上游版本检查，避免网络瞬断把已安装工具显示成未知。
+fn resolve_homebrew_cask_latest_version(
+    cask_latest_version: Option<String>,
+    upstream_latest_version: Option<String>,
+) -> (Option<String>, Option<String>, Option<String>) {
+    match cask_latest_version {
+        Some(cask_latest_version) => {
+            let upstream_latest_version = upstream_latest_version
+                .filter(|upstream_version| upstream_version != &cask_latest_version);
+            (
+                Some(cask_latest_version),
+                Some(LATEST_VERSION_SOURCE_HOMEBREW_CASK.to_string()),
+                upstream_latest_version,
+            )
+        }
+        None => (upstream_latest_version, None, None),
     }
 }
 
@@ -1488,6 +1610,9 @@ fn build_tool_search_paths(tool: &str) -> Vec<std::path::PathBuf> {
     // 常见的安装路径（原生安装优先）
     let mut search_paths: Vec<std::path::PathBuf> = Vec::new();
     if !home.as_os_str().is_empty() {
+        if tool == "grok" {
+            push_unique_path(&mut search_paths, home.join(".grok").join("bin"));
+        }
         push_unique_path(&mut search_paths, home.join(".local/bin"));
         push_unique_path(&mut search_paths, home.join(".npm-global/bin"));
         push_unique_path(&mut search_paths, home.join("n/bin"));
@@ -1941,9 +2066,9 @@ fn parent_dir(p: &str) -> String {
 
 /// 从 canonicalize 后的真身路径提取 Homebrew formula 名：
 /// `/opt/homebrew/Cellar/gemini-cli/0.13.0/...` → `Some("gemini-cli")`。
-/// 非 Cellar 路径（= 不是 formula，可能是 Homebrew 的 node 装的 npm 全局包）返回 None。
+/// 非 Cellar 路径（= 不是 formula，可能是 Cask 或 Homebrew 的 node 装的 npm 全局包）返回 None。
 /// 关键区分：formula 即便内部用 node，真身也落在 `Cellar/<formula>/` 下；而 Homebrew
-/// npm 全局包落在 `/opt/homebrew/lib/node_modules`（不含 Cellar）。两者升级命令不同。
+/// npm 全局包落在 `/opt/homebrew/lib/node_modules`（不含 Cellar）。三者升级命令不同。
 #[cfg(not(target_os = "windows"))]
 fn brew_formula_from_path(real: &str) -> Option<String> {
     let mut segs = real.split('/');
@@ -1952,6 +2077,33 @@ fn brew_formula_from_path(real: &str) -> Option<String> {
             return segs.next().filter(|s| !s.is_empty()).map(|s| s.to_string());
         }
     }
+    None
+}
+
+/// 从 canonicalize 后的真身路径提取 Homebrew Cask token：
+/// `/opt/homebrew/Caskroom/claude-code/2.1.193/claude` → `Some("claude-code")`。
+/// Cask 安装由 Homebrew 管理，不能交给 CLI 的自更新或 npm；两者都会绕开 Caskroom
+/// 当前命中的版本，导致“命令成功但版本没变”或依赖 GUI PATH 中 node 的失败。
+#[cfg(not(target_os = "windows"))]
+fn brew_cask_from_path(real: &str) -> Option<String> {
+    let mut segs = real.split('/');
+    while let Some(seg) = segs.next() {
+        if seg.eq_ignore_ascii_case("Caskroom") {
+            return segs.next().filter(|s| !s.is_empty()).map(|s| s.to_string());
+        }
+    }
+    None
+}
+
+/// PATH 默认入口若落在 Homebrew Caskroom，返回其 Cask token。
+#[cfg(not(target_os = "windows"))]
+fn homebrew_cask_token_for_path_default(tool: &str) -> Option<String> {
+    let real = resolve_path_default(tool)?;
+    brew_cask_from_path(&real.to_string_lossy())
+}
+
+#[cfg(target_os = "windows")]
+fn homebrew_cask_token_for_path_default(_tool: &str) -> Option<String> {
     None
 }
 
@@ -2098,7 +2250,7 @@ fn anchored_official_update_command(tool: &str, bin_path: &str) -> Option<String
 fn prefers_official_update(tool: &str, shell: LifecycleCommandShell) -> bool {
     match shell {
         LifecycleCommandShell::Posix => {
-            matches!(tool, "claude" | "codex" | "opencode" | "openclaw")
+            matches!(tool, "claude" | "codex" | "opencode" | "openclaw" | "grok")
         }
         LifecycleCommandShell::WindowsBatch => {
             matches!(
@@ -2107,7 +2259,7 @@ fn prefers_official_update(tool: &str, shell: LifecycleCommandShell) -> bool {
                 // 安装方式探测失败弹交互 prompt（spawn npm.cmd 没传 shell:true）；静默
                 // lifecycle 没有 stdin 会挂死，Windows 先锚到包管理器路径，等上游修了
                 // 再把 opencode 加回这里。
-                "claude" | "codex" | "openclaw"
+                "claude" | "codex" | "openclaw" | "grok"
             )
         }
     }
@@ -2201,6 +2353,13 @@ fn package_manager_anchored_command_from_paths(
         let brew = sibling_bin(bin_path, "brew")?;
         return Some(format!("{} upgrade {formula}", quote_path_if_spaced(&brew)));
     }
+    if let Some(cask) = brew_cask_from_path(real_target) {
+        let brew = sibling_bin(bin_path, "brew")?;
+        return Some(format!(
+            "{} upgrade --cask {cask}",
+            quote_path_if_spaced(&brew)
+        ));
+    }
     let pkg = npm_package_for(tool)?;
     match infer_install_source(Path::new(bin_path)) {
         "volta" => {
@@ -2245,8 +2404,9 @@ fn package_manager_anchored_command_from_paths(
 /// ② Claude 原生安装器（`~/.local/share/claude/versions/`）→ `<bin_path 绝对> update`；
 ///    bin_path 指向 launcher,launcher 内部 dispatch update 子命令。它不归 npm 管,
 ///    且在 PATH 里比 nvm/homebrew 更靠前,用 npm 升级会装到别处且被原生那份遮蔽。
-/// ③ Homebrew formula（真身在 `Cellar/<formula>/`）→ `<bin_path 同目录>/brew upgrade <formula>`;
-///    formula 由 Homebrew 拥有,避免 self-update 尝试改动包管理器管理的安装。
+/// ③ Homebrew formula / Cask（真身在 `Cellar/<formula>/` / `Caskroom/<cask>/`）→
+///    `<bin_path 同目录>/brew upgrade [--cask] <package>`；Homebrew 管理的安装不可交给
+///    CLI 自更新，否则可能因 GUI PATH 缺 node 失败，或返回成功却仍命中旧 Cask 版本。
 /// ④ 其余支持官方自升级的工具 → `<bin_path 绝对> update/upgrade || <原锚定包管理器命令>`；
 ///    Codex 的 self-update 只在部分 release 可用,所以保留 npm/brew/bun/volta fallback。
 /// ⑤ 不支持官方自升级的 npm 全局包(例如 Gemini CLI) → 锚定到"那处 bin 目录的 npm"。
@@ -2264,7 +2424,7 @@ fn anchored_command_from_paths(tool: &str, bin_path: &str, real_target: &str) ->
         return anchored_official_update_command(tool, bin_path);
     }
     let package_command = package_manager_anchored_command_from_paths(tool, bin_path, real_target);
-    if brew_formula_from_path(real_target).is_some() {
+    if brew_formula_from_path(real_target).is_some() || brew_cask_from_path(real_target).is_some() {
         return package_command;
     }
     if prefers_official_update(tool, LifecycleCommandShell::Posix) {
@@ -2446,6 +2606,7 @@ fn posix_install_command_for(tool: &str) -> String {
         "claude" => installer_with_npm_fallback(CLAUDE_INSTALL_UNIX, tool),
         "opencode" => installer_with_npm_fallback(OPENCODE_INSTALL_UNIX, tool),
         "hermes" => HERMES_INSTALL_UNIX.to_string(),
+        "grok" => GROK_INSTALL_UNIX.to_string(),
         _ => static_fallback_command_for(tool, ToolLifecycleAction::Install),
     }
 }
@@ -3657,7 +3818,27 @@ mod tests {
     fn test_extract_version() {
         assert_eq!(extract_version("claude 1.0.20"), "1.0.20");
         assert_eq!(extract_version("v2.3.4-beta.1"), "2.3.4-beta.1");
+        assert_eq!(extract_version("Grok Build 0.2.94"), "0.2.94");
         assert_eq!(extract_version("no version here"), "no version here");
+    }
+
+    #[test]
+    fn grok_build_uses_its_official_lifecycle_commands() {
+        assert!(VALID_TOOLS.contains(&"grok"));
+        assert_eq!(posix_install_command_for("grok"), GROK_INSTALL_UNIX);
+        assert_eq!(
+            tool_action_shell_command_for_shell(
+                "grok",
+                ToolLifecycleAction::Update,
+                LifecycleCommandShell::Posix,
+            ),
+            Some(GROK_UPDATE_UNIX.to_string())
+        );
+        assert_eq!(official_update_args("grok"), Some("update"));
+        assert!(prefers_official_update(
+            "grok",
+            LifecycleCommandShell::Posix,
+        ));
     }
 
     #[test]
@@ -3738,6 +3919,29 @@ mod tests {
         assert_eq!(
             pick_latest_version(map, &["beta"], Some("0.200.0")),
             Some("0.135.0".to_string())
+        );
+    }
+
+    #[test]
+    fn homebrew_cask_latest_version_overrides_upstream_for_update_decisions() {
+        assert_eq!(
+            resolve_homebrew_cask_latest_version(
+                Some("2.1.197".to_string()),
+                Some("2.1.206".to_string()),
+            ),
+            (
+                Some("2.1.197".to_string()),
+                Some(LATEST_VERSION_SOURCE_HOMEBREW_CASK.to_string()),
+                Some("2.1.206".to_string()),
+            )
+        );
+        assert_eq!(
+            resolve_homebrew_cask_latest_version(Some("2.1.197".to_string()), None),
+            (
+                Some("2.1.197".to_string()),
+                Some(LATEST_VERSION_SOURCE_HOMEBREW_CASK.to_string()),
+                None,
+            )
         );
     }
 
@@ -4370,6 +4574,31 @@ mod tests {
                 "/opt/homebrew/Cellar/codex/1.2.3/bin/codex",
             );
             assert_eq!(cmd.as_deref(), Some("/opt/homebrew/bin/brew upgrade codex"));
+        }
+
+        #[test]
+        fn homebrew_casks_use_brew_cask_upgrade_not_cli_self_update() {
+            // Homebrew Cask 的真身在 Caskroom 而不是 Cellar。若误走 CLI update：
+            // Codex 旧版会依赖 GUI PATH 中的 node，Claude 则可能返回 0 却不改 Cask 版本。
+            let codex = anchored_command_from_paths(
+                "codex",
+                "/opt/homebrew/bin/codex",
+                "/opt/homebrew/Caskroom/codex/0.142.5/codex-aarch64-apple-darwin",
+            );
+            assert_eq!(
+                codex.as_deref(),
+                Some("/opt/homebrew/bin/brew upgrade --cask codex")
+            );
+
+            let claude = anchored_command_from_paths(
+                "claude",
+                "/opt/homebrew/bin/claude",
+                "/opt/homebrew/Caskroom/claude-code/2.1.193/claude",
+            );
+            assert_eq!(
+                claude.as_deref(),
+                Some("/opt/homebrew/bin/brew upgrade --cask claude-code")
+            );
         }
 
         #[test]

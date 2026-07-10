@@ -35,6 +35,7 @@ import appIcon from "@/assets/icons/app-icon.png";
 import fable5VerifiedBanner from "@/assets/fable5-verified.png";
 import { APP_ICON_MAP } from "@/config/appConfig";
 import type { AppId } from "@/lib/api/types";
+import { ProviderIcon } from "@/components/ProviderIcon";
 import { extractErrorMessage } from "@/utils/errorUtils";
 import { isWindows } from "@/lib/platform";
 import { isUpdateAvailable } from "@/lib/version";
@@ -49,6 +50,8 @@ interface ToolVersion {
   name: string;
   version: string | null;
   latest_version: string | null;
+  latest_version_source?: string | null;
+  upstream_latest_version?: string | null;
   error: string | null;
   // 后端已定位到可执行文件但 --version 报错（装了却跑不起来）。直接读此字段，
   // 不要靠匹配 error 文案反推——避免前端与后端字符串硬耦合。
@@ -64,6 +67,7 @@ const TOOL_NAMES = [
   "opencode",
   "openclaw",
   "hermes",
+  "grok",
 ] as const;
 type ToolName = (typeof TOOL_NAMES)[number];
 type ToolLifecycleAction = "install" | "update";
@@ -122,6 +126,11 @@ const HERMES_WINDOWS_INSTALL_COMMAND = `powershell -NoProfile -ExecutionPolicy B
   HERMES_WINDOWS_INSTALL_SCRIPT,
 )}`;
 
+const GROK_WINDOWS_INSTALL_SCRIPT = "irm https://x.ai/cli/install.ps1 | iex";
+const GROK_WINDOWS_INSTALL_COMMAND = `powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${powershellEncodedCommand(
+  GROK_WINDOWS_INSTALL_SCRIPT,
+)}`;
+
 const POSIX_ONE_CLICK_INSTALL_COMMANDS = `# Claude Code
 ${posixScriptInstallCommand("https://claude.ai/install.sh")} || npm i -g @anthropic-ai/claude-code@latest
 # Codex
@@ -133,7 +142,9 @@ ${posixScriptInstallCommand("https://opencode.ai/install")} || npm i -g opencode
 # OpenClaw
 npm i -g openclaw@latest
 # Hermes
-${posixScriptInstallCommand("https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh")}`;
+${posixScriptInstallCommand("https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh")}
+# Grok Build
+${posixScriptInstallCommand("https://x.ai/cli/install.sh")}`;
 
 const WINDOWS_ONE_CLICK_INSTALL_COMMANDS = `# Claude Code
 npm i -g @anthropic-ai/claude-code@latest
@@ -146,7 +157,9 @@ npm i -g opencode-ai@latest
 # OpenClaw
 npm i -g openclaw@latest
 # Hermes
-${HERMES_WINDOWS_INSTALL_COMMAND}`;
+${HERMES_WINDOWS_INSTALL_COMMAND}
+# Grok Build
+${GROK_WINDOWS_INSTALL_COMMAND}`;
 
 const ONE_CLICK_INSTALL_COMMANDS = isWindows()
   ? WINDOWS_ONE_CLICK_INSTALL_COMMANDS
@@ -159,6 +172,7 @@ const TOOL_DISPLAY_NAMES: Record<ToolName, string> = {
   opencode: "OpenCode",
   openclaw: "OpenClaw",
   hermes: "Hermes",
+  grok: "Grok Build",
 };
 
 // 后端返回的 tool 是 string；这里收敛唯一的 ToolName 断言与兜底，供升级确认
@@ -167,7 +181,7 @@ function toolDisplayName(tool: string): string {
   return TOOL_DISPLAY_NAMES[tool as ToolName] ?? tool;
 }
 
-const TOOL_APP_IDS: Record<ToolName, AppId> = {
+const TOOL_APP_IDS: Record<Exclude<ToolName, "grok">, AppId> = {
   claude: "claude",
   codex: "codex",
   gemini: "gemini",
@@ -321,8 +335,8 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
   const loadAllToolVersions = useCallback(
     async (options?: { force?: boolean }) => {
       const force = options?.force ?? false;
-      // 命中新鲜缓存：切回「关于」Tab 触发的重挂直接复用上次结果，跳过 6 个 `--version`
-      // 子进程 + 6 个 latest 版本网络请求。手动「刷新」传 force 绕过缓存强制重查。
+      // 命中新鲜缓存：切回「关于」Tab 触发的重挂直接复用上次结果，跳过 7 个 `--version`
+      // 子进程 + 7 个 latest 版本网络请求。手动「刷新」传 force 绕过缓存强制重查。
       if (
         !force &&
         toolVersionsCache &&
@@ -336,7 +350,7 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
       try {
         // 逐工具并发探测：每个工具一完成就合并进 toolVersions（并写模块缓存）、清掉自己
         // 的 loadingTools 标志，对应卡片随即独立刷新——而非等全部探测完才一次性显示（后端
-        // 原本对 6 个工具串行 await，总耗时累加；并发后压成「最慢的那一个」）。refreshTool-
+        // 原本对 7 个工具串行 await，总耗时累加；并发后压成「最慢的那一个」）。refreshTool-
         // Versions 已内建按 name 合并 + per-tool loading + try/catch 兜底（单工具失败返回 []
         // 不拖累其余），故 Promise.all 永不 reject。Respect current shell/flag overrides.
         await Promise.all(
@@ -383,7 +397,7 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
 
     // 本软件自身版本走本地调用（getVersion，无网络，毫秒级），与工具版本探测彼此独立。
     // 之前两者被塞进同一个 Promise.all，导致 setVersion / setIsLoadingVersion 被压在
-    // 「全部工具检查完成」之后——图标下方的版本徽标因此要干等 6 个工具全检完才显示。
+    // 「全部工具检查完成」之后——图标下方的版本徽标因此要干等 7 个工具全检完才显示。
     // 拆成两条独立链路：应用版本一拿到就立刻显示，工具探测各自渐进刷新，互不阻塞。
     const loadAppVersion = async () => {
       try {
@@ -525,7 +539,7 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
     }
   }, []);
 
-  // 顶部按钮：一次性诊断全部 6 个工具，有冲突的写入各自卡片，
+  // 顶部按钮：一次性诊断全部 7 个工具，有冲突的写入各自卡片，
   // 全部无冲突时给一条 info toast。后端逐工具枚举所有安装并判定分歧。
   const handleDiagnoseAll = useCallback(async () => {
     setIsDiagnosingAll(true);
@@ -991,7 +1005,17 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
         <div className="flex flex-col gap-0 overflow-hidden rounded-[10px] border border-border/70 bg-card shadow-sm divide-y divide-border/60">
           {TOOL_NAMES.map((toolName) => {
             const tool = toolVersionByName.get(toolName);
-            const appConfig = APP_ICON_MAP[TOOL_APP_IDS[toolName]];
+            const toolIcon =
+              toolName === "grok" ? (
+                <ProviderIcon
+                  icon="grok"
+                  name="Grok Build"
+                  size={16}
+                  showFallback={false}
+                />
+              ) : (
+                APP_ICON_MAP[TOOL_APP_IDS[toolName]].icon
+              );
             const displayName = TOOL_DISPLAY_NAMES[toolName];
             const isToolVersionLoading =
               Boolean(loadingTools[toolName]) ||
@@ -1000,6 +1024,8 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
               tool?.version,
               tool?.latest_version,
             );
+            const usesHomebrewCaskChannel =
+              tool?.latest_version_source === "homebrew_cask";
             const installedButBroken = Boolean(tool?.installed_but_broken);
             const action: ToolLifecycleAction | null =
               isToolVersionLoading || installedButBroken
@@ -1019,7 +1045,7 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
                   {/* 左侧：微标 + 名称与环境 */}
                   <div className="flex items-center gap-3 min-w-[140px]">
                     <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-background border border-border shadow-sm">
-                      {appConfig?.icon ?? <Terminal className="h-4 w-4" />}
+                      {toolIcon ?? <Terminal className="h-4 w-4" />}
                     </span>
                     <div className="text-left">
                       <div className="text-xs font-semibold text-zinc-900 dark:text-zinc-50 leading-none">
@@ -1057,7 +1083,9 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
                     </div>
                     <div className="flex flex-col items-start gap-0.5">
                       <span className="text-[9px] text-zinc-400 dark:text-zinc-500 uppercase tracking-wider font-semibold">
-                        {t("settings.latestVersion")}
+                        {usesHomebrewCaskChannel
+                          ? t("settings.latestVersionHomebrewCask")
+                          : t("settings.latestVersion")}
                       </span>
                       <span className="font-mono text-xs text-zinc-700 dark:text-zinc-300">
                         {isToolVersionLoading
@@ -1074,6 +1102,17 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
                       </div>
                     )}
                   </div>
+
+                  {!isToolVersionLoading &&
+                    usesHomebrewCaskChannel &&
+                    tool?.upstream_latest_version && (
+                      <div className="flex items-center gap-1.5 text-[10px] text-amber-700 dark:text-amber-300">
+                        <Info className="h-3 w-3 shrink-0" />
+                        {t("settings.homebrewCaskVersionLag", {
+                          version: tool.upstream_latest_version,
+                        })}
+                      </div>
+                    )}
 
                   {/* 右侧：选择器 + 状态 + 操作按钮 */}
                   <div className="flex items-center gap-3 flex-shrink-0">

@@ -13,7 +13,7 @@ const KEEP_LIST = [
     'bytedance', 'doubao', 'deepseek', 'moonshot', 'kimi', 'stepfun',
     'zhipu', 'chatglm', 'glm', 'minimax', 'mistral', 'cohere',
     'perplexity', 'huggingface', 'midjourney', 'stability',
-    'xai', 'grok', 'yi', 'zeroone', 'ollama',
+    'xai', 'grok', 'opencode', 'yi', 'zeroone', 'ollama',
     'packycode',
 
     // Cloud/Tools

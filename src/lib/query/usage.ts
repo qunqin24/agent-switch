@@ -131,6 +131,7 @@ export const usageKeys = {
   detail: (requestId: string) =>
     [...usageKeys.all, "detail", requestId] as const,
   pricing: () => [...usageKeys.all, "pricing"] as const,
+  pricingMetadata: () => [...usageKeys.all, "pricing-metadata"] as const,
   limits: (providerId: string, appType: string) =>
     [...usageKeys.all, "limits", providerId, appType] as const,
   script: (providerId: string, appType: string) =>
@@ -325,6 +326,25 @@ export function useModelPricing() {
   return useQuery({
     queryKey: usageKeys.pricing(),
     queryFn: usageApi.getModelPricing,
+  });
+}
+
+export function usePricingMetadataSyncStatus() {
+  return useQuery({
+    queryKey: usageKeys.pricingMetadata(),
+    queryFn: usageApi.getModelPricingMetadataSyncStatus,
+  });
+}
+
+export function useRefreshPricingMetadata() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: usageApi.refreshModelPricingMetadata,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: usageKeys.pricing() });
+      queryClient.invalidateQueries({ queryKey: usageKeys.pricingMetadata() });
+    },
   });
 }
 

@@ -8,7 +8,7 @@ const ICONS_TO_EXTRACT = {
     'openai', 'anthropic', 'claude', 'google', 'gemini',
     'deepseek', 'kimi', 'moonshot', 'stepfun', 'zhipu', 'minimax',
     'baidu', 'alibaba', 'tencent', 'meta', 'microsoft',
-    'cohere', 'perplexity', 'mistral', 'huggingface'
+    'cohere', 'perplexity', 'mistral', 'grok', 'opencode', 'huggingface'
   ],
 
   // 云平台

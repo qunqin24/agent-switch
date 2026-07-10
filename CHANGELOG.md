@@ -5,6 +5,26 @@ All notable changes to CC Switch will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.16.7] - 2026-07-11
+
+### Added
+
+- Added Grok Build as a managed local tool, including install, update, version detection, and Usage dashboard support.
+- Added automatic refresh of the official model-pricing catalog with ETag caching, user override preservation, and historical zero-cost backfill.
+
+### Changed
+
+- Usage accounting now records the actual pricing model for local Grok Build turns, including cache-read tokens, and the session sync action reports repaired historical records separately from new imports.
+- Updated OpenCode and Grok brand icons to use the LobeHub SVG catalog.
+
+### Fixed
+
+- Fixed Claude Code and Codex upgrades across native installer, Homebrew Cask, Node managers, and broken-install recovery paths; upgrades now verify that the installed version actually changed.
+- Fixed Grok Build sessions that change models mid-conversation: each turn is billed by its own event model, and rotated unified logs are safely re-scanned without duplicate records.
+- Fixed session-manager scrolling so the conversation list, message pane, and table of contents scroll independently rather than moving the whole page.
+- Fixed usage statistics to hide unmetered redirect aliases and calculate cache-inclusive Grok input correctly during backfill.
+- Made daily usage-rollup tests deterministic across local time zones.
+
 ## [3.16.6] - 2026-06-20
 
 ### Changed

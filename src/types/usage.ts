@@ -38,6 +38,7 @@ export interface RequestLog {
 
 export interface SessionSyncResult {
   imported: number;
+  updated: number;
   skipped: number;
   filesScanned: number;
   errors: string[];
@@ -63,6 +64,26 @@ export interface ModelPricing {
   outputCostPerMillion: string;
   cacheReadCostPerMillion: string;
   cacheCreationCostPerMillion: string;
+}
+
+export interface PricingMetadataSyncStatus {
+  sourceUrl: string;
+  lastAttemptAt: number | null;
+  lastSuccessAt: number | null;
+  lastError: string | null;
+  etag: string | null;
+  lastAdded: number;
+  lastUpdated: number;
+  lastPreserved: number;
+}
+
+export interface PricingMetadataSyncResult {
+  outcome: "updated" | "not_modified" | "skipped";
+  added: number;
+  updated: number;
+  preserved: number;
+  backfilledRows: number;
+  status: PricingMetadataSyncStatus;
 }
 
 export interface UsageSummary {
@@ -167,9 +188,10 @@ export interface UsageRangeSelection {
  * Desktop's full usage. The backend collapses `claude-desktop → claude` in
  * every dashboard query (see `folded_app_type_sql`).
  * `opencode` / `openclaw` / `hermes` have no proxy handler at all — they
- * appear only as managed apps elsewhere.
+ * appear only as managed apps elsewhere. Grok Build is included because its
+ * local unified session log contains per-turn usage fields.
  */
-export type AppType = "claude" | "codex" | "gemini" | "opencode";
+export type AppType = "claude" | "codex" | "gemini" | "opencode" | "grok";
 
 export type AppTypeFilter = "all" | AppType;
 
@@ -178,6 +200,7 @@ export const KNOWN_APP_TYPES: ReadonlyArray<AppType> = [
   "codex",
   "gemini",
   "opencode",
+  "grok",
 ];
 
 /**
@@ -195,6 +218,7 @@ export const KNOWN_APP_TYPES: ReadonlyArray<AppType> = [
 export const CACHE_INCLUSIVE_APP_TYPES: ReadonlySet<string> = new Set([
   "codex",
   "gemini",
+  "grok",
 ]);
 
 /** Subset of request-log fields needed to derive cache-normalized input. */

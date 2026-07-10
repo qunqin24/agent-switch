@@ -231,6 +231,8 @@ impl Database {
         )
         .map_err(|e| AppError::Database(e.to_string()))?;
 
+        Self::create_model_pricing_metadata_tables(conn)?;
+
         // 12. Stream Check Logs 表
         conn.execute("CREATE TABLE IF NOT EXISTS stream_check_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT, provider_id TEXT NOT NULL, provider_name TEXT NOT NULL,
@@ -1270,10 +1272,62 @@ impl Database {
         Ok(())
     }
 
+    // 模型价格远端元数据同步辅助表。model_pricing 仍是唯一的计价来源；这些表只
+    // 用来区分内置价、上一次远端价和用户手动覆盖，避免自动同步覆盖用户配置。
+    // 此方法也会被 seed 路径调用，因为部分旧数据库迁移会直接进入 seed。
+    fn create_model_pricing_metadata_tables(conn: &Connection) -> Result<(), AppError> {
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS model_pricing_builtin_baseline (
+                model_id TEXT PRIMARY KEY, display_name TEXT NOT NULL,
+                input_cost_per_million TEXT NOT NULL, output_cost_per_million TEXT NOT NULL,
+                cache_read_cost_per_million TEXT NOT NULL DEFAULT '0',
+                cache_creation_cost_per_million TEXT NOT NULL DEFAULT '0'
+            )",
+            [],
+        )
+        .map_err(|e| AppError::Database(e.to_string()))?;
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS model_pricing_remote_values (
+                model_id TEXT PRIMARY KEY, display_name TEXT NOT NULL,
+                input_cost_per_million TEXT NOT NULL, output_cost_per_million TEXT NOT NULL,
+                cache_read_cost_per_million TEXT NOT NULL DEFAULT '0',
+                cache_creation_cost_per_million TEXT NOT NULL DEFAULT '0',
+                source_etag TEXT,
+                updated_at INTEGER NOT NULL
+            )",
+            [],
+        )
+        .map_err(|e| AppError::Database(e.to_string()))?;
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS model_pricing_remote_suppressions (
+                model_id TEXT PRIMARY KEY,
+                deleted_at INTEGER NOT NULL
+            )",
+            [],
+        )
+        .map_err(|e| AppError::Database(e.to_string()))?;
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS model_pricing_metadata_sync_state (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                etag TEXT,
+                last_attempt_at INTEGER,
+                last_success_at INTEGER,
+                last_error TEXT,
+                last_added INTEGER NOT NULL DEFAULT 0,
+                last_updated INTEGER NOT NULL DEFAULT 0,
+                last_preserved INTEGER NOT NULL DEFAULT 0
+            )",
+            [],
+        )
+        .map_err(|e| AppError::Database(e.to_string()))?;
+        Ok(())
+    }
+
     /// 插入默认模型定价数据
     /// 格式: (model_id, display_name, input, output, cache_read, cache_creation)
     /// 注意: model_id 使用短横线格式（如 claude-haiku-4-5），与 API 返回的模型名称标准化后一致
     fn seed_model_pricing(conn: &Connection) -> Result<(), AppError> {
+        Self::create_model_pricing_metadata_tables(conn)?;
         let pricing_data = [
             // Claude Fable 5（Opus 之上的新档）
             (
@@ -1853,6 +1907,7 @@ impl Database {
             ("glm-4.6", "GLM-4.6", "0.6", "2.2", "0.11", "0"),
             ("glm-5", "GLM-5", "1", "3.2", "0.2", "0"),
             ("glm-5.1", "GLM-5.1", "1.4", "4.4", "0.26", "0"),
+            ("glm-5.2", "GLM-5.2", "1.4", "4.4", "0.26", "0"),
             // MiMo (小米)
             (
                 "mimo-v2-flash",
@@ -2087,6 +2142,14 @@ impl Database {
                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             )
             .map_err(|e| AppError::Database(format!("准备模型定价语句失败: {e}")))?;
+        let mut baseline_stmt = conn
+            .prepare(
+                "INSERT OR IGNORE INTO model_pricing_builtin_baseline (
+                    model_id, display_name, input_cost_per_million, output_cost_per_million,
+                    cache_read_cost_per_million, cache_creation_cost_per_million
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            )
+            .map_err(|e| AppError::Database(format!("准备内置模型定价基线语句失败: {e}")))?;
         for (model_id, display_name, input, output, cache_read, cache_creation) in pricing_data {
             stmt.execute(rusqlite::params![
                 model_id,
@@ -2097,6 +2160,16 @@ impl Database {
                 cache_creation
             ])
             .map_err(|e| AppError::Database(format!("插入模型定价失败: {e}")))?;
+            baseline_stmt
+                .execute(rusqlite::params![
+                    model_id,
+                    display_name,
+                    input,
+                    output,
+                    cache_read,
+                    cache_creation
+                ])
+                .map_err(|e| AppError::Database(format!("插入内置模型定价基线失败: {e}")))?;
         }
 
         log::info!("已插入 {} 条默认模型定价数据", pricing_data.len());
@@ -2407,6 +2480,26 @@ impl Database {
                 ],
             )
             .map_err(|e| AppError::Database(format!("修复模型 {model_id} 定价失败: {e}")))?;
+            conn.execute(
+                "UPDATE model_pricing_builtin_baseline SET
+                    display_name = ?2,
+                    input_cost_per_million = ?3,
+                    output_cost_per_million = ?4,
+                    cache_read_cost_per_million = ?5,
+                    cache_creation_cost_per_million = ?6
+                 WHERE model_id = ?1",
+                rusqlite::params![
+                    model_id,
+                    display_name,
+                    input,
+                    output,
+                    cache_read,
+                    cache_creation
+                ],
+            )
+            .map_err(|e| {
+                AppError::Database(format!("更新模型 {model_id} 内置定价基线失败: {e}"))
+            })?;
         }
 
         Ok(())

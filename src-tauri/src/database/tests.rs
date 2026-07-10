@@ -741,6 +741,19 @@ fn schema_model_pricing_is_seeded_on_init() {
         "应该包含 Gemini 模型定价，实际数量: {}",
         gemini_count
     );
+
+    let glm_5_2: (String, String, String) = conn
+        .query_row(
+            "SELECT input_cost_per_million, output_cost_per_million, cache_read_cost_per_million
+             FROM model_pricing WHERE model_id = 'glm-5.2'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .expect("GLM-5.2 pricing should be seeded");
+    assert_eq!(
+        glm_5_2,
+        ("1.4".to_string(), "4.4".to_string(), "0.26".to_string())
+    );
 }
 
 #[test]

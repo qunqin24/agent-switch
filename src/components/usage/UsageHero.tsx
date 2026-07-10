@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useUsageSummaryByApp } from "@/lib/query/usage";
 import { cn } from "@/lib/utils";
 import { APP_ICON_MAP } from "@/config/appConfig";
+import { ProviderIcon } from "@/components/ProviderIcon";
 import type { AppId } from "@/lib/api/types";
 import {
   Activity,
@@ -65,6 +66,10 @@ const TITLE_THEMES: Record<AppType | "all", TitleTheme> = {
     accent: "text-purple-600 dark:text-purple-400",
     iconBg: "bg-purple-500/10",
   },
+  grok: {
+    accent: "text-teal-700 dark:text-teal-300",
+    iconBg: "bg-teal-500/10",
+  },
 };
 
 /**
@@ -123,7 +128,7 @@ type CacheWriteState = "ok" | "partial" | "na";
 
 /**
  * Anthropic-style protocols report cache creation; OpenAI-style protocols
- * (Codex/Gemini) do not — so a mix shows the number with a caveat, all-OpenAI
+ * (Codex/Gemini/Grok) do not — so a mix shows the number with a caveat, all-OpenAI
  * shows N/A. `appTypes` is the set actually contributing to the displayed
  * summary (a single app, or every app that participated in "all").
  */
@@ -149,6 +154,16 @@ function AppGlyph({
   appType?: string;
   accentClass: string;
 }) {
+  if (appType === "grok") {
+    return (
+      <ProviderIcon
+        icon="grok"
+        name="Grok Build"
+        size={20}
+        showFallback={false}
+      />
+    );
+  }
   if (appType && appType in APP_ICON_MAP) {
     const base = APP_ICON_MAP[appType as AppId].icon;
     if (isValidElement<{ size?: number }>(base)) {

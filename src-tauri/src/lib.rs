@@ -981,6 +981,38 @@ pub fn run() {
                 }
             }
 
+            // 模型定价元数据：启动时按 24 小时间隔检查一次，随后在常驻期间每天检查。
+            // 网络或远端格式异常只记录状态，不会影响本地定价和应用启动。
+            let db_for_pricing_metadata = app.state::<AppState>().db.clone();
+            tauri::async_runtime::spawn(async move {
+                const PRICING_METADATA_SYNC_INTERVAL_SECS: u64 = 24 * 60 * 60;
+
+                if let Err(e) =
+                    crate::services::pricing_metadata::refresh_pricing_metadata_if_due(
+                        &db_for_pricing_metadata,
+                    )
+                    .await
+                {
+                    log::warn!("模型定价元数据启动同步失败: {e}");
+                }
+
+                let mut interval = tokio::time::interval(std::time::Duration::from_secs(
+                    PRICING_METADATA_SYNC_INTERVAL_SECS,
+                ));
+                interval.tick().await; // 跳过立即 tick：启动时已检查
+                loop {
+                    interval.tick().await;
+                    if let Err(e) =
+                        crate::services::pricing_metadata::refresh_pricing_metadata_if_due(
+                            &db_for_pricing_metadata,
+                        )
+                        .await
+                    {
+                        log::warn!("模型定价元数据定时同步失败: {e}");
+                    }
+                }
+            });
+
             // 异常退出恢复 + 代理状态自动恢复
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -1066,6 +1098,10 @@ pub fn run() {
                         "OpenCode usage initial sync",
                         crate::services::session_usage_opencode::sync_opencode_usage(db),
                     );
+                    run_step(
+                        "Grok usage initial sync",
+                        crate::services::session_usage_grok::sync_grok_usage(db),
+                    );
 
                     // 定期同步
                     let mut interval = tokio::time::interval(std::time::Duration::from_secs(
@@ -1089,6 +1125,10 @@ pub fn run() {
                         run_step(
                             "OpenCode usage periodic sync",
                             crate::services::session_usage_opencode::sync_opencode_usage(db),
+                        );
+                        run_step(
+                            "Grok usage periodic sync",
+                            crate::services::session_usage_grok::sync_grok_usage(db),
                         );
                     }
                 });
@@ -1347,6 +1387,8 @@ pub fn run() {
             commands::get_request_logs,
             commands::get_request_detail,
             commands::get_model_pricing,
+            commands::get_model_pricing_metadata_sync_status,
+            commands::refresh_model_pricing_metadata,
             commands::update_model_pricing,
             commands::delete_model_pricing,
             commands::check_provider_limits,

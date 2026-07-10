@@ -456,7 +456,10 @@ export function SessionManagerPage({ appId }: { appId: string }) {
 
   return (
     <TooltipProvider>
-      <div className="flex flex-1 min-h-0" onWheel={(e) => e.stopPropagation()}>
+      <div
+        className="flex flex-1 min-h-0 overflow-hidden"
+        onWheel={(e) => e.stopPropagation()}
+      >
         {/* 左栏：会话列表 */}
         <div className="w-[300px] shrink-0 flex flex-col min-h-0 border-r border-zinc-100 dark:border-zinc-800 bg-white dark:bg-zinc-950">
           {/* 左栏头部 */}
@@ -659,7 +662,7 @@ export function SessionManagerPage({ appId }: { appId: string }) {
           </div>
 
           {/* 列表 */}
-          <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
                 <RefreshCw className="size-5 animate-spin text-muted-foreground" />
@@ -838,7 +841,7 @@ export function SessionManagerPage({ appId }: { appId: string }) {
               <div className="flex-1 min-h-0 flex">
                 <div
                   ref={scrollContainerRef}
-                  className="flex-1 overflow-y-auto min-w-0"
+                  className="flex-1 min-h-0 overflow-y-auto overscroll-contain min-w-0"
                 >
                   <div className="mx-auto max-w-4xl px-5 py-4">
                     {isLoadingMessages ? (

@@ -261,6 +261,18 @@ fn effective_model_sql(alias: &str) -> String {
     format!("COALESCE(NULLIF({alias}.pricing_model, ''), {alias}.model)")
 }
 
+/// SQL 谓词：仅保留有实际计量数据的请求。
+///
+/// 失败的转发请求会保留客户端传入的模型名，便于在请求日志中定位限流、鉴权等
+/// 问题；但上游没有返回用量或产生费用时，它们不应被当作模型用量统计。
+fn has_metered_usage_sql(alias: &str) -> String {
+    format!(
+        "({alias}.input_tokens > 0 OR {alias}.output_tokens > 0 \
+         OR {alias}.cache_read_tokens > 0 OR {alias}.cache_creation_tokens > 0 \
+         OR CAST({alias}.total_cost_usd AS REAL) <> 0)"
+    )
+}
+
 /// 把 Dashboard 顶部的 Provider/模型筛选追加到查询条件。
 ///
 /// Provider 按展示名精确匹配（复用 [`provider_name_coalesce`]，会话占位行的
@@ -1320,7 +1332,8 @@ impl Database {
     ) -> Result<Vec<ModelStats>, AppError> {
         let conn = lock_conn!(self.conn);
 
-        let mut detail_conditions = vec![effective_usage_log_filter("l")];
+        let mut detail_conditions =
+            vec![effective_usage_log_filter("l"), has_metered_usage_sql("l")];
         let mut detail_params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
         if let Some(start) = start_date {
             detail_conditions.push("l.created_at >= ?".to_string());
@@ -1353,7 +1366,7 @@ impl Database {
             String::new()
         };
 
-        let mut rollup_conditions = Vec::new();
+        let mut rollup_conditions = vec![has_metered_usage_sql("r")];
         let mut rollup_params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
         let rollup_bounds = compute_rollup_date_bounds(start_date, end_date)?;
         push_rollup_date_filters(
@@ -1806,10 +1819,11 @@ impl Database {
         let million = rust_decimal::Decimal::from(1_000_000u64);
 
         // 与 CostCalculator::calculate_for_app 保持一致的计算逻辑：
-        // 1. Codex/Gemini 的 input_tokens 包含 cache_read_tokens，需要扣除后按输入价计费
+        // 1. Codex/Gemini/Grok 的 input_tokens 包含 cache_read_tokens，需要扣除后按输入价计费
         // 2. Claude/Anthropic 的 input_tokens 已经是 fresh input，不能再次扣减
         // 3. 各项成本是基础成本（不含倍率），倍率只作用于最终总价
-        let input_includes_cache_read = matches!(log.app_type.as_str(), "codex" | "gemini");
+        let input_includes_cache_read =
+            matches!(log.app_type.as_str(), "codex" | "gemini" | "grok");
         let billable_input_tokens = if input_includes_cache_read {
             (log.input_tokens as u64).saturating_sub(log.cache_read_tokens as u64)
         } else {
@@ -2078,7 +2092,7 @@ fn model_pricing_candidates(model_id: &str) -> Vec<String> {
     candidates
 }
 
-fn clean_model_id_for_pricing(model_id: &str) -> String {
+pub(crate) fn clean_model_id_for_pricing(model_id: &str) -> String {
     let normalized = model_id
         .rsplit_once('/')
         .map_or(model_id, |(_, r)| r)
@@ -2763,6 +2777,52 @@ mod tests {
         assert_eq!(input_cost, "0.000100");
         assert_eq!(cache_read_cost, "0.000020");
         assert_eq!(total_cost, "0.000120");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_backfill_missing_usage_costs_excludes_grok_cached_prompt() -> Result<(), AppError> {
+        let db = Database::memory()?;
+
+        {
+            let conn = lock_conn!(db.conn);
+            conn.execute(
+                "INSERT INTO model_pricing (
+                    model_id, display_name, input_cost_per_million, output_cost_per_million,
+                    cache_read_cost_per_million, cache_creation_cost_per_million
+                ) VALUES ('grok-4.5', 'Grok 4.5', '2', '6', '0.5', '0')",
+                [],
+            )?;
+            insert_usage_log(
+                &conn,
+                "grok-cache-included-input",
+                "grok",
+                "_grok_session",
+                "grok-4.5",
+                "grok_session",
+                1000,
+                13_967,
+                110,
+                11_136,
+                0,
+                200,
+                "0",
+            )?;
+        }
+
+        assert_eq!(db.backfill_missing_usage_costs()?, 1);
+
+        let conn = lock_conn!(db.conn);
+        let (input_cost, cache_read_cost, total_cost): (String, String, String) = conn.query_row(
+            "SELECT input_cost_usd, cache_read_cost_usd, total_cost_usd
+             FROM proxy_request_logs WHERE request_id = 'grok-cache-included-input'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?;
+        assert_eq!(input_cost, "0.005662");
+        assert_eq!(cache_read_cost, "0.005568");
+        assert_eq!(total_cost, "0.011890");
 
         Ok(())
     }
@@ -3507,6 +3567,75 @@ mod tests {
     }
 
     #[test]
+    fn test_get_model_stats_excludes_unmetered_redirect_failures() -> Result<(), AppError> {
+        let db = Database::memory()?;
+
+        {
+            let conn = lock_conn!(db.conn);
+            insert_usage_log(
+                &conn,
+                "redirected-glm",
+                "claude",
+                "zhipu",
+                "glm-5.2",
+                "proxy",
+                1_000,
+                500,
+                1,
+                0,
+                0,
+                200,
+                "0.001",
+            )?;
+            insert_usage_log(
+                &conn,
+                "rate-limited-request-model",
+                "claude",
+                "zhipu",
+                "claude-sonnet-4-6",
+                "proxy",
+                1_001,
+                0,
+                0,
+                0,
+                0,
+                429,
+                "0",
+            )?;
+            conn.execute(
+                "INSERT INTO usage_daily_rollups (
+                    date, app_type, provider_id, model,
+                    request_count, success_count, input_tokens, output_tokens,
+                    cache_read_tokens, cache_creation_tokens, total_cost_usd, avg_latency_ms
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                params![
+                    "2024-01-01",
+                    "claude",
+                    "zhipu",
+                    "claude-haiku-4-5",
+                    2,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    "0",
+                    25
+                ],
+            )?;
+        }
+
+        let stats = db.get_model_stats(None, None, None, None, None)?;
+        assert_eq!(stats.len(), 1);
+        assert_eq!(stats[0].model, "glm-5.2");
+        assert_eq!(stats[0].request_count, 1);
+        assert_eq!(stats[0].total_tokens, 501);
+        assert_eq!(stats[0].total_cost, "0.001000");
+
+        Ok(())
+    }
+
+    #[test]
     fn test_get_provider_stats_with_time_filter() -> Result<(), AppError> {
         let db = Database::memory()?;
 
@@ -3922,6 +4051,17 @@ mod tests {
         assert!(
             result.is_some(),
             "带前缀+冒号后缀的模型应清洗后匹配到 kimi-k2-0905"
+        );
+        let result = find_model_pricing_row(&conn, "zai-org/glm-5.2")?;
+        assert_eq!(
+            result,
+            Some((
+                "1.4".to_string(),
+                "4.4".to_string(),
+                "0.26".to_string(),
+                "0".to_string(),
+            )),
+            "带 zai-org 命名空间的 GLM-5.2 应命中内置定价"
         );
 
         // 清洗：@ 替换为 -（seed_model_pricing 已预置 gpt-5.2-codex-low）

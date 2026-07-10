@@ -1000,7 +1000,10 @@ function App() {
       <AnimatePresence mode="wait">
         <motion.div
           key={currentView}
-          className="flex-1 min-h-0"
+          className={cn(
+            "flex-1 min-h-0",
+            currentView === "sessions" && "flex overflow-hidden",
+          )}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -1509,6 +1512,10 @@ function App() {
               onImportSuccess={handleImportSuccess}
               onClose={() => setCurrentView("providers")}
             />
+          </div>
+        ) : currentView === "sessions" ? (
+          <div className="relative z-10 flex min-h-0 flex-1 overflow-hidden animate-fade-in">
+            {renderContent()}
           </div>
         ) : (
           <div className="relative z-10 flex-1 overflow-y-auto animate-fade-in px-8 py-6">

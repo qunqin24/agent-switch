@@ -48,6 +48,7 @@ pub fn sync_opencode_usage(db: &Database) -> Result<SessionSyncResult, AppError>
     if !db_path.exists() {
         return Ok(SessionSyncResult {
             imported: 0,
+            updated: 0,
             skipped: 0,
             files_scanned: 0,
             errors: vec![],
@@ -75,6 +76,7 @@ pub fn sync_opencode_usage(db: &Database) -> Result<SessionSyncResult, AppError>
     if file_modified <= last_modified {
         return Ok(SessionSyncResult {
             imported: 0,
+            updated: 0,
             skipped: 0,
             files_scanned: 1,
             errors: vec![],
@@ -88,6 +90,7 @@ pub fn sync_opencode_usage(db: &Database) -> Result<SessionSyncResult, AppError>
 
     let mut result = SessionSyncResult {
         imported: 0,
+        updated: 0,
         skipped: 0,
         files_scanned: 1,
         errors: vec![],

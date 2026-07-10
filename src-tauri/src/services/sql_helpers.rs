@@ -16,7 +16,7 @@
 /// style provider not added here) shows up loudly as a too-low cache hit
 /// rate, which is easier to catch than the silent over-deduction that
 /// would happen with the opposite default.
-const CACHE_INCLUSIVE_APP_TYPES: &[&str] = &["codex", "gemini"];
+const CACHE_INCLUSIVE_APP_TYPES: &[&str] = &["codex", "gemini", "grok"];
 
 /// Build an SQL expression that returns the cache-normalized `input_tokens`
 /// for a single row in `proxy_request_logs` or `usage_daily_rollups`.
@@ -100,6 +100,13 @@ mod tests {
             [],
         )
         .unwrap();
+        // Grok Build reports prompt_tokens with cached_prompt_tokens included.
+        conn.execute(
+            "INSERT INTO proxy_request_logs (request_id, app_type, input_tokens, cache_read_tokens)
+             VALUES ('grok-1', 'grok', 1200, 700)",
+            [],
+        )
+        .unwrap();
         // Claude row: Anthropic semantics — input_tokens already excludes cache.
         conn.execute(
             "INSERT INTO proxy_request_logs (request_id, app_type, input_tokens, cache_read_tokens)
@@ -111,8 +118,9 @@ mod tests {
         let expr = fresh_input_sql("l");
         let sql = format!("SELECT COALESCE(SUM({expr}), 0) FROM proxy_request_logs l");
         let total: i64 = conn.query_row(&sql, [], |r| r.get(0)).unwrap();
-        // Codex: 1000-600=400; Gemini: 800-300=500; Claude: 200 unchanged.
-        assert_eq!(total, 400 + 500 + 200);
+        // Codex: 1000-600=400; Gemini: 800-300=500; Grok: 1200-700=500;
+        // Claude: 200 unchanged.
+        assert_eq!(total, 400 + 500 + 500 + 200);
     }
 
     #[test]

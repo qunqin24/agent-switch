@@ -29,6 +29,8 @@ use std::time::SystemTime;
 #[serde(rename_all = "camelCase")]
 pub struct SessionSyncResult {
     pub imported: u32,
+    /// 已有记录被补充元数据或重新计价的数量。
+    pub updated: u32,
     pub skipped: u32,
     pub files_scanned: u32,
     pub errors: Vec<String>,
@@ -63,6 +65,7 @@ pub fn sync_claude_session_logs(db: &Database) -> Result<SessionSyncResult, AppE
     if !projects_dir.exists() {
         return Ok(SessionSyncResult {
             imported: 0,
+            updated: 0,
             skipped: 0,
             files_scanned: 0,
             errors: vec![],
@@ -71,6 +74,7 @@ pub fn sync_claude_session_logs(db: &Database) -> Result<SessionSyncResult, AppE
 
     let mut result = SessionSyncResult {
         imported: 0,
+        updated: 0,
         skipped: 0,
         files_scanned: 0,
         errors: vec![],

@@ -1,4 +1,6 @@
 import React, { useMemo } from "react";
+import grokIconSvg from "@lobehub/icons-static-svg/icons/grok.svg?raw";
+import openCodeIconSvg from "@lobehub/icons-static-svg/icons/opencode.svg?raw";
 import {
   getIcon,
   hasIcon,
@@ -7,6 +9,13 @@ import {
   isUrlIcon,
 } from "@/icons/extracted";
 import { cn } from "@/lib/utils";
+
+// Keep these brand marks sourced directly from Lobe Icons instead of the
+// generated local catalog, so package upgrades carry through automatically.
+const LOBE_BRAND_ICON_SVGS: Record<string, string> = {
+  grok: grokIconSvg,
+  opencode: openCodeIconSvg,
+};
 
 interface ProviderIconProps {
   icon?: string; // 图标名称
@@ -27,6 +36,12 @@ export const ProviderIcon: React.FC<ProviderIconProps> = ({
 }) => {
   // 获取内联 SVG 字符串
   const iconSvg = useMemo(() => {
+    const lobeBrandIcon = icon
+      ? LOBE_BRAND_ICON_SVGS[icon.toLowerCase()]
+      : undefined;
+    if (lobeBrandIcon) {
+      return lobeBrandIcon;
+    }
     if (icon && !isUrlIcon(icon) && hasIcon(icon)) {
       return getIcon(icon);
     }
@@ -71,7 +86,7 @@ export const ProviderIcon: React.FC<ProviderIconProps> = ({
     return (
       <span
         className={cn(
-          "inline-flex items-center justify-center flex-shrink-0",
+          "inline-flex items-center justify-center flex-shrink-0 [&>svg]:block",
           className,
         )}
         title={name}

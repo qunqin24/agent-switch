@@ -26,10 +26,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useModelPricing, useDeleteModelPricing } from "@/lib/query/usage";
+import {
+  useModelPricing,
+  useDeleteModelPricing,
+  usePricingMetadataSyncStatus,
+  useRefreshPricingMetadata,
+} from "@/lib/query/usage";
 import { PricingEditModal } from "./PricingEditModal";
 import { isNonNegativeDecimalString, type ModelPricing } from "@/types/usage";
-import { Plus, Pencil, Trash2, Loader2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { proxyApi } from "@/lib/api/proxy";
 
@@ -45,9 +50,11 @@ interface AppConfig {
 type AppConfigState = Record<PricingApp, AppConfig>;
 
 export function PricingConfigPanel() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { data: pricing, isLoading, error } = useModelPricing();
+  const { data: pricingMetadataStatus } = usePricingMetadataSyncStatus();
   const deleteMutation = useDeleteModelPricing();
+  const refreshPricingMetadataMutation = useRefreshPricingMetadata();
   const [editingModel, setEditingModel] = useState<ModelPricing | null>(null);
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
@@ -197,6 +204,44 @@ export function PricingConfigPanel() {
     });
   };
 
+  const handleRefreshPricingMetadata = () => {
+    refreshPricingMetadataMutation.mutate(undefined, {
+      onSuccess: (result) => {
+        if (result.outcome === "not_modified" && result.backfilledRows === 0) {
+          toast.success(t("usage.pricingSyncNoChanges"));
+          return;
+        }
+        toast.success(
+          t("usage.pricingSyncUpdated", {
+            added: result.added,
+            updated: result.updated,
+            preserved: result.preserved,
+            backfilled: result.backfilledRows,
+          }),
+        );
+      },
+      onError: (error) => {
+        toast.error(
+          t("usage.pricingSyncFailedToast", { error: String(error) }),
+        );
+      },
+    });
+  };
+
+  const pricingSyncLabel = (() => {
+    if (pricingMetadataStatus?.lastError) {
+      return t("usage.pricingSyncFailed");
+    }
+    if (pricingMetadataStatus?.lastSuccessAt) {
+      const time = new Intl.DateTimeFormat(i18n.language, {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(new Date(pricingMetadataStatus.lastSuccessAt * 1000));
+      return t("usage.pricingSyncAt", { time });
+    }
+    return t("usage.pricingSyncNotYet");
+  })();
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-4">
@@ -340,19 +385,45 @@ export function PricingConfigPanel() {
       {/* 模型定价配置 */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h4 className="text-sm font-medium text-muted-foreground">
-            {t("usage.modelPricingDesc")} {t("usage.perMillion")}
-          </h4>
-          <Button
-            onClick={(e) => {
-              e.stopPropagation();
-              handleAddNew();
-            }}
-            size="sm"
-          >
-            <Plus className="mr-1 h-4 w-4" />
-            {t("common.add")}
-          </Button>
+          <div>
+            <h4 className="text-sm font-medium text-muted-foreground">
+              {t("usage.modelPricingDesc")} {t("usage.perMillion")}
+            </h4>
+            <p
+              className="mt-0.5 text-xs text-muted-foreground"
+              title={pricingMetadataStatus?.lastError ?? undefined}
+            >
+              {pricingSyncLabel}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleRefreshPricingMetadata}
+              disabled={refreshPricingMetadataMutation.isPending}
+              title={t("usage.pricingSyncRefresh")}
+              aria-label={t("usage.pricingSyncRefresh")}
+            >
+              <RefreshCw
+                className={
+                  refreshPricingMetadataMutation.isPending
+                    ? "h-4 w-4 animate-spin"
+                    : "h-4 w-4"
+                }
+              />
+            </Button>
+            <Button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleAddNew();
+              }}
+              size="sm"
+            >
+              <Plus className="mr-1 h-4 w-4" />
+              {t("common.add")}
+            </Button>
+          </div>
         </div>
 
         <div className="space-y-4">

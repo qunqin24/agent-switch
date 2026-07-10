@@ -244,6 +244,8 @@ export const settingsApi = {
       name: string;
       version: string | null;
       latest_version: string | null;
+      latest_version_source?: string | null;
+      upstream_latest_version?: string | null;
       error: string | null;
       installed_but_broken: boolean;
       env_type: "windows" | "wsl" | "macos" | "linux" | "unknown";

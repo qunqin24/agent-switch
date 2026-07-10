@@ -150,6 +150,7 @@ pub fn sync_codex_usage(db: &Database) -> Result<SessionSyncResult, AppError> {
 
     let mut result = SessionSyncResult {
         imported: 0,
+        updated: 0,
         skipped: 0,
         files_scanned: files.len() as u32,
         errors: vec![],
