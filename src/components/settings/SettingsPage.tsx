@@ -36,6 +36,7 @@ import { AppVisibilitySettings } from "@/components/settings/AppVisibilitySettin
 import { SkillStorageLocationSettings } from "@/components/settings/SkillStorageLocationSettings";
 import { SkillSyncMethodSettings } from "@/components/settings/SkillSyncMethodSettings";
 import { TerminalSettings } from "@/components/settings/TerminalSettings";
+import { ModelsDevMetadataSettings } from "@/components/settings/ModelsDevMetadataSettings";
 import {
   SettingSection,
   SettingsPane,
@@ -345,6 +346,18 @@ export function SettingsPage({
                               onChange={handleAutoSave}
                             />
                             <ClaudeDesktopSettings />
+                          </SettingSection>
+
+                          <SettingSection
+                            title={t("settings.sections.modelMetadata")}
+                          >
+                            <ModelsDevMetadataSettings
+                              autoUpdate={settings.modelsDevAutoUpdate ?? true}
+                              intervalHours={
+                                settings.modelsDevUpdateIntervalHours ?? 24
+                              }
+                              onChange={handleAutoSave}
+                            />
                           </SettingSection>
 
                           <SettingSection

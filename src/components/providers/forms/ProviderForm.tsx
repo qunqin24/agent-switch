@@ -6,7 +6,6 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Form, FormField, FormItem, FormMessage } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
 import { providerSchema, type ProviderFormData } from "@/lib/schemas/provider";
 import { providersApi, settingsApi, type AppId } from "@/lib/api";
 import type {
@@ -67,6 +66,7 @@ import GeminiConfigEditor from "./GeminiConfigEditor";
 import JsonEditor from "@/components/JsonEditor";
 import { Label } from "@/components/ui/label";
 import { ProviderPresetSelector } from "./ProviderPresetSelector";
+import { ProviderKeyInput } from "./ProviderKeyInput";
 import { BasicFormFields } from "./BasicFormFields";
 import { ClaudeFormFields } from "./ClaudeFormFields";
 import { ClaudeDesktopProviderForm } from "./ClaudeDesktopProviderForm";
@@ -1745,14 +1745,10 @@ function ProviderFormFull({
                     {t("opencode.providerKey")}
                     <span className="text-destructive ml-1">*</span>
                   </Label>
-                  <Input
+                  <ProviderKeyInput
                     id="opencode-key"
                     value={opencodeForm.opencodeProviderKey}
-                    onChange={(e) =>
-                      opencodeForm.setOpencodeProviderKey(
-                        e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""),
-                      )
-                    }
+                    onValueChange={opencodeForm.setOpencodeProviderKey}
                     placeholder={t("opencode.providerKeyPlaceholder")}
                     disabled={
                       isProviderKeyLocked || isProviderKeyLockStateLoading
@@ -1811,14 +1807,10 @@ function ProviderFormFull({
                     {t("openclaw.providerKey")}
                     <span className="text-destructive ml-1">*</span>
                   </Label>
-                  <Input
+                  <ProviderKeyInput
                     id="openclaw-key"
                     value={openclawForm.openclawProviderKey}
-                    onChange={(e) =>
-                      openclawForm.setOpenclawProviderKey(
-                        e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""),
-                      )
-                    }
+                    onValueChange={openclawForm.setOpenclawProviderKey}
                     placeholder={t("openclaw.providerKeyPlaceholder")}
                     disabled={
                       isProviderKeyLocked || isProviderKeyLockStateLoading
@@ -1879,14 +1871,10 @@ function ProviderFormFull({
                     })}
                     <span className="text-destructive ml-1">*</span>
                   </Label>
-                  <Input
+                  <ProviderKeyInput
                     id="hermes-key"
                     value={hermesForm.hermesProviderKey}
-                    onChange={(e) =>
-                      hermesForm.setHermesProviderKey(
-                        e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""),
-                      )
-                    }
+                    onValueChange={hermesForm.setHermesProviderKey}
                     placeholder={t("hermes.form.providerKeyPlaceholder", {
                       defaultValue: "my-provider",
                     })}

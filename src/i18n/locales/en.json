@@ -336,11 +336,27 @@
       "apps": "Apps",
       "skills": "Skills",
       "integration": "Auth & Integration",
+      "modelMetadata": "Model Metadata",
       "system": "System"
     },
     "tabAuth": "Auth",
     "tabAdvanced": "Advanced",
     "tabProxy": "Routing",
+    "modelsDev": {
+      "autoUpdate": {
+        "title": "Automatically update model data",
+        "description": "Download official Models.dev capabilities, limits, and pricing to a local cache."
+      },
+      "interval": {
+        "title": "Update frequency",
+        "description": "Checks while the app is running. The last valid local data remains available offline.",
+        "options": {
+          "6": "Every 6 hours",
+          "24": "Daily",
+          "168": "Weekly"
+        }
+      }
+    },
     "authCenter": {
       "title": "OAuth Authentication Center",
       "description": "Use your other subscriptions in Claude Code — please be mindful of compliance risks.",
@@ -1366,7 +1382,46 @@
     "modelExtraFieldKeyPlaceholder": "variants",
     "sdkOptions": "SDK Options",
     "modelOptionKeyPlaceholder": "provider",
-    "modelOptionValuePlaceholder": "{\"order\": [\"baseten\"]}"
+    "modelOptionValuePlaceholder": "{\"order\": [\"baseten\"]}",
+    "thinkingSettings": "Thinking Settings",
+    "thinkingEnabled": "Enable Thinking",
+    "thinkingProtocol": "Request Format",
+    "thinkingProtocolAnthropic": "Anthropic Thinking",
+    "thinkingProtocolOpenAI": "OpenAI Reasoning Effort",
+    "thinkingProtocolGemini": "Gemini Thinking Config",
+    "thinkingBudget": "Thinking Budget",
+    "thinkingEffort": "Reasoning Effort",
+    "thinkingLevel": "Default Thinking Level",
+    "thinkingLevelLow": "Low",
+    "thinkingLevelMedium": "Medium",
+    "thinkingLevelHigh": "High",
+    "thinkingLevelMax": "Maximum",
+    "thinkingEffortLow": "Low",
+    "thinkingEffortMedium": "Medium",
+    "thinkingEffortHigh": "High",
+    "thinkingEffortXhigh": "Extra High",
+    "autoConfigureThinking": "Auto Configure",
+    "modelsDevReasoningSupported": "Models.dev: reasoning supported",
+    "modelsDevReasoningUnsupported": "Models.dev: reasoning not listed",
+    "modelsDevCapabilitySummary": "Capabilities: {{capabilities}}",
+    "modelsDevCapabilityAttachment": "Attachments",
+    "modelsDevCapabilityReasoning": "Reasoning",
+    "modelsDevCapabilityToolCall": "Tool calling",
+    "modelsDevCapabilityStructuredOutput": "Structured output",
+    "modelsDevCapabilityTemperature": "Temperature",
+    "modelsDevThinkingLoadError": "Failed to load Models.dev",
+    "modelsDevLoadingCapabilities": "Loading model capabilities from Models.dev...",
+    "modelsDevModelNotFound": "{{model}} was not found on Models.dev. Check the model ID or configure it manually.",
+    "modelsDevThinkingUnsupported": "Models.dev does not list reasoning support for {{name}}. You can still configure it manually.",
+    "modelsDevThinkingConfigured": "Enabled thinking from {{name}} metadata",
+    "modelsDevThinkingManualFormat": "Choose a request format below and enable thinking manually for this SDK.",
+    "modelsDevNativeEffortHint": "Native Models.dev reasoning levels: {{values}}",
+    "modelsDevReasoningOptionsUnavailable": "Models.dev does not publish native reasoning levels for this model. Add them manually in Model Properties.",
+    "modelLimits": "Model Limits and Thinking Levels",
+    "contextLimit": "Context",
+    "outputLimit": "Max Output",
+    "generateThinkingVariants": "Generate Level Presets",
+    "thinkingVariantsGenerated": "Generated {{values}} thinking presets"
   },
   "providerPreset": {
     "label": "Provider Preset",

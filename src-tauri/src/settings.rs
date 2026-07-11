@@ -397,6 +397,12 @@ pub struct AppSettings {
     pub common_config_confirmed: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub language: Option<String>,
+    /// 是否自动更新本地 Models.dev 元数据缓存。
+    #[serde(default = "default_models_dev_auto_update")]
+    pub models_dev_auto_update: bool,
+    /// Models.dev 元数据自动更新间隔（小时）。
+    #[serde(default = "default_models_dev_update_interval_hours")]
+    pub models_dev_update_interval_hours: u32,
 
     // ===== 主页面显示的应用 =====
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -488,6 +494,14 @@ fn default_minimize_to_tray_on_close() -> bool {
     true
 }
 
+fn default_models_dev_auto_update() -> bool {
+    true
+}
+
+fn default_models_dev_update_interval_hours() -> u32 {
+    24
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
@@ -510,6 +524,8 @@ impl Default for AppSettings {
             first_run_notice_confirmed: None,
             common_config_confirmed: None,
             language: None,
+            models_dev_auto_update: true,
+            models_dev_update_interval_hours: 24,
             visible_apps: None,
             claude_config_dir: None,
             codex_config_dir: None,

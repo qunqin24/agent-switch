@@ -6,6 +6,7 @@ pub mod env_checker;
 pub mod env_manager;
 pub mod mcp;
 pub mod model_fetch;
+pub mod models_dev_cache;
 pub mod omo;
 pub mod pricing_metadata;
 pub mod prompt;

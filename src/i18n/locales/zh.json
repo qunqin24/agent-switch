@@ -336,11 +336,27 @@
       "apps": "应用",
       "skills": "Skills",
       "integration": "认证与集成",
+      "modelMetadata": "模型元数据",
       "system": "系统"
     },
     "tabAuth": "认证",
     "tabAdvanced": "高级",
     "tabProxy": "路由",
+    "modelsDev": {
+      "autoUpdate": {
+        "title": "自动更新模型数据",
+        "description": "定时下载 Models.dev 官方模型能力、限制和价格，并保存到本机缓存。"
+      },
+      "interval": {
+        "title": "更新频率",
+        "description": "应用运行期间按此频率检查更新；离线时继续使用最后一次有效数据。",
+        "options": {
+          "6": "每 6 小时",
+          "24": "每天",
+          "168": "每周"
+        }
+      }
+    },
     "authCenter": {
       "title": "OAuth 认证中心",
       "description": "在 Claude Code 中使用您的其他订阅，请注意合规风险。",
@@ -1366,7 +1382,46 @@
     "modelExtraFieldKeyPlaceholder": "variants",
     "sdkOptions": "SDK 选项",
     "modelOptionKeyPlaceholder": "provider",
-    "modelOptionValuePlaceholder": "{\"order\": [\"baseten\"]}"
+    "modelOptionValuePlaceholder": "{\"order\": [\"baseten\"]}",
+    "thinkingSettings": "思考设置",
+    "thinkingEnabled": "启用思考",
+    "thinkingProtocol": "配置格式",
+    "thinkingProtocolAnthropic": "Anthropic Thinking",
+    "thinkingProtocolOpenAI": "OpenAI Reasoning Effort",
+    "thinkingProtocolGemini": "Gemini Thinking Config",
+    "thinkingBudget": "思考预算",
+    "thinkingEffort": "思考强度",
+    "thinkingLevel": "默认思考等级",
+    "thinkingLevelLow": "低（Low）",
+    "thinkingLevelMedium": "中（Medium）",
+    "thinkingLevelHigh": "高（High）",
+    "thinkingLevelMax": "最大（Max）",
+    "thinkingEffortLow": "低",
+    "thinkingEffortMedium": "中",
+    "thinkingEffortHigh": "高",
+    "thinkingEffortXhigh": "极高",
+    "autoConfigureThinking": "自动配置",
+    "modelsDevReasoningSupported": "Models.dev：支持思考",
+    "modelsDevReasoningUnsupported": "Models.dev：未标记思考能力",
+    "modelsDevCapabilitySummary": "能力：{{capabilities}}",
+    "modelsDevCapabilityAttachment": "附件",
+    "modelsDevCapabilityReasoning": "思考",
+    "modelsDevCapabilityToolCall": "工具调用",
+    "modelsDevCapabilityStructuredOutput": "结构化输出",
+    "modelsDevCapabilityTemperature": "温度",
+    "modelsDevThinkingLoadError": "读取 Models.dev 失败",
+    "modelsDevLoadingCapabilities": "正在读取 Models.dev 模型能力...",
+    "modelsDevModelNotFound": "Models.dev 中未找到 {{model}}；请检查模型 ID 或手动配置",
+    "modelsDevThinkingUnsupported": "Models.dev 未标记 {{name}} 支持思考；你仍可手动配置",
+    "modelsDevThinkingConfigured": "已按 {{name}} 的能力自动开启思考",
+    "modelsDevThinkingManualFormat": "当前接口格式请在下方手动选择配置格式后启用思考",
+    "modelsDevNativeEffortHint": "Models.dev 原生思考档位：{{values}}",
+    "modelsDevReasoningOptionsUnavailable": "Models.dev 未提供此模型的原生思考档位；请在模型属性中手动添加",
+    "modelLimits": "模型限制与思考等级",
+    "contextLimit": "上下文",
+    "outputLimit": "最大输出",
+    "generateThinkingVariants": "生成等级预设",
+    "thinkingVariantsGenerated": "已生成 {{values}} 思考预设"
   },
   "providerPreset": {
     "label": "预设供应商",

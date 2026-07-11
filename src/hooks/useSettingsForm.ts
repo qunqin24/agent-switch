@@ -119,6 +119,8 @@ export function useSettingsForm(): UseSettingsFormResult {
       preserveCodexOfficialAuthOnSwitch:
         data.preserveCodexOfficialAuthOnSwitch ?? false,
       unifyCodexSessionHistory: data.unifyCodexSessionHistory ?? false,
+      modelsDevAutoUpdate: data.modelsDevAutoUpdate ?? true,
+      modelsDevUpdateIntervalHours: data.modelsDevUpdateIntervalHours ?? 24,
       claudeConfigDir: sanitizeDir(data.claudeConfigDir),
       codexConfigDir: sanitizeDir(data.codexConfigDir),
       geminiConfigDir: sanitizeDir(data.geminiConfigDir),
@@ -145,6 +147,8 @@ export function useSettingsForm(): UseSettingsFormResult {
             skipClaudeOnboarding: false,
             preserveCodexOfficialAuthOnSwitch: false,
             unifyCodexSessionHistory: false,
+            modelsDevAutoUpdate: true,
+            modelsDevUpdateIntervalHours: 24,
             language: readPersistedLanguage(),
           } as SettingsFormState);
 
@@ -185,6 +189,9 @@ export function useSettingsForm(): UseSettingsFormResult {
         preserveCodexOfficialAuthOnSwitch:
           serverData.preserveCodexOfficialAuthOnSwitch ?? false,
         unifyCodexSessionHistory: serverData.unifyCodexSessionHistory ?? false,
+        modelsDevAutoUpdate: serverData.modelsDevAutoUpdate ?? true,
+        modelsDevUpdateIntervalHours:
+          serverData.modelsDevUpdateIntervalHours ?? 24,
         claudeConfigDir: sanitizeDir(serverData.claudeConfigDir),
         codexConfigDir: sanitizeDir(serverData.codexConfigDir),
         geminiConfigDir: sanitizeDir(serverData.geminiConfigDir),

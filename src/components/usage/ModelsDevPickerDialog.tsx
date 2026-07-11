@@ -23,8 +23,8 @@ import {
 } from "@/components/ui/select";
 import { useUpdateModelPricing } from "@/lib/query/usage";
 import { isTextEditableTarget } from "@/utils/domUtils";
+import { modelsDevCacheApi } from "@/lib/api/modelsDev";
 
-const MODELS_DEV_API_URL = "https://models.dev/api.json";
 // 全量约 5000 条：默认只展示最新发布的一批，搜索时才做全量匹配
 const DEFAULT_VISIBLE_ROWS = 50;
 const MAX_VISIBLE_ROWS = 200;
@@ -161,11 +161,7 @@ export function ModelsDevPickerDialog({
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["models-dev-pricing"],
     queryFn: async (): Promise<ModelsDevResponse> => {
-      const res = await fetch(MODELS_DEV_API_URL);
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-      return res.json();
+      return modelsDevCacheApi.getPricingCatalog<ModelsDevResponse>();
     },
     enabled: open,
     staleTime: 60 * 60 * 1000,

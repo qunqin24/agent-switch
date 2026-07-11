@@ -17,6 +17,10 @@ export const settingsSchema = z.object({
   enableLocalProxy: z.boolean().optional(),
   preserveCodexOfficialAuthOnSwitch: z.boolean().optional(),
   unifyCodexSessionHistory: z.boolean().optional(),
+  modelsDevAutoUpdate: z.boolean().optional(),
+  modelsDevUpdateIntervalHours: z
+    .union([z.literal(6), z.literal(24), z.literal(168)])
+    .optional(),
   language: z.enum(["en", "zh", "zh-TW", "ja"]).optional(),
 
   // 设备级目录覆盖

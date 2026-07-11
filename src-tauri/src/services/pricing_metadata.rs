@@ -6,9 +6,6 @@
 use crate::database::{lock_conn, Database};
 use crate::error::AppError;
 use crate::services::usage_stats::clean_model_id_for_pricing;
-use chrono::Utc;
-use reqwest::header::{ETAG, IF_NONE_MATCH};
-use reqwest::StatusCode;
 use rusqlite::{params, Connection, OptionalExtension};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -16,29 +13,7 @@ use serde_json::Number;
 use std::collections::BTreeMap;
 use std::str::FromStr;
 
-pub const PRICING_METADATA_SOURCE_URL: &str = "https://basellm.github.io/llm-metadata/api/all.json";
-
-const SYNC_INTERVAL_SECS: i64 = 24 * 60 * 60;
-const MAX_RESPONSE_BYTES: u64 = 8 * 1024 * 1024;
-
-// 仅使用模型厂商的直连目录。聚合商、云平台代理和路由服务会给同一模型提供不同
-// 的折扣价或区域价，不能作为 CC Switch 的默认计价来源。
-const CANONICAL_PROVIDER_IDS: &[&str] = &[
-    "anthropic",
-    "openai",
-    "google",
-    "xai",
-    "zai",
-    "zhipuai",
-    "deepseek",
-    "moonshotai",
-    "minimax",
-    "alibaba",
-    "mistral",
-    "cohere",
-    "groq",
-    "perplexity",
-];
+pub const PRICING_METADATA_SOURCE_URL: &str = crate::services::models_dev_cache::MODELS_DEV_API_URL;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -123,11 +98,15 @@ pub async fn refresh_pricing_metadata(
     db: &Database,
     force: bool,
 ) -> Result<PricingMetadataSyncResult, AppError> {
-    let now = Utc::now().timestamp();
     let current_status = get_pricing_metadata_sync_status(db)?;
-    if !force && !is_due(&current_status, now) {
+    if force {
+        crate::services::models_dev_cache::refresh_models_dev_cache(true).await?;
+    }
+    let cache = crate::services::models_dev_cache::get_models_dev_cache_for_use().await?;
+    let cache_version = cache.fetched_at.to_string();
+    if !force && current_status.etag.as_deref() == Some(cache_version.as_str()) {
         return Ok(PricingMetadataSyncResult {
-            outcome: "skipped".to_string(),
+            outcome: "not_modified".to_string(),
             added: 0,
             updated: 0,
             preserved: 0,
@@ -135,99 +114,23 @@ pub async fn refresh_pricing_metadata(
             status: current_status,
         });
     }
-
-    let mut request = crate::proxy::http_client::get()
-        .get(PRICING_METADATA_SOURCE_URL)
-        .header("Accept", "application/json")
-        .header("User-Agent", "cc-switch");
-    if let Some(etag) = current_status.etag.as_deref() {
-        request = request.header(IF_NONE_MATCH, etag);
-    }
-
-    let response = match request.send().await {
-        Ok(response) => response,
-        Err(error) => {
-            let message = format!("定价元数据请求失败: {error}");
-            let _ = record_sync_failure(db, now, &message);
-            return Err(AppError::Message(message));
-        }
-    };
-
-    if response.status() == StatusCode::NOT_MODIFIED {
-        record_not_modified(db, now)?;
-        let backfilled_rows = db.backfill_missing_usage_costs()?;
-        return Ok(PricingMetadataSyncResult {
-            outcome: if backfilled_rows > 0 {
-                "updated".to_string()
-            } else {
-                "not_modified".to_string()
-            },
-            added: 0,
-            updated: 0,
-            preserved: 0,
-            backfilled_rows,
-            status: get_pricing_metadata_sync_status(db)?,
-        });
-    }
-
-    if !response.status().is_success() {
-        let message = format!("定价元数据请求返回 HTTP {}", response.status());
-        let _ = record_sync_failure(db, now, &message);
-        return Err(AppError::Message(message));
-    }
-
-    if response
-        .content_length()
-        .is_some_and(|len| len > MAX_RESPONSE_BYTES)
-    {
-        let message = format!(
-            "定价元数据响应过大（超过 {} MiB）",
-            MAX_RESPONSE_BYTES / 1024 / 1024
-        );
-        let _ = record_sync_failure(db, now, &message);
-        return Err(AppError::Message(message));
-    }
-
-    let etag = response
-        .headers()
-        .get(ETAG)
-        .and_then(|value| value.to_str().ok())
-        .map(str::to_string);
-    let body = match response.bytes().await {
-        Ok(body) if body.len() as u64 <= MAX_RESPONSE_BYTES => body,
-        Ok(_) => {
-            let message = format!(
-                "定价元数据响应过大（超过 {} MiB）",
-                MAX_RESPONSE_BYTES / 1024 / 1024
-            );
-            let _ = record_sync_failure(db, now, &message);
-            return Err(AppError::Message(message));
-        }
-        Err(error) => {
-            let message = format!("读取定价元数据响应失败: {error}");
-            let _ = record_sync_failure(db, now, &message);
-            return Err(AppError::Message(message));
-        }
-    };
-
-    let catalog: MetadataCatalog = match serde_json::from_slice(&body) {
-        Ok(catalog) => catalog,
-        Err(error) => {
-            let message = format!("解析定价元数据失败: {error}");
-            let _ = record_sync_failure(db, now, &message);
-            return Err(AppError::Message(message));
-        }
-    };
-    let candidates = extract_pricing_candidates(&catalog);
+    let catalog: MetadataCatalog = serde_json::from_value(cache.api.clone())
+        .map_err(|error| AppError::Message(format!("解析 Models.dev 定价元数据失败: {error}")))?;
+    let candidates = extract_pricing_candidates(&catalog, &cache.models);
     if candidates.is_empty() {
-        let message = "定价元数据中没有可用的官方模型价格".to_string();
-        let _ = record_sync_failure(db, now, &message);
-        return Err(AppError::Message(message));
+        return Err(AppError::Message(
+            "Models.dev 缓存中没有可用的官方模型价格".to_string(),
+        ));
     }
 
     let counters = {
         let conn = lock_conn!(db.conn);
-        apply_pricing_candidates_on_conn(&conn, &candidates, etag.as_deref(), now)?
+        apply_pricing_candidates_on_conn(
+            &conn,
+            &candidates,
+            Some(&cache_version),
+            cache.fetched_at,
+        )?
     };
     let backfilled_rows = db.backfill_missing_usage_costs()?;
 
@@ -239,12 +142,6 @@ pub async fn refresh_pricing_metadata(
         backfilled_rows,
         status: get_pricing_metadata_sync_status(db)?,
     })
-}
-
-fn is_due(status: &PricingMetadataSyncStatus, now: i64) -> bool {
-    status
-        .last_success_at
-        .is_none_or(|last_success| now.saturating_sub(last_success) >= SYNC_INTERVAL_SECS)
 }
 
 fn get_pricing_metadata_sync_status_on_conn(
@@ -284,62 +181,33 @@ fn get_pricing_metadata_sync_status_on_conn(
     }))
 }
 
-fn record_not_modified(db: &Database, now: i64) -> Result<(), AppError> {
-    let conn = lock_conn!(db.conn);
-    conn.execute(
-        "INSERT INTO model_pricing_metadata_sync_state (
-            id, last_attempt_at, last_success_at, last_error,
-            last_added, last_updated, last_preserved
-         ) VALUES (1, ?1, ?1, NULL, 0, 0, 0)
-         ON CONFLICT(id) DO UPDATE SET
-            last_attempt_at = excluded.last_attempt_at,
-            last_success_at = excluded.last_success_at,
-            last_error = NULL,
-            last_added = 0,
-            last_updated = 0,
-            last_preserved = 0",
-        params![now],
-    )?;
-    Ok(())
-}
-
-fn record_sync_failure(db: &Database, now: i64, message: &str) -> Result<(), AppError> {
-    let conn = lock_conn!(db.conn);
-    if let Err(error) = conn.execute(
-        "INSERT INTO model_pricing_metadata_sync_state (
-            id, last_attempt_at, last_error, last_added, last_updated, last_preserved
-         ) VALUES (1, ?1, ?2, 0, 0, 0)
-         ON CONFLICT(id) DO UPDATE SET
-            last_attempt_at = excluded.last_attempt_at,
-            last_error = excluded.last_error,
-            last_added = 0,
-            last_updated = 0,
-            last_preserved = 0",
-        params![now, message],
-    ) {
-        log::warn!("记录定价元数据同步失败状态失败: {error}");
-    }
-    Ok(())
-}
-
-fn extract_pricing_candidates(catalog: &MetadataCatalog) -> BTreeMap<String, StoredPricing> {
+fn extract_pricing_candidates(
+    catalog: &MetadataCatalog,
+    official_models: &serde_json::Value,
+) -> BTreeMap<String, StoredPricing> {
     let mut candidates = BTreeMap::new();
 
-    for provider_id in CANONICAL_PROVIDER_IDS {
-        let Some(provider) = catalog.get(*provider_id) else {
+    let Some(model_index) = official_models.as_object() else {
+        return candidates;
+    };
+    for canonical_id in model_index.keys() {
+        let Some((provider_id, official_model_id)) = canonical_id.split_once('/') else {
             continue;
         };
-
-        for (model_key, model) in &provider.models {
-            let model_id = clean_model_id_for_pricing(model.id.as_deref().unwrap_or(model_key));
-            if model_id.is_empty() || candidates.contains_key(&model_id) {
-                continue;
-            }
-            let Some(pricing) = pricing_from_metadata(model, &model_id) else {
-                continue;
-            };
-            candidates.insert(model_id, pricing);
+        let Some(provider) = catalog.get(provider_id) else {
+            continue;
+        };
+        let Some(model) = provider.models.get(official_model_id) else {
+            continue;
+        };
+        let model_id = clean_model_id_for_pricing(model.id.as_deref().unwrap_or(official_model_id));
+        if model_id.is_empty() || candidates.contains_key(&model_id) {
+            continue;
         }
+        let Some(pricing) = pricing_from_metadata(model, &model_id) else {
+            continue;
+        };
+        candidates.insert(model_id, pricing);
     }
 
     candidates
@@ -618,10 +486,10 @@ mod tests {
     }
 
     #[test]
-    fn extracts_only_canonical_provider_prices() {
+    fn extracts_only_prices_from_the_official_model_index() {
         let catalog: MetadataCatalog = serde_json::from_str(
             r#"{
-                "zai": {"models": {"glm-5.2": {
+                "zhipuai": {"models": {"glm-5.2": {
                     "id": "glm-5.2", "name": "GLM-5.2",
                     "cost": {"input": 1.4, "output": 4.4, "cache_read": 0.26, "cache_write": 0}
                 }}},
@@ -632,7 +500,10 @@ mod tests {
         )
         .expect("valid metadata fixture");
 
-        let candidates = extract_pricing_candidates(&catalog);
+        let models = serde_json::json!({
+            "zhipuai/glm-5.2": { "name": "GLM-5.2" },
+        });
+        let candidates = extract_pricing_candidates(&catalog, &models);
         assert_eq!(candidates.len(), 1);
         assert_eq!(candidates["glm-5.2"].input, "1.4");
         assert_eq!(candidates["glm-5.2"].output, "4.4");

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { FormLabel } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -11,8 +11,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Download, Plus, Trash2, ChevronRight, Loader2 } from "lucide-react";
+import {
+  Download,
+  Plus,
+  Trash2,
+  ChevronRight,
+  Loader2,
+  Sparkles,
+} from "lucide-react";
 import { ApiKeySection, ModelDropdown } from "./shared";
+import { Switch } from "@/components/ui/switch";
 import {
   fetchModelsForConfig,
   showFetchModelsError,
@@ -20,11 +28,34 @@ import {
 } from "@/lib/api/model-fetch";
 import { opencodeNpmPackages } from "@/config/opencodeProviderPresets";
 import { cn } from "@/lib/utils";
+import { modelsDevCacheApi } from "@/lib/api/modelsDev";
 import {
+  buildOpenCodeReasoningEffortVariants,
+  clearOpenCodeThinkingSettings,
+  formatOpenCodeModelDisplayName,
+  getOpenCodeThinkingProtocolForNpm,
+  getOpenCodeReasoningEffort,
   getModelExtraFields,
+  getOpenCodeThinkingLevel,
+  getOpenCodeThinkingSettings,
+  getOpenCodeThinkingSettingsForLevel,
+  inferOpenCodeThinkingProtocol,
   isKnownModelKey,
+  prepareOpenCodeModelForProtocolChange,
+  removeAllAutomaticOpenCodeThinkingVariants,
+  removeAutomaticOpenCodeReasoningEffortVariants,
+  removeAutomaticOpenCodeThinkingVariants,
+  setOpenCodeThinkingSettings,
+  setOpenCodeReasoningEffort,
+  supportsAutomaticOpenCodeThinkingConfig,
+  type OpenCodeThinkingProtocol,
 } from "./helpers/opencodeFormUtils";
 import type { ProviderCategory, OpenCodeModel } from "@/types";
+import {
+  getModelsDevCapabilityDeclarations,
+  getModelsDevReasoningEfforts,
+  type ModelsDevCatalogModel,
+} from "@/lib/modelsDevCatalog";
 
 /**
  * Model ID input with local state to prevent focus loss.
@@ -142,6 +173,14 @@ function ModelOptionKeyInput({
   );
 }
 
+function getModelVariants(model: OpenCodeModel): Record<string, unknown> {
+  return model.variants &&
+    typeof model.variants === "object" &&
+    !Array.isArray(model.variants)
+    ? (model.variants as Record<string, unknown>)
+    : {};
+}
+
 interface OpenCodeFormFieldsProps {
   // NPM Package
   npm: string;
@@ -187,6 +226,12 @@ export function OpenCodeFormFields({
   onExtraOptionsChange,
 }: OpenCodeFormFieldsProps) {
   const { t } = useTranslation();
+  const modelsRef = useRef(models);
+  const autoConfigurationRevisionRef = useRef(0);
+
+  useEffect(() => {
+    modelsRef.current = models;
+  }, [models]);
 
   const [fetchedModels, setFetchedModels] = useState<FetchedModel[]>([]);
   const [isFetchingModels, setIsFetchingModels] = useState(false);
@@ -220,15 +265,371 @@ export function OpenCodeFormFields({
 
   // Track which models have expanded options panel
   const [expandedModels, setExpandedModels] = useState<Set<string>>(new Set());
+  const [modelsDevMetadata, setModelsDevMetadata] = useState<
+    Record<string, ModelsDevCatalogModel | null>
+  >({});
+  const [modelsDevLoading, setModelsDevLoading] = useState<Set<string>>(
+    new Set(),
+  );
+  const [thinkingProtocols, setThinkingProtocols] = useState<
+    Record<string, OpenCodeThinkingProtocol>
+  >({});
+
+  const getThinkingProtocol = (key: string, model: OpenCodeModel) =>
+    thinkingProtocols[key] ?? inferOpenCodeThinkingProtocol(npm, model);
+
+  const getModelsDevCapabilitySummary = (metadata: ModelsDevCatalogModel) => {
+    const capabilities: string[] = [];
+    if (metadata.attachment) {
+      capabilities.push(t("opencode.modelsDevCapabilityAttachment", "附件"));
+    }
+    if (metadata.reasoning) {
+      capabilities.push(t("opencode.modelsDevCapabilityReasoning", "思考"));
+    }
+    if (metadata.tool_call) {
+      capabilities.push(t("opencode.modelsDevCapabilityToolCall", "工具调用"));
+    }
+    if (metadata.structured_output) {
+      capabilities.push(
+        t("opencode.modelsDevCapabilityStructuredOutput", "结构化输出"),
+      );
+    }
+    if (metadata.temperature) {
+      capabilities.push(t("opencode.modelsDevCapabilityTemperature", "温度"));
+    }
+    if (metadata.modalities?.input?.length || metadata.modalities?.output?.length) {
+      capabilities.push(
+        `${metadata.modalities.input?.join("/") ?? ""} -> ${metadata.modalities.output?.join("/") ?? ""}`,
+      );
+    }
+    return capabilities.join(" · ");
+  };
+
+  const loadModelsDevMetadata = useCallback(
+    async (
+      modelKey: string,
+      model: OpenCodeModel,
+      forceRefresh = false,
+    ) => {
+      if (
+        !forceRefresh &&
+        Object.prototype.hasOwnProperty.call(modelsDevMetadata, modelKey)
+      ) {
+        return modelsDevMetadata[modelKey];
+      }
+
+      setModelsDevLoading((prev) => new Set(prev).add(modelKey));
+      try {
+        const metadata = await modelsDevCacheApi.getModelMetadata(
+          modelKey,
+          model.name,
+        );
+        setModelsDevMetadata((prev) => ({
+          ...prev,
+          [modelKey]: metadata ?? null,
+        }));
+        return metadata ?? null;
+      } catch (error) {
+        toast.error(
+          t("opencode.modelsDevThinkingLoadError", {
+            defaultValue: "读取 Models.dev 失败",
+          }),
+        );
+        console.warn("[Models.dev] Failed to load model metadata:", error);
+        return null;
+      } finally {
+        setModelsDevLoading((prev) => {
+          const next = new Set(prev);
+          next.delete(modelKey);
+          return next;
+        });
+      }
+    },
+    [modelsDevMetadata, t],
+  );
+
+  const updateModelThinking = (
+    modelKey: string,
+    protocol: OpenCodeThinkingProtocol,
+    updater: (
+      settings: ReturnType<typeof getOpenCodeThinkingSettings>,
+    ) => ReturnType<typeof getOpenCodeThinkingSettings>,
+  ) => {
+    const model = models[modelKey];
+    if (!model) return;
+    const settings = getOpenCodeThinkingSettings(model, protocol);
+    onModelsChange({
+      ...models,
+      [modelKey]: setOpenCodeThinkingSettings(
+        model,
+        protocol,
+        updater(settings),
+      ),
+    });
+  };
+
+  const handleThinkingProtocolChange = (
+    modelKey: string,
+    protocol: OpenCodeThinkingProtocol,
+  ) => {
+    const model = models[modelKey];
+    if (!model) return;
+    const previousProtocol = getThinkingProtocol(modelKey, model);
+    const previousSettings = getOpenCodeThinkingSettings(
+      model,
+      previousProtocol,
+    );
+    setThinkingProtocols((prev) => ({ ...prev, [modelKey]: protocol }));
+    if (previousSettings.enabled) {
+      onModelsChange({
+        ...models,
+        [modelKey]: setOpenCodeThinkingSettings(
+          model,
+          protocol,
+          previousSettings,
+        ),
+      });
+    }
+  };
+
+  const applyModelsDevAutoConfiguration = async (
+    modelKey: string,
+    sourceModel: OpenCodeModel,
+    options: {
+      notify: boolean;
+      ignoreInMemoryMetadata?: boolean;
+      npmOverride?: string;
+      protocolOverride?: OpenCodeThinkingProtocol;
+      requestRevision?: number;
+    },
+  ) => {
+    const targetNpm = options.npmOverride ?? npm;
+    if (!supportsAutomaticOpenCodeThinkingConfig(targetNpm)) {
+      if (options.notify) {
+        toast.info(
+          t("opencode.modelsDevThinkingManualFormat", {
+            defaultValue: "当前接口格式请在下方手动选择配置格式后启用思考",
+          }),
+        );
+      }
+      return;
+    }
+    const metadata = await loadModelsDevMetadata(
+      modelKey,
+      sourceModel,
+      options.ignoreInMemoryMetadata,
+    );
+    if (!metadata) {
+      if (options.notify) {
+        toast.info(
+          t("opencode.modelsDevModelNotFound", {
+            model: modelKey,
+            defaultValue:
+              "Models.dev 中未找到 {{model}}；请检查模型 ID 或手动配置",
+          }),
+        );
+      }
+      return;
+    }
+    if (
+      options.requestRevision !== undefined &&
+      options.requestRevision !== autoConfigurationRevisionRef.current
+    ) {
+      return;
+    }
+
+    // Resolve against the latest form state so a delayed metadata response
+    // cannot overwrite a model the user edited or removed in the meantime.
+    const currentModels = modelsRef.current;
+    const currentModel = currentModels[modelKey];
+    if (!currentModel) return;
+
+    const protocol =
+      options.protocolOverride ?? getThinkingProtocol(modelKey, currentModel);
+    const nativeEfforts = getModelsDevReasoningEfforts(metadata);
+    const defaultNativeEffort = nativeEfforts[0];
+    const capabilityDeclarations = getModelsDevCapabilityDeclarations(metadata);
+    // Do not infer a thinking protocol or levels from a boolean capability.
+    // Only the API's explicit reasoning_options may change thinking settings.
+    const protocolCleanModel = options.protocolOverride
+      ? clearOpenCodeThinkingSettings(currentModel)
+      : currentModel;
+    const configuredModel = defaultNativeEffort
+      ? setOpenCodeReasoningEffort(
+          protocolCleanModel,
+          protocol,
+          defaultNativeEffort,
+        )
+      : protocolCleanModel;
+    const existingLimit = configuredModel.limit ?? {};
+    const resolvedLimit = {
+      context: existingLimit.context ?? metadata.limit?.context,
+      output: existingLimit.output ?? metadata.limit?.output,
+    };
+    const currentVariants = getModelVariants(configuredModel);
+    const existingVariants =
+      defaultNativeEffort || options.protocolOverride
+        ? removeAutomaticOpenCodeReasoningEffortVariants(
+            options.protocolOverride
+              ? removeAllAutomaticOpenCodeThinkingVariants(currentVariants)
+              : removeAutomaticOpenCodeThinkingVariants(
+                  currentVariants,
+                  protocol,
+                ),
+          )
+        : currentVariants;
+    const resolvedVariants = {
+      ...(defaultNativeEffort
+        ? buildOpenCodeReasoningEffortVariants(protocol, nativeEfforts)
+        : {}),
+      ...existingVariants,
+    };
+    const nextModels = {
+      ...currentModels,
+      [modelKey]: {
+        ...configuredModel,
+        ...capabilityDeclarations,
+        ...(resolvedLimit.context || resolvedLimit.output
+          ? { limit: resolvedLimit }
+          : {}),
+        variants: resolvedVariants,
+      },
+    };
+    modelsRef.current = nextModels;
+    onModelsChange(nextModels);
+
+    if (!options.notify) return;
+    if (defaultNativeEffort) {
+      toast.success(
+        t("opencode.modelsDevThinkingConfigured", {
+          name: metadata.name || modelKey,
+          defaultValue: "已按 {{name}} 的能力自动开启思考",
+        }),
+      );
+    } else if (metadata.reasoning) {
+      toast.info(
+        t("opencode.modelsDevReasoningOptionsUnavailable", {
+          defaultValue:
+            "Models.dev 未提供此模型的原生思考档位；仅补充已知模型限制",
+        }),
+      );
+    } else {
+      toast.warning(
+        t("opencode.modelsDevThinkingUnsupported", {
+          name: metadata.name || modelKey,
+          defaultValue: "Models.dev 未标记 {{name}} 支持思考；已补充已知模型能力",
+        }),
+      );
+    }
+  };
+
+  const handleAutoConfigureThinking = async (modelKey: string) => {
+    const model = modelsRef.current[modelKey];
+    if (!model) return;
+    await applyModelsDevAutoConfiguration(modelKey, model, {
+      notify: true,
+      ignoreInMemoryMetadata: true,
+      requestRevision: autoConfigurationRevisionRef.current,
+    });
+  };
+
+  const handleNpmPackageChange = (nextNpm: string) => {
+    if (nextNpm === npm) return;
+
+    onNpmChange(nextNpm);
+    const protocol = getOpenCodeThinkingProtocolForNpm(nextNpm);
+    const currentModels = modelsRef.current;
+    const requestRevision = ++autoConfigurationRevisionRef.current;
+    const resetModels = Object.fromEntries(
+      Object.entries(currentModels).map(([key, model]) => [
+        key,
+        prepareOpenCodeModelForProtocolChange(model),
+      ]),
+    );
+    modelsRef.current = resetModels;
+    onModelsChange(resetModels);
+    setThinkingProtocols(
+      Object.fromEntries(Object.keys(currentModels).map((key) => [key, protocol])),
+    );
+
+    for (const [modelKey, model] of Object.entries(resetModels)) {
+      void applyModelsDevAutoConfiguration(modelKey, model, {
+        notify: false,
+        ignoreInMemoryMetadata: true,
+        npmOverride: nextNpm,
+        protocolOverride: protocol,
+        requestRevision,
+      });
+    }
+  };
+
+  const handleGenerateThinkingVariants = async (modelKey: string) => {
+    const model = models[modelKey];
+    if (!model) return;
+    const protocol = getThinkingProtocol(modelKey, model);
+    const metadata = await loadModelsDevMetadata(modelKey, model, true);
+    const nativeEfforts = getModelsDevReasoningEfforts(metadata);
+    if (!nativeEfforts.length) {
+      toast.info(
+        t("opencode.modelsDevReasoningOptionsUnavailable", {
+          defaultValue:
+            "Models.dev 未提供此模型的原生思考档位；请在模型属性中手动添加",
+        }),
+      );
+      return;
+    }
+    onModelsChange({
+      ...models,
+      [modelKey]: {
+        ...model,
+        variants: {
+          ...buildOpenCodeReasoningEffortVariants(protocol, nativeEfforts),
+          ...removeAutomaticOpenCodeReasoningEffortVariants(
+            removeAutomaticOpenCodeThinkingVariants(
+              getModelVariants(model),
+              protocol,
+            ),
+          ),
+        },
+      },
+    });
+    toast.success(
+      t("opencode.thinkingVariantsGenerated", {
+        values: nativeEfforts.join(" / "),
+        defaultValue: "已生成 {{values}} 思考预设",
+      }),
+    );
+  };
+
+  const handleModelLimitChange = (
+    modelKey: string,
+    field: "context" | "output",
+    value: string,
+  ) => {
+    const model = models[modelKey];
+    const limit = Number(value);
+    if (!model || !Number.isInteger(limit) || limit <= 0) return;
+    onModelsChange({
+      ...models,
+      [modelKey]: {
+        ...model,
+        limit: { ...model.limit, [field]: limit },
+      },
+    });
+  };
 
   // Toggle model expand state
   const toggleModelExpand = (key: string) => {
+    const willExpand = !expandedModels.has(key);
     setExpandedModels((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
       return next;
     });
+    if (willExpand && models[key]) {
+      void loadModelsDevMetadata(key, models[key]);
+    }
   };
 
   // Add a new model entry
@@ -244,6 +645,7 @@ export function OpenCodeFormFields({
   const handleRemoveModel = (key: string) => {
     const newModels = { ...models };
     delete newModels[key];
+    modelsRef.current = newModels;
     onModelsChange(newModels);
     // Also remove from expanded set
     setExpandedModels((prev) => {
@@ -255,33 +657,50 @@ export function OpenCodeFormFields({
 
   // Update model ID (key)
   const handleModelIdChange = (oldKey: string, newKey: string) => {
-    if (oldKey === newKey || !newKey.trim()) return;
+    const modelId = newKey.trim();
+    if (oldKey === modelId || !modelId) return;
     const newModels: Record<string, OpenCodeModel> = {};
+    let addedModel: OpenCodeModel | undefined;
     for (const [k, v] of Object.entries(models)) {
       if (k === oldKey) {
-        newModels[newKey] = v;
+        addedModel = {
+          ...v,
+          ...(v.name.trim()
+            ? {}
+            : { name: formatOpenCodeModelDisplayName(modelId) }),
+        };
+        newModels[modelId] = addedModel;
       } else {
         newModels[k] = v;
       }
     }
+    modelsRef.current = newModels;
     onModelsChange(newModels);
     // Update expanded set if this model was expanded
     if (expandedModels.has(oldKey)) {
       setExpandedModels((prev) => {
         const next = new Set(prev);
         next.delete(oldKey);
-        next.add(newKey);
+        next.add(modelId);
         return next;
+      });
+    }
+    if (addedModel) {
+      void applyModelsDevAutoConfiguration(modelId, addedModel, {
+        notify: false,
+        requestRevision: autoConfigurationRevisionRef.current,
       });
     }
   };
 
   // Update model name
   const handleModelNameChange = (key: string, name: string) => {
-    onModelsChange({
+    const nextModels = {
       ...models,
       [key]: { ...models[key], name },
-    });
+    };
+    modelsRef.current = nextModels;
+    onModelsChange(nextModels);
   };
 
   // Model options handlers
@@ -452,7 +871,7 @@ export function OpenCodeFormFields({
             defaultValue: "接口格式",
           })}
         </FormLabel>
-        <Select value={npm} onValueChange={onNpmChange}>
+        <Select value={npm} onValueChange={handleNpmPackageChange}>
           <SelectTrigger id="opencode-npm">
             <SelectValue
               placeholder={t("opencode.selectPackage", {
@@ -690,6 +1109,384 @@ export function OpenCodeFormFields({
                 {/* Expanded model details */}
                 {expandedModels.has(key) && (
                   <div className="ml-9 pl-4 border-l-2 border-muted space-y-3">
+                    {(() => {
+                      const protocol = getThinkingProtocol(key, model);
+                      const settings = getOpenCodeThinkingSettings(
+                        model,
+                        protocol,
+                      );
+                      const metadata = modelsDevMetadata[key];
+                      const isLoadingMetadata = modelsDevLoading.has(key);
+                      const nativeEfforts = getModelsDevReasoningEfforts(metadata);
+
+                      return (
+                        <div className="space-y-3 rounded-md border border-border/60 bg-muted/20 p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <span className="text-xs font-medium text-foreground">
+                                {t("opencode.thinkingSettings", {
+                                  defaultValue: "思考设置",
+                                })}
+                              </span>
+                              {metadata && (
+                                <>
+                                  <p
+                                    className={cn(
+                                      "mt-0.5 text-xs",
+                                      metadata.reasoning
+                                        ? "text-emerald-600 dark:text-emerald-400"
+                                        : "text-muted-foreground",
+                                    )}
+                                  >
+                                    {metadata.reasoning
+                                      ? t(
+                                          "opencode.modelsDevReasoningSupported",
+                                          {
+                                            defaultValue: "Models.dev：支持思考",
+                                          },
+                                        )
+                                      : t(
+                                          "opencode.modelsDevReasoningUnsupported",
+                                          {
+                                            defaultValue:
+                                              "Models.dev：未标记思考能力",
+                                          },
+                                        )}
+                                  </p>
+                                  <p className="mt-0.5 text-xs text-muted-foreground">
+                                    {t("opencode.modelsDevCapabilitySummary", {
+                                      capabilities:
+                                        getModelsDevCapabilitySummary(metadata),
+                                      defaultValue: "能力：{{capabilities}}",
+                                    })}
+                                  </p>
+                                </>
+                              )}
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                void handleAutoConfigureThinking(key)
+                              }
+                              disabled={isLoadingMetadata}
+                              className="h-7 shrink-0 gap-1"
+                            >
+                              {isLoadingMetadata ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Sparkles className="h-3.5 w-3.5" />
+                              )}
+                              {t("opencode.autoConfigureThinking", {
+                                defaultValue: "自动配置",
+                              })}
+                            </Button>
+                          </div>
+
+                          {isLoadingMetadata ? (
+                            <p className="text-xs text-muted-foreground">
+                              {t("opencode.modelsDevLoadingCapabilities", {
+                                defaultValue: "正在读取 Models.dev 模型能力...",
+                              })}
+                            </p>
+                          ) : nativeEfforts.length ? (
+                            <p className="text-xs text-muted-foreground">
+                              {t("opencode.modelsDevNativeEffortHint", {
+                                values: nativeEfforts.join(" / "),
+                                defaultValue:
+                                  "Models.dev 原生思考档位：{{values}}",
+                              })}
+                            </p>
+                          ) : (
+                            <>
+                              <div className="flex items-center justify-between gap-3">
+                            <label
+                              htmlFor={`opencode-thinking-${key}`}
+                              className="text-sm font-medium"
+                            >
+                              {t("opencode.thinkingEnabled", {
+                                defaultValue: "启用思考",
+                              })}
+                            </label>
+                            <Switch
+                              id={`opencode-thinking-${key}`}
+                              checked={settings.enabled}
+                              onCheckedChange={(enabled) =>
+                                updateModelThinking(
+                                  key,
+                                  protocol,
+                                  (current) => ({
+                                    ...current,
+                                    enabled,
+                                  }),
+                                )
+                              }
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="space-y-1.5">
+                              <span className="text-xs text-muted-foreground">
+                                {t("opencode.thinkingProtocol", {
+                                  defaultValue: "配置格式",
+                                })}
+                              </span>
+                              <Select
+                                value={protocol}
+                                onValueChange={(value) =>
+                                  handleThinkingProtocolChange(
+                                    key,
+                                    value as OpenCodeThinkingProtocol,
+                                  )
+                                }
+                              >
+                                <SelectTrigger className="h-9">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="anthropic">
+                                    {t("opencode.thinkingProtocolAnthropic", {
+                                      defaultValue: "Anthropic Thinking",
+                                    })}
+                                  </SelectItem>
+                                  <SelectItem value="openai">
+                                    {t("opencode.thinkingProtocolOpenAI", {
+                                      defaultValue: "OpenAI Reasoning Effort",
+                                    })}
+                                  </SelectItem>
+                                  <SelectItem value="gemini">
+                                    {t("opencode.thinkingProtocolGemini", {
+                                      defaultValue: "Gemini Thinking Config",
+                                    })}
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            {protocol === "openai" ? (
+                              <div className="space-y-1.5">
+                                <span className="text-xs text-muted-foreground">
+                                  {t("opencode.thinkingEffort", {
+                                    defaultValue: "思考强度",
+                                  })}
+                                </span>
+                                <Select
+                                  value={settings.effort}
+                                  onValueChange={(value) =>
+                                    updateModelThinking(
+                                      key,
+                                      protocol,
+                                      (current) => ({
+                                        ...current,
+                                        effort: value as typeof current.effort,
+                                      }),
+                                    )
+                                  }
+                                >
+                                  <SelectTrigger className="h-9">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {(
+                                      [
+                                        "low",
+                                        "medium",
+                                        "high",
+                                        "xhigh",
+                                      ] as const
+                                    ).map((effort) => (
+                                      <SelectItem key={effort} value={effort}>
+                                        {t(
+                                          `opencode.thinkingEffort${effort[0].toUpperCase()}${effort.slice(1)}`,
+                                          {
+                                            defaultValue: effort,
+                                          },
+                                        )}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            ) : (
+                              <div className="space-y-1.5">
+                                <span className="text-xs text-muted-foreground">
+                                  {t("opencode.thinkingBudget", {
+                                    defaultValue: "思考预算",
+                                  })}
+                                </span>
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  step={1}
+                                  value={settings.budgetTokens}
+                                  onChange={(event) => {
+                                    const budgetTokens = Number(
+                                      event.target.value,
+                                    );
+                                    if (
+                                      Number.isInteger(budgetTokens) &&
+                                      budgetTokens > 0
+                                    ) {
+                                      updateModelThinking(
+                                        key,
+                                        protocol,
+                                        (current) => ({
+                                          ...current,
+                                          budgetTokens,
+                                        }),
+                                      );
+                                    }
+                                  }}
+                                  className="h-9"
+                                />
+                              </div>
+                            )}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                    {(() => {
+                      const protocol = getThinkingProtocol(key, model);
+                      const settings = getOpenCodeThinkingSettings(
+                        model,
+                        protocol,
+                      );
+                      const nativeEfforts = getModelsDevReasoningEfforts(
+                        modelsDevMetadata[key],
+                      );
+                      const thinkingLevel = nativeEfforts.length
+                        ? (getOpenCodeReasoningEffort(model, protocol) ??
+                          nativeEfforts[0])
+                        : getOpenCodeThinkingLevel(protocol, settings);
+                      const limit = model.limit ?? {};
+
+                      return (
+                        <div className="space-y-3 rounded-md border border-border/60 bg-muted/20 p-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-xs font-medium text-foreground">
+                              {t("opencode.modelLimits", {
+                                defaultValue: "模型限制与思考等级",
+                              })}
+                            </span>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                void handleGenerateThinkingVariants(key)
+                              }
+                              disabled={modelsDevLoading.has(key)}
+                              className="h-7 gap-1"
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                              {t("opencode.generateThinkingVariants", {
+                                defaultValue: "生成等级预设",
+                              })}
+                            </Button>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="space-y-1.5">
+                              <span className="text-xs text-muted-foreground">
+                                {t("opencode.contextLimit", {
+                                  defaultValue: "上下文",
+                                })}
+                              </span>
+                              <Input
+                                type="number"
+                                min={1}
+                                step={1}
+                                value={limit.context ?? ""}
+                                onChange={(event) =>
+                                  handleModelLimitChange(
+                                    key,
+                                    "context",
+                                    event.target.value,
+                                  )
+                                }
+                                placeholder="1000000"
+                                className="h-9"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <span className="text-xs text-muted-foreground">
+                                {t("opencode.outputLimit", {
+                                  defaultValue: "最大输出",
+                                })}
+                              </span>
+                              <Input
+                                type="number"
+                                min={1}
+                                step={1}
+                                value={limit.output ?? ""}
+                                onChange={(event) =>
+                                  handleModelLimitChange(
+                                    key,
+                                    "output",
+                                    event.target.value,
+                                  )
+                                }
+                                placeholder="131072"
+                                className="h-9"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <span className="text-xs text-muted-foreground">
+                              {t("opencode.thinkingLevel", {
+                                defaultValue: "默认思考等级",
+                              })}
+                            </span>
+                            <Select
+                              value={thinkingLevel}
+                              onValueChange={(value) => {
+                                if (nativeEfforts.length) {
+                                  onModelsChange({
+                                    ...models,
+                                    [key]: setOpenCodeReasoningEffort(
+                                      model,
+                                      protocol,
+                                      value,
+                                    ),
+                                  });
+                                  return;
+                                }
+                                updateModelThinking(key, protocol, () =>
+                                  getOpenCodeThinkingSettingsForLevel(
+                                    protocol,
+                                    value as "low" | "medium" | "high",
+                                  ),
+                                );
+                              }}
+                            >
+                              <SelectTrigger className="h-9">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {(nativeEfforts.length
+                                  ? nativeEfforts
+                                  : ["low", "medium", "high"]
+                                ).map((level) => (
+                                    <SelectItem key={level} value={level}>
+                                      {t(
+                                        `opencode.thinkingLevel${level[0].toUpperCase()}${level.slice(1)}`,
+                                        { defaultValue: level },
+                                      )}
+                                    </SelectItem>
+                                  ),
+                                )}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     {/* Model Properties (extra fields like variants, cost) */}
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">

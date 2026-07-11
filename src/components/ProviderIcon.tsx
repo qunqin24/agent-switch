@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useId, useMemo } from "react";
 import grokIconSvg from "@lobehub/icons-static-svg/icons/grok.svg?raw";
 import openCodeIconSvg from "@lobehub/icons-static-svg/icons/opencode.svg?raw";
 import {
@@ -9,6 +9,7 @@ import {
   isUrlIcon,
 } from "@/icons/extracted";
 import { cn } from "@/lib/utils";
+import { namespaceSvgIds } from "@/lib/namespaceSvgIds";
 
 // Keep these brand marks sourced directly from Lobe Icons instead of the
 // generated local catalog, so package upgrades carry through automatically.
@@ -34,19 +35,23 @@ export const ProviderIcon: React.FC<ProviderIconProps> = ({
   className,
   showFallback = true,
 }) => {
+  const iconInstanceId = useId()
+    .replace(/[^a-zA-Z0-9_-]/g, "")
+    .replace(/^/, "provider-icon-");
+
   // 获取内联 SVG 字符串
   const iconSvg = useMemo(() => {
     const lobeBrandIcon = icon
       ? LOBE_BRAND_ICON_SVGS[icon.toLowerCase()]
       : undefined;
     if (lobeBrandIcon) {
-      return lobeBrandIcon;
+      return namespaceSvgIds(lobeBrandIcon, iconInstanceId);
     }
     if (icon && !isUrlIcon(icon) && hasIcon(icon)) {
-      return getIcon(icon);
+      return namespaceSvgIds(getIcon(icon), iconInstanceId);
     }
     return "";
-  }, [icon]);
+  }, [icon, iconInstanceId]);
 
   // 获取图标 URL（URL_ICONS 列表中的 SVG / 光栅图片）
   const iconUrl = useMemo(() => {

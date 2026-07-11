@@ -981,35 +981,36 @@ pub fn run() {
                 }
             }
 
-            // 模型定价元数据：启动时按 24 小时间隔检查一次，随后在常驻期间每天检查。
-            // 网络或远端格式异常只记录状态，不会影响本地定价和应用启动。
+            // Models.dev 本地缓存：启动后和运行期间检查用户设置的更新频率。
+            // 价格同步只读取该缓存，因此模型能力、限制和价格始终来自同一快照。
             let db_for_pricing_metadata = app.state::<AppState>().db.clone();
             tauri::async_runtime::spawn(async move {
-                const PRICING_METADATA_SYNC_INTERVAL_SECS: u64 = 24 * 60 * 60;
-
-                if let Err(e) =
-                    crate::services::pricing_metadata::refresh_pricing_metadata_if_due(
-                        &db_for_pricing_metadata,
-                    )
-                    .await
-                {
-                    log::warn!("模型定价元数据启动同步失败: {e}");
+                async fn sync_models_dev_cache_and_pricing(db: &Database) {
+                    match crate::services::models_dev_cache::refresh_models_dev_cache(false).await {
+                        Ok(result) if result.outcome != "disabled" => {
+                            if let Err(error) =
+                                crate::services::pricing_metadata::refresh_pricing_metadata_if_due(db)
+                                    .await
+                            {
+                                log::warn!("Models.dev 定价同步失败: {error}");
+                            }
+                        }
+                        Ok(_) => {}
+                        Err(error) => {
+                            log::warn!("Models.dev 缓存自动更新失败: {error}");
+                        }
+                    }
                 }
 
-                let mut interval = tokio::time::interval(std::time::Duration::from_secs(
-                    PRICING_METADATA_SYNC_INTERVAL_SECS,
-                ));
+                sync_models_dev_cache_and_pricing(&db_for_pricing_metadata).await;
+
+                // 小时级唤醒仅用于读取当前用户设置；实际下载频率仍由缓存服务的
+                // 6/24/168 小时间隔精确门控，设置变更无需重启应用。
+                let mut interval = tokio::time::interval(std::time::Duration::from_secs(60 * 60));
                 interval.tick().await; // 跳过立即 tick：启动时已检查
                 loop {
                     interval.tick().await;
-                    if let Err(e) =
-                        crate::services::pricing_metadata::refresh_pricing_metadata_if_due(
-                            &db_for_pricing_metadata,
-                        )
-                        .await
-                    {
-                        log::warn!("模型定价元数据定时同步失败: {e}");
-                    }
+                    sync_models_dev_cache_and_pricing(&db_for_pricing_metadata).await;
                 }
             });
 
@@ -1272,6 +1273,10 @@ pub fn run() {
             commands::get_current_prompt_file_content,
             // model list fetch (OpenAI-compatible /v1/models)
             commands::fetch_models_for_config,
+            commands::get_models_dev_model_metadata,
+            commands::get_models_dev_api_catalog,
+            commands::refresh_models_dev_cache,
+            commands::get_models_dev_cache_status,
             // ours: endpoint speed test + custom endpoint management
             commands::test_api_endpoints,
             commands::get_custom_endpoints,

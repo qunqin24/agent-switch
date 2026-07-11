@@ -336,11 +336,27 @@
       "apps": "アプリ",
       "skills": "Skills",
       "integration": "認証と連携",
+      "modelMetadata": "モデルメタデータ",
       "system": "システム"
     },
     "tabAuth": "認証",
     "tabAdvanced": "詳細",
     "tabProxy": "ルーティング",
+    "modelsDev": {
+      "autoUpdate": {
+        "title": "モデルデータを自動更新",
+        "description": "Models.dev の公式モデル機能、制限、価格をローカルキャッシュへ保存します。"
+      },
+      "interval": {
+        "title": "更新頻度",
+        "description": "アプリの実行中にこの頻度で確認します。オフライン時は最後に有効だったデータを使用します。",
+        "options": {
+          "6": "6 時間ごと",
+          "24": "毎日",
+          "168": "毎週"
+        }
+      }
+    },
     "authCenter": {
       "title": "OAuth 認証センター",
       "description": "Claude Code で他のサブスクリプションをご利用いただけます。コンプライアンスリスクにご注意ください。",
@@ -1366,7 +1382,46 @@
     "modelExtraFieldKeyPlaceholder": "variants",
     "sdkOptions": "SDK オプション",
     "modelOptionKeyPlaceholder": "provider",
-    "modelOptionValuePlaceholder": "{\"order\": [\"baseten\"]}"
+    "modelOptionValuePlaceholder": "{\"order\": [\"baseten\"]}",
+    "thinkingSettings": "思考設定",
+    "thinkingEnabled": "思考を有効化",
+    "thinkingProtocol": "リクエスト形式",
+    "thinkingProtocolAnthropic": "Anthropic Thinking",
+    "thinkingProtocolOpenAI": "OpenAI Reasoning Effort",
+    "thinkingProtocolGemini": "Gemini Thinking Config",
+    "thinkingBudget": "思考予算",
+    "thinkingEffort": "思考強度",
+    "thinkingLevel": "デフォルトの思考レベル",
+    "thinkingLevelLow": "低（Low）",
+    "thinkingLevelMedium": "中（Medium）",
+    "thinkingLevelHigh": "高（High）",
+    "thinkingLevelMax": "最大（Max）",
+    "thinkingEffortLow": "低",
+    "thinkingEffortMedium": "中",
+    "thinkingEffortHigh": "高",
+    "thinkingEffortXhigh": "最高",
+    "autoConfigureThinking": "自動設定",
+    "modelsDevReasoningSupported": "Models.dev：思考に対応",
+    "modelsDevReasoningUnsupported": "Models.dev：思考能力の記載なし",
+    "modelsDevCapabilitySummary": "機能：{{capabilities}}",
+    "modelsDevCapabilityAttachment": "添付ファイル",
+    "modelsDevCapabilityReasoning": "思考",
+    "modelsDevCapabilityToolCall": "ツール呼び出し",
+    "modelsDevCapabilityStructuredOutput": "構造化出力",
+    "modelsDevCapabilityTemperature": "温度",
+    "modelsDevThinkingLoadError": "Models.dev の読み込みに失敗しました",
+    "modelsDevLoadingCapabilities": "Models.dev からモデルの機能を読み込んでいます...",
+    "modelsDevModelNotFound": "Models.dev に {{model}} が見つかりません。モデル ID を確認するか、手動で設定してください。",
+    "modelsDevThinkingUnsupported": "Models.dev では {{name}} の思考対応が確認できません。手動設定は可能です。",
+    "modelsDevThinkingConfigured": "{{name}} のメタデータから思考を有効にしました",
+    "modelsDevThinkingManualFormat": "この SDK では下のリクエスト形式を選んで、手動で思考を有効にしてください。",
+    "modelsDevNativeEffortHint": "Models.dev のネイティブ思考レベル: {{values}}",
+    "modelsDevReasoningOptionsUnavailable": "Models.dev はこのモデルのネイティブ思考レベルを提供していません。モデルプロパティで手動追加してください。",
+    "modelLimits": "モデル制限と思考レベル",
+    "contextLimit": "コンテキスト",
+    "outputLimit": "最大出力",
+    "generateThinkingVariants": "レベルプリセットを生成",
+    "thinkingVariantsGenerated": "{{values}} の思考プリセットを生成しました"
   },
   "providerPreset": {
     "label": "プロバイダータイプ",

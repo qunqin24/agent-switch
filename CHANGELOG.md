@@ -5,6 +5,19 @@ All notable changes to CC Switch will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.16.8] - 2026-07-11
+
+### Added
+
+- Added a shared local Models.dev cache for official model metadata and pricing. The cache powers OpenCode auto-configuration and usage cost refresh, supports 6-hour, daily, or weekly updates, and preserves user-defined prices.
+- Added automatic OpenCode model display names and metadata configuration when models are added. Changing the AI SDK interface format also regenerates the model's native reasoning settings.
+
+### Fixed
+
+- Fixed provider-key inputs with Chinese Pinyin IMEs: preedit text is no longer duplicated while the field still enforces lowercase letters, numbers, and hyphens on commit.
+- Fixed inline SVG provider icons with gradients or clip paths, including NewAPI, becoming blank when rendered more than once on the same page.
+- Removed the official-website banner from generated GitHub Release notes.
+
 ## [3.16.7] - 2026-07-11
 
 ### Added

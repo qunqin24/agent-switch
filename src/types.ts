@@ -362,6 +362,10 @@ export interface Settings {
   commonConfigConfirmed?: boolean;
   // 首选语言（可选，默认中文）
   language?: "en" | "zh" | "zh-TW" | "ja";
+  // 是否自动更新本地 Models.dev 模型元数据缓存
+  modelsDevAutoUpdate?: boolean;
+  // Models.dev 自动更新间隔（小时）
+  modelsDevUpdateIntervalHours?: number;
 
   // 主页面显示的应用（默认全部显示）
   visibleApps?: VisibleApps;
