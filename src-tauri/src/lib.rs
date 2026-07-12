@@ -1485,11 +1485,16 @@ pub fn run() {
             commands::copilot_get_usage_for_account,
             // OMO commands
             commands::read_omo_local_file,
+            commands::list_opencode_models_for_omo,
             commands::get_current_omo_provider_id,
             commands::disable_current_omo,
             commands::read_omo_slim_local_file,
             commands::get_current_omo_slim_provider_id,
             commands::disable_current_omo_slim,
+            commands::list_opencode_agents,
+            commands::list_opencode_mcp_server_ids,
+            commands::save_opencode_agent,
+            commands::delete_opencode_agent,
             // Workspace files (OpenClaw)
             commands::read_workspace_file,
             commands::write_workspace_file,

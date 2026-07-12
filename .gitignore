@@ -29,5 +29,6 @@ flatpak-repo/
 copilot-api
 .history
 CODEBUDDY.md
+PRODUCT.md
 .github
 mainWindow.js

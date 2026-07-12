@@ -29,7 +29,7 @@ export const OMO_BUILTIN_AGENTS: OmoAgentDef[] = [
     display: "Sisyphus",
     descKey: "omo.agentDesc.sisyphus",
     tooltipKey: "omo.agentTooltip.sisyphus",
-    recommended: "claude-opus-4-8",
+    recommended: "gpt-5.6-terra",
     group: "main",
   },
   {
@@ -37,7 +37,7 @@ export const OMO_BUILTIN_AGENTS: OmoAgentDef[] = [
     display: "Hephaestus",
     descKey: "omo.agentDesc.hephaestus",
     tooltipKey: "omo.agentTooltip.hephaestus",
-    recommended: "gpt-5.5",
+    recommended: "gpt-5.6-sol",
     group: "main",
   },
   {
@@ -120,7 +120,7 @@ export const OMO_BUILTIN_CATEGORIES: OmoCategoryDef[] = [
     display: "Visual Engineering",
     descKey: "omo.categoryDesc.visualEngineering",
     tooltipKey: "omo.categoryTooltip.visualEngineering",
-    recommended: "gemini-3.5-flash",
+    recommended: "gpt-5.6-luna",
   },
   {
     key: "ultrabrain",
@@ -310,6 +310,30 @@ export function parseOmoOtherFieldsObject(
   return parsed as Record<string, unknown>;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function extractOmoSlimActivePresetAgents(
+  settings: Record<string, unknown> | undefined,
+): Record<string, Record<string, unknown>> {
+  const legacyAgents = settings?.agents;
+  if (isRecord(legacyAgents) && Object.keys(legacyAgents).length > 0) {
+    return legacyAgents as Record<string, Record<string, unknown>>;
+  }
+
+  const otherFields = settings?.otherFields;
+  if (!isRecord(otherFields) || typeof otherFields.preset !== "string") {
+    return {};
+  }
+  const presets = otherFields.presets;
+  if (!isRecord(presets)) return {};
+  const activePreset = presets[otherFields.preset];
+  if (!isRecord(activePreset)) return {};
+
+  return activePreset as Record<string, Record<string, unknown>>;
+}
+
 // ============================================================================
 // OMO Slim (oh-my-opencode-slim) definitions
 // ============================================================================
@@ -344,7 +368,7 @@ export const OMO_SLIM_BUILTIN_AGENTS: OmoAgentDef[] = [
     display: "Explorer",
     descKey: "omo.slimAgentDesc.explorer",
     tooltipKey: "omo.slimAgentTooltip.explorer",
-    recommended: "grok-build-0.1",
+    recommended: "gpt-5.6-luna",
     group: "sub",
   },
   {
@@ -352,7 +376,7 @@ export const OMO_SLIM_BUILTIN_AGENTS: OmoAgentDef[] = [
     display: "Designer",
     descKey: "omo.slimAgentDesc.designer",
     tooltipKey: "omo.slimAgentTooltip.designer",
-    recommended: "gemini-3.5-flash",
+    recommended: "gpt-5.6-luna",
     group: "sub",
   },
   {
@@ -360,7 +384,15 @@ export const OMO_SLIM_BUILTIN_AGENTS: OmoAgentDef[] = [
     display: "Fixer",
     descKey: "omo.slimAgentDesc.fixer",
     tooltipKey: "omo.slimAgentTooltip.fixer",
-    recommended: "gpt-5.5",
+    recommended: "gpt-5.6-luna",
+    group: "sub",
+  },
+  {
+    key: "observer",
+    display: "Observer",
+    descKey: "omo.slimAgentDesc.observer",
+    tooltipKey: "omo.slimAgentTooltip.observer",
+    recommended: "kimi-k2.6",
     group: "sub",
   },
   {
@@ -368,18 +400,24 @@ export const OMO_SLIM_BUILTIN_AGENTS: OmoAgentDef[] = [
     display: "Council",
     descKey: "omo.slimAgentDesc.council",
     tooltipKey: "omo.slimAgentTooltip.council",
-    recommended: "gpt-5.4-mini",
+    group: "sub",
+  },
+  {
+    key: "councillor",
+    display: "Councillor",
+    descKey: "omo.slimAgentDesc.councillor",
+    tooltipKey: "omo.slimAgentTooltip.councillor",
     group: "sub",
   },
 ];
 
 export const OMO_SLIM_DISABLEABLE_AGENTS = [
-  { value: "orchestrator", label: "Orchestrator" },
   { value: "oracle", label: "Oracle" },
   { value: "librarian", label: "Librarian" },
   { value: "explorer", label: "Explorer" },
   { value: "designer", label: "Designer" },
   { value: "fixer", label: "Fixer" },
+  { value: "observer", label: "Observer" },
   { value: "council", label: "Council" },
 ] as const;
 
@@ -407,10 +445,6 @@ export function buildOmoProfilePreview(
   const result: Record<string, unknown> = {};
   const isSlim = options?.slim ?? false;
 
-  if (Object.keys(agents).length > 0) result["agents"] = agents;
-  if (!isSlim && categories && Object.keys(categories).length > 0)
-    result["categories"] = categories;
-
   try {
     const other = parseOmoOtherFieldsObject(otherFieldsStr);
     if (other) {
@@ -419,6 +453,20 @@ export function buildOmoProfilePreview(
       }
     }
   } catch {}
+
+  if (isSlim && typeof result.preset === "string" && isRecord(result.presets)) {
+    result.presets = {
+      ...result.presets,
+      [result.preset]: agents,
+    };
+    delete result.agents;
+  } else if (Object.keys(agents).length > 0) {
+    result.agents = agents;
+  }
+
+  if (!isSlim && categories && Object.keys(categories).length > 0) {
+    result.categories = categories;
+  }
 
   return result;
 }

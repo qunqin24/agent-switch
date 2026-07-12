@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { providersApi, sessionsApi, settingsApi, type AppId } from "@/lib/api";
+import { omoApi, omoSlimApi } from "@/lib/api/omo";
 import type { DeleteSessionOptions } from "@/lib/api/sessions";
 import type { SwitchResult } from "@/lib/api/providers";
 import type { Provider, SessionMeta, Settings } from "@/types";
@@ -141,7 +142,7 @@ export const useUpdateProviderMutation = (appId: AppId) => {
       await providersApi.update(provider, appId, originalId);
       return provider;
     },
-    onSuccess: async () => {
+    onSuccess: async (provider) => {
       await queryClient.invalidateQueries({ queryKey: ["providers", appId] });
       if (appId === "openclaw") {
         await queryClient.invalidateQueries({
@@ -151,14 +152,44 @@ export const useUpdateProviderMutation = (appId: AppId) => {
       if (appId === "hermes") {
         await invalidateHermesProviderCaches(queryClient);
       }
-      toast.success(
-        t("notifications.updateSuccess", {
-          defaultValue: "供应商更新成功",
-        }),
-        {
-          closeButton: true,
-        },
-      );
+
+      let omoRestartRequired = false;
+      if (
+        appId === "opencode" &&
+        (provider.category === "omo" || provider.category === "omo-slim")
+      ) {
+        try {
+          const currentProviderId =
+            provider.category === "omo-slim"
+              ? await omoSlimApi.getCurrentProviderId()
+              : await omoApi.getCurrentOmoProviderId();
+          omoRestartRequired = currentProviderId === provider.id;
+        } catch (error) {
+          console.warn(
+            "[OMO_RESTART_NOTICE_FAILED] failed to check current OMO provider",
+            error,
+          );
+        }
+      }
+
+      if (omoRestartRequired) {
+        toast.info(
+          t("notifications.omoRestartRequired", {
+            defaultValue:
+              "配置已写入。正在运行的 OpenCode 不会热重载 Agent 配置，请重启 OpenCode 后生效。",
+          }),
+          { duration: 6500, closeButton: true },
+        );
+      } else {
+        toast.success(
+          t("notifications.updateSuccess", {
+            defaultValue: "供应商更新成功",
+          }),
+          {
+            closeButton: true,
+          },
+        );
+      }
     },
     onError: (error: Error) => {
       const detail = extractErrorMessage(error) || t("common.unknown");

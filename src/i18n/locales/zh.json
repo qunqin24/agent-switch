@@ -257,6 +257,7 @@
     "skipClaudeOnboardingFailed": "跳过 Claude Code 初次安装确认失败",
     "clearClaudeOnboardingSkipFailed": "恢复 Claude Code 初次安装确认失败",
     "updateSuccess": "供应商更新成功",
+    "omoRestartRequired": "配置已写入。正在运行的 OpenCode 不会热重载 Agent 配置，请重启 OpenCode 后生效。",
     "updateFailed": "更新供应商失败：{{error}}",
     "deleteSuccess": "供应商已删除",
     "deleteFailed": "删除供应商失败：{{error}}",
@@ -2414,7 +2415,140 @@
     "skillsFailedDescription": "请打开 Skills 页面点击“导入已有”手动导入（或重启后再试）。"
   },
   "agents": {
-    "title": "智能体"
+    "title": "Agent 管理",
+    "manage": "管理 OpenCode Agent",
+    "add": "新建 Agent",
+    "search": "搜索 Agent...",
+    "empty": "当前作用域还没有自定义 Agent",
+    "count": "共 {{count}} 个 Agent",
+    "selectTitle": "选择或新建一个 Agent",
+    "selectDescription": "可视化管理 OpenCode 原生主 Agent 和子 Agent，无需手动编辑 Markdown。",
+    "newAgent": "新建 Agent",
+    "scope": {
+      "global": "全局",
+      "project": "项目",
+      "chooseProject": "选择项目目录",
+      "projectHint": "选择项目目录后管理 .opencode/agents"
+    },
+    "mode": {
+      "primary": "主 Agent",
+      "subagent": "子 Agent",
+      "all": "两者皆可"
+    },
+    "source": {
+      "omoSlim": "OMO Slim",
+      "managedByOmoSlim": "由 OMO Slim 管理",
+      "readOnlyHint": "此 Agent 由 OMO Slim 管理，在这里仅供查看。请在 OMO Slim 配置中调整它。"
+    },
+    "sections": {
+      "identity": "基本信息",
+      "behavior": "运行行为",
+      "model": "模型与参数",
+      "visibility": "可见性",
+      "prompt": "系统提示词"
+    },
+    "status": {
+      "hidden": "已隐藏",
+      "disabled": "已禁用",
+      "unsaved": "未保存"
+    },
+    "form": {
+      "id": "Agent ID",
+      "description": "描述",
+      "mode": "运行模式",
+      "modeHint": "决定 Agent 作为主会话、子任务，或两者皆可。",
+      "model": "模型",
+      "variant": "思考等级",
+      "inheritModel": "继承 OpenCode 默认模型",
+      "searchModel": "搜索模型...",
+      "noModels": "没有可用模型",
+      "noVariant": "不指定",
+      "temperature": "温度",
+      "topP": "Top P",
+      "steps": "最大步骤",
+      "color": "界面颜色",
+      "colorHelp": "查看界面颜色说明",
+      "colorHint": "设置 Agent 在 OpenCode 界面中的标识颜色，仅影响外观。支持十六进制颜色或 primary、secondary、accent、success、warning、error、info 等主题色。",
+      "hidden": "隐藏 Agent",
+      "hiddenHint": "可被调用，但不显示在 @ 补全中",
+      "disabled": "禁用 Agent",
+      "disabledHint": "保留配置，但不允许使用",
+      "prompt": "系统提示词",
+      "promptPlaceholder": "写入该 Agent 的系统提示词…",
+      "advanced": "高级 frontmatter 字段",
+      "advancedHint": "这里仅显示尚未被表单管理的顶层字段，必须是 JSON 对象。",
+      "restartHint": "保存后请重启 OpenCode，让 Agent 定义完整重载。"
+    },
+    "permissions": {
+      "title": "工具权限",
+      "description": "询问会在执行前请求确认；未列出的复杂权限会保留在文件中。",
+      "allow": "允许",
+      "ask": "询问",
+      "deny": "拒绝",
+      "inherit": "继承",
+      "bulkAllow": "全部允许",
+      "bulkAsk": "全部询问",
+      "bulkDeny": "全部拒绝",
+      "bulkTitle": "全部工具",
+      "bulkDescription": "一键应用到以下所有内置工具",
+      "help": "查看“{{tool}}”权限说明",
+      "tools": {
+        "read": "读取",
+        "edit": "编辑",
+        "glob": "文件匹配",
+        "grep": "内容搜索",
+        "list": "目录列表",
+        "bash": "终端命令",
+        "task": "子任务",
+        "external_directory": "外部目录",
+        "todowrite": "待办事项",
+        "webfetch": "网页读取",
+        "websearch": "网络搜索",
+        "lsp": "代码智能（LSP）",
+        "skill": "技能",
+        "question": "向用户提问",
+        "doom_loop": "循环保护"
+      },
+      "toolDescriptions": {
+        "read": "允许 Agent 读取项目中的文件内容；可使用路径规则进行精细控制。",
+        "edit": "控制所有文件修改操作，包括 edit、write 和 apply_patch。",
+        "glob": "允许 Agent 使用 Glob 模式查找匹配的文件和目录。",
+        "grep": "允许 Agent 使用正则表达式搜索文件内容。",
+        "list": "允许 Agent 查看目录中的文件和子目录列表。",
+        "bash": "允许 Agent 在项目环境中执行终端命令；可按命令模式设置更细规则。",
+        "task": "允许 Agent 启动子 Agent 或委派子任务。",
+        "external_directory": "控制 Agent 访问当前项目工作区之外的文件和目录。",
+        "todowrite": "允许 Agent 创建、更新和读取任务待办列表。",
+        "webfetch": "允许 Agent 获取并读取指定 URL 的网页内容。",
+        "websearch": "允许 Agent 搜索互联网；需要 OpenCode Provider 或启用 OPENCODE_ENABLE_EXA。",
+        "lsp": "允许 Agent 使用定义跳转、引用查找、悬浮信息等 LSP 代码智能功能。",
+        "skill": "允许 Agent 加载并读取 SKILL.md 中定义的技能说明。",
+        "question": "允许 Agent 在执行过程中向用户提出问题并等待回答。",
+        "doom_loop": "当相同工具调用连续重复时，允许 OpenCode 请求用户确认恢复操作。"
+      }
+    },
+    "mcpPermissions": {
+      "title": "MCP 权限",
+      "description": "使用“服务名_*”控制该 MCP 的全部工具；已有的具体工具规则会继续保留并优先生效。",
+      "bulkAllow": "全部允许",
+      "bulkAsk": "全部询问",
+      "bulkDeny": "全部拒绝",
+      "bulkTitle": "全部 MCP 服务",
+      "bulkDescription": "一键设置以下所有 MCP 服务",
+      "empty": "OpenCode 当前没有配置 MCP 服务",
+      "pattern": "权限规则：{{pattern}}"
+    },
+    "validation": {
+      "required": "请填写 Agent ID 和描述"
+    },
+    "notifications": {
+      "saved": "Agent 已保存",
+      "deleted": "Agent 已删除"
+    },
+    "delete": {
+      "title": "删除 Agent",
+      "message": "确定删除 Agent“{{name}}”吗？此操作会删除对应的 Markdown 文件。"
+    }
   },
   "modelTest": {
     "testProvider": "测试模型"
@@ -2753,6 +2887,15 @@
     "profileName": "名称",
     "mainAgents": "主 Agent",
     "subAgents": "子 Agent",
+    "optionalAgents": "可选 / 内部 Agent",
+    "featureEnabled": "已开启",
+    "featureDisabled": "已关闭",
+    "selectCouncilModelFirst": "请先为 Council 选择汇总模型，再开启 Council",
+    "optionalAgentStatus": {
+      "observer": "默认关闭：仅在需要图片、截图或 PDF 分析时手动开启",
+      "council": "默认关闭：会并行调用多个模型，成本和延迟更高",
+      "councillor": "内部 Agent：跟随 Council 一同开启或关闭，不能单独切换"
+    },
     "categories": "分类",
     "customAgents": "自定义 Agent",
     "noCustomAgents": "暂无自定义 Agent",
@@ -2895,7 +3038,9 @@
       "explorer": "探索者",
       "designer": "设计师",
       "fixer": "修复者",
-      "council": "议会"
+      "observer": "观察者",
+      "council": "议会",
+      "councillor": "议员"
     },
     "slimAgentTooltip": {
       "orchestrator": "编写执行代码，编排多代理工作流，召唤专家",
@@ -2904,7 +3049,9 @@
       "explorer": "正则搜索、AST 模式匹配、文件发现（只读）",
       "designer": "现代响应式设计、CSS/Tailwind 精通",
       "fixer": "代码实现、重构、测试、验证",
-      "council": "多模型共识代理，并行运行多个只读 councillor，再由 master 汇总最终答案。"
+      "observer": "视觉内容与图片分析代理；插件默认禁用，需要配置支持视觉输入的模型后启用。",
+      "council": "多模型共识代理，并行运行多个只读 councillor，再由 master 汇总最终答案。",
+      "councillor": "Council 内部使用的只读议员代理，负责独立分析同一问题且不可禁用。"
     }
   },
   "openclawConfig": {

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { providersApi } from "@/lib/api";
+import type { OmoOpenCodeModel } from "@/lib/api/providers";
 import { useProvidersQuery } from "@/lib/query/queries";
 import type { OpenCodeProviderConfig } from "@/types";
 import { OPENCODE_PRESET_MODEL_VARIANTS } from "@/config/opencodeProviderPresets";
@@ -26,6 +27,64 @@ interface OmoModelBuild {
   usedFallbackSource: boolean;
 }
 
+const OMO_MODEL_CATALOG_CACHE_KEY = "cc-switch:omo-model-catalog:v1";
+
+interface OmoModelCatalogCache {
+  version: 1;
+  updatedAt: string;
+  models: OmoOpenCodeModel[];
+}
+
+function isCachedOmoModel(value: unknown): value is OmoOpenCodeModel {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const model = value as Partial<OmoOpenCodeModel>;
+  return (
+    typeof model.value === "string" &&
+    typeof model.providerId === "string" &&
+    typeof model.modelId === "string" &&
+    typeof model.name === "string" &&
+    Array.isArray(model.variants) &&
+    model.variants.every((variant) => typeof variant === "string")
+  );
+}
+
+export function readCachedOmoModelCatalog(): OmoOpenCodeModel[] | null {
+  try {
+    const raw = globalThis.localStorage?.getItem(OMO_MODEL_CATALOG_CACHE_KEY);
+    if (!raw) return null;
+    const cache = JSON.parse(raw) as Partial<OmoModelCatalogCache>;
+    if (
+      cache.version !== 1 ||
+      !Array.isArray(cache.models) ||
+      !cache.models.every(isCachedOmoModel)
+    ) {
+      return null;
+    }
+    return cache.models;
+  } catch {
+    return null;
+  }
+}
+
+export function writeCachedOmoModelCatalog(models: OmoOpenCodeModel[]): void {
+  if (models.length === 0) return;
+  try {
+    const cache: OmoModelCatalogCache = {
+      version: 1,
+      updatedAt: new Date().toISOString(),
+      models,
+    };
+    globalThis.localStorage?.setItem(
+      OMO_MODEL_CATALOG_CACHE_KEY,
+      JSON.stringify(cache),
+    );
+  } catch {
+    // Cache failures must not block the live OpenCode catalog.
+  }
+}
+
 export interface OmoModelSourceResult {
   omoModelOptions: Array<{ value: string; label: string }>;
   omoModelVariantsMap: Record<string, string[]>;
@@ -36,6 +95,7 @@ export interface OmoModelSourceResult {
       limit?: { context?: number; output?: number };
     }
   >;
+  isOmoModelCatalogLoading: boolean;
   existingOpencodeKeys: string[];
 }
 
@@ -57,6 +117,11 @@ export function useOmoModelSource({
     string[] | null
   >(null);
   const [omoLiveIdsLoadFailed, setOmoLiveIdsLoadFailed] = useState(false);
+  const [openCodeCliModels, setOpenCodeCliModels] = useState<
+    OmoOpenCodeModel[] | null
+  >(() => (isOmoCategory ? readCachedOmoModelCatalog() : null));
+  const [openCodeCliModelsLoadFailed, setOpenCodeCliModelsLoadFailed] =
+    useState(false);
   const lastOmoModelSourceWarningRef = useRef<string>("");
 
   useEffect(() => {
@@ -95,6 +160,42 @@ export function useOmoModelSource({
     };
   }, [isOmoCategory]);
 
+  useEffect(() => {
+    let active = true;
+    if (!isOmoCategory) {
+      setOpenCodeCliModels(null);
+      setOpenCodeCliModelsLoadFailed(false);
+      return () => {
+        active = false;
+      };
+    }
+
+    setOpenCodeCliModels(readCachedOmoModelCatalog());
+    setOpenCodeCliModelsLoadFailed(false);
+    void providersApi
+      .listOpenCodeModelsForOmo()
+      .then((models) => {
+        writeCachedOmoModelCatalog(models);
+        if (active) {
+          setOpenCodeCliModels(models);
+        }
+      })
+      .catch((error) => {
+        console.warn(
+          "[OMO_MODEL_SOURCE_CLI_FAILED] failed to load OpenCode model catalog",
+          error,
+        );
+        if (active) {
+          setOpenCodeCliModelsLoadFailed(true);
+          setOpenCodeCliModels((current) => current ?? []);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isOmoCategory]);
+
   const omoModelBuild = useMemo<OmoModelBuild>(() => {
     const empty: OmoModelBuild = {
       options: [],
@@ -107,15 +208,12 @@ export function useOmoModelSource({
       return empty;
     }
 
-    const allProviders = opencodeProvidersData?.providers;
-    if (!allProviders) {
+    const allProviders = opencodeProvidersData?.providers || {};
+    if (openCodeCliModels === null && !openCodeCliModelsLoadFailed) {
       return empty;
     }
 
     const shouldFilterByLive = !omoLiveIdsLoadFailed;
-    if (shouldFilterByLive && enabledOpencodeProviderIds === null) {
-      return empty;
-    }
     const liveSet =
       shouldFilterByLive && enabledOpencodeProviderIds
         ? new Set(enabledOpencodeProviderIds)
@@ -132,8 +230,25 @@ export function useOmoModelSource({
     > = {};
     const parseFailedProviders: string[] = [];
 
+    for (const model of openCodeCliModels || []) {
+      const label = `${model.providerId} / ${model.name} (${model.modelId})`;
+      dedupedOptions.set(model.value, label);
+      if (model.variants.length > 0) {
+        variantsMap[model.value] = model.variants;
+      }
+      const meta: (typeof presetMetaMap)[string] = {};
+      if (model.options) meta.options = model.options;
+      if (model.limit) meta.limit = model.limit;
+      if (Object.keys(meta).length > 0) {
+        presetMetaMap[model.value] = meta;
+      }
+    }
+
     for (const [providerKey, provider] of Object.entries(allProviders)) {
       if (provider.category === "omo" || provider.category === "omo-slim") {
+        continue;
+      }
+      if (shouldFilterByLive && enabledOpencodeProviderIds === null) {
         continue;
       }
       if (liveSet && !liveSet.has(providerKey)) {
@@ -167,9 +282,8 @@ export function useOmoModelSource({
             : providerKey;
         const value = `${providerKey}/${modelId}`;
         const label = `${providerDisplayName} / ${modelName} (${modelId})`;
-        if (!dedupedOptions.has(value)) {
-          dedupedOptions.set(value, label);
-        }
+        // Managed providers contribute the friendlier CC Switch display name.
+        dedupedOptions.set(value, label);
 
         const rawVariants = model.variants;
         if (
@@ -224,13 +338,17 @@ export function useOmoModelSource({
       variantsMap,
       presetMetaMap,
       parseFailedProviders,
-      usedFallbackSource: omoLiveIdsLoadFailed,
+      usedFallbackSource:
+        (openCodeCliModels?.length ?? 0) === 0 &&
+        (omoLiveIdsLoadFailed || openCodeCliModelsLoadFailed),
     };
   }, [
     isOmoCategory,
     opencodeProvidersData?.providers,
     enabledOpencodeProviderIds,
     omoLiveIdsLoadFailed,
+    openCodeCliModels,
+    openCodeCliModelsLoadFailed,
   ]);
 
   // Warning toast for parse failures / fallback
@@ -275,6 +393,12 @@ export function useOmoModelSource({
     omoModelOptions: omoModelBuild.options,
     omoModelVariantsMap: omoModelBuild.variantsMap,
     omoPresetMetaMap: omoModelBuild.presetMetaMap,
+    isOmoModelCatalogLoading:
+      isOmoCategory &&
+      ((openCodeCliModels === null && !openCodeCliModelsLoadFailed) ||
+        (openCodeCliModelsLoadFailed &&
+          enabledOpencodeProviderIds === null &&
+          !omoLiveIdsLoadFailed)),
     existingOpencodeKeys,
   };
 }

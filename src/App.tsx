@@ -26,6 +26,7 @@ import {
   Shield,
   Cpu,
   LayoutDashboard,
+  Bot,
 } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { Provider, VisibleApps } from "@/types";
@@ -1002,7 +1003,8 @@ function App() {
           key={currentView}
           className={cn(
             "flex-1 min-h-0",
-            currentView === "sessions" && "flex overflow-hidden",
+            (currentView === "sessions" || currentView === "agents") &&
+              "flex overflow-hidden",
           )}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -1427,6 +1429,17 @@ function App() {
                           </>
                         ) : (
                           <>
+                            {activeApp === "opencode" && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setCurrentView("agents")}
+                                className="rounded-full w-8 h-8 hover:bg-white text-zinc-500 hover:text-zinc-900 shadow-sm dark:text-zinc-400 dark:hover:bg-zinc-700 dark:hover:text-zinc-50"
+                                title={t("agents.manage")}
+                              >
+                                <Bot className="w-4 h-4" />
+                              </Button>
+                            )}
                             {hasSkillsSupport && (
                               <Button
                                 variant="ghost"
@@ -1513,7 +1526,7 @@ function App() {
               onClose={() => setCurrentView("providers")}
             />
           </div>
-        ) : currentView === "sessions" ? (
+        ) : currentView === "sessions" || currentView === "agents" ? (
           <div className="relative z-10 flex min-h-0 flex-1 overflow-hidden animate-fade-in">
             {renderContent()}
           </div>

@@ -20,10 +20,15 @@ Command.displayName = CommandPrimitive.displayName;
 
 const CommandInput = React.forwardRef<
   React.ComponentRef<typeof CommandPrimitive.Input>,
-  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Input>
->(({ className, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof CommandPrimitive.Input> & {
+    wrapperClassName?: string;
+  }
+>(({ className, wrapperClassName, ...props }, ref) => (
   <div
-    className="flex items-center border-b px-3 focus-within:outline-none focus-within:ring-0"
+    className={cn(
+      "flex items-center border-b px-3 focus-within:outline-none focus-within:ring-0",
+      wrapperClassName,
+    )}
     cmdk-input-wrapper=""
   >
     <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />

@@ -257,6 +257,7 @@
     "skipClaudeOnboardingFailed": "Claude Code の初回確認スキップに失敗しました",
     "clearClaudeOnboardingSkipFailed": "Claude Code の初回確認の復元に失敗しました",
     "updateSuccess": "プロバイダーを更新しました",
+    "omoRestartRequired": "設定を保存しました。実行中の OpenCode は Agent 設定をホットリロードしないため、OpenCode を再起動すると反映されます。",
     "updateFailed": "プロバイダーの更新に失敗しました: {{error}}",
     "deleteSuccess": "プロバイダーを削除しました",
     "deleteFailed": "プロバイダーの削除に失敗しました: {{error}}",
@@ -2414,7 +2415,140 @@
     "skillsFailedDescription": "Skills 画面で「既存をインポート」をクリックして手動でインポートしてください（または再起動して再試行）。"
   },
   "agents": {
-    "title": "エージェント"
+    "title": "Agent 管理",
+    "manage": "OpenCode Agent を管理",
+    "add": "Agent を追加",
+    "search": "Agent を検索...",
+    "empty": "このスコープにはカスタム Agent がありません",
+    "count": "{{count}} Agent",
+    "selectTitle": "Agent を選択または作成",
+    "selectDescription": "OpenCode ネイティブのメイン Agent とサブ Agent を管理します。",
+    "newAgent": "新しい Agent",
+    "scope": {
+      "global": "グローバル",
+      "project": "プロジェクト",
+      "chooseProject": "プロジェクトを選択",
+      "projectHint": "プロジェクトを選択して .opencode/agents を管理"
+    },
+    "mode": {
+      "primary": "メイン Agent",
+      "subagent": "サブ Agent",
+      "all": "両方"
+    },
+    "source": {
+      "omoSlim": "OMO Slim",
+      "managedByOmoSlim": "OMO Slim が管理",
+      "readOnlyHint": "この Agent は OMO Slim によって管理されているため、ここでは閲覧のみ可能です。OMO Slim 設定で変更してください。"
+    },
+    "sections": {
+      "identity": "基本情報",
+      "behavior": "動作",
+      "model": "モデルとパラメータ",
+      "visibility": "表示",
+      "prompt": "システムプロンプト"
+    },
+    "status": {
+      "hidden": "非表示",
+      "disabled": "無効",
+      "unsaved": "未保存"
+    },
+    "form": {
+      "id": "Agent ID",
+      "description": "説明",
+      "mode": "モード",
+      "modeHint": "メインセッション、サブタスク、または両方として動作するかを指定します。",
+      "model": "モデル",
+      "variant": "推論レベル",
+      "inheritModel": "OpenCode の既定モデルを継承",
+      "searchModel": "モデルを検索...",
+      "noModels": "利用可能なモデルがありません",
+      "noVariant": "指定なし",
+      "temperature": "Temperature",
+      "topP": "Top P",
+      "steps": "最大ステップ",
+      "color": "UI カラー",
+      "colorHelp": "UI カラーの説明",
+      "colorHint": "OpenCode インターフェースでの Agent の識別色を設定します。外観にのみ影響します。16 進カラーまたは primary、secondary、accent、success、warning、error、info などのテーマカラーを使用できます。",
+      "hidden": "Agent を非表示",
+      "hiddenHint": "呼び出し可能ですが @ 補完には表示されません",
+      "disabled": "Agent を無効化",
+      "disabledHint": "設定を保持したまま使用を停止します",
+      "prompt": "システムプロンプト",
+      "promptPlaceholder": "この Agent のシステムプロンプトを入力…",
+      "advanced": "高度な frontmatter フィールド",
+      "advancedHint": "フォームで管理されないトップレベル項目のみ表示します。JSON オブジェクトが必要です。",
+      "restartHint": "保存後に OpenCode を再起動して Agent を再読み込みしてください。"
+    },
+    "permissions": {
+      "title": "ツール権限",
+      "description": "確認は実行前に承認を求めます。複雑な既存権限は保持されます。",
+      "allow": "許可",
+      "ask": "確認",
+      "deny": "拒否",
+      "inherit": "継承",
+      "bulkAllow": "すべて許可",
+      "bulkAsk": "すべて確認",
+      "bulkDeny": "すべて拒否",
+      "bulkTitle": "すべてのツール",
+      "bulkDescription": "以下の全組み込みツールに一括適用します",
+      "help": "「{{tool}}」権限の説明",
+      "tools": {
+        "read": "読み取り",
+        "edit": "編集",
+        "glob": "ファイル検索",
+        "grep": "内容検索",
+        "list": "ディレクトリ一覧",
+        "bash": "ターミナルコマンド",
+        "task": "サブタスク",
+        "external_directory": "外部ディレクトリ",
+        "todowrite": "TODO リスト",
+        "webfetch": "Web ページ取得",
+        "websearch": "Web 検索",
+        "lsp": "コードインテリジェンス（LSP）",
+        "skill": "スキル",
+        "question": "ユーザーへの質問",
+        "doom_loop": "ループ保護"
+      },
+      "toolDescriptions": {
+        "read": "Agent がプロジェクト内のファイルを読み取ることを許可します。パス規則で細かく制御できます。",
+        "edit": "edit、write、apply_patch を含むすべてのファイル変更ツールを制御します。",
+        "glob": "Agent が Glob パターンでファイルやディレクトリを検索することを許可します。",
+        "grep": "Agent が正規表現でファイル内容を検索することを許可します。",
+        "list": "Agent がディレクトリ内のファイルとサブディレクトリを一覧表示することを許可します。",
+        "bash": "Agent がプロジェクト環境でターミナルコマンドを実行することを許可します。コマンド規則で細かく制御できます。",
+        "task": "Agent がサブ Agent を起動したり、サブタスクを委任したりすることを許可します。",
+        "external_directory": "現在のプロジェクトワークツリー外にあるファイルとディレクトリへのアクセスを制御します。",
+        "todowrite": "Agent がタスクの TODO リストを作成、更新、読み取りすることを許可します。",
+        "webfetch": "Agent が指定 URL の Web ページを取得して読み取ることを許可します。",
+        "websearch": "Agent が Web を検索することを許可します。OpenCode Provider または OPENCODE_ENABLE_EXA が必要です。",
+        "lsp": "定義、参照、ホバー情報などの LSP コードインテリジェンスを許可します。",
+        "skill": "Agent が SKILL.md に定義されたスキル説明を読み込むことを許可します。",
+        "question": "Agent が実行中にユーザーへ質問し、回答を待つことを許可します。",
+        "doom_loop": "同一のツール呼び出しが繰り返された場合、OpenCode が復旧確認を求めることを許可します。"
+      }
+    },
+    "mcpPermissions": {
+      "title": "MCP 権限",
+      "description": "「サーバー名_*」規則でその MCP の全ツールを制御します。既存のツール固有規則は保持され、優先して適用されます。",
+      "bulkAllow": "すべて許可",
+      "bulkAsk": "すべて確認",
+      "bulkDeny": "すべて拒否",
+      "bulkTitle": "すべての MCP サーバー",
+      "bulkDescription": "以下の全 MCP サーバーに一括適用します",
+      "empty": "OpenCode に MCP サーバーが設定されていません",
+      "pattern": "権限規則：{{pattern}}"
+    },
+    "validation": {
+      "required": "Agent ID と説明を入力してください"
+    },
+    "notifications": {
+      "saved": "Agent を保存しました",
+      "deleted": "Agent を削除しました"
+    },
+    "delete": {
+      "title": "Agent を削除",
+      "message": "Agent「{{name}}」を削除しますか？Markdown ファイルも削除されます。"
+    }
   },
   "modelTest": {
     "testProvider": "モデルテスト"
@@ -2753,6 +2887,15 @@
     "profileName": "名前",
     "mainAgents": "メインエージェント",
     "subAgents": "サブエージェント",
+    "optionalAgents": "オプション / 内部エージェント",
+    "featureEnabled": "有効",
+    "featureDisabled": "無効",
+    "selectCouncilModelFirst": "Council を有効にする前に統合モデルを選択してください",
+    "optionalAgentStatus": {
+      "observer": "デフォルトで無効：画像、スクリーンショット、PDF の分析が必要な場合のみ手動で有効化",
+      "council": "デフォルトで無効：複数モデルの並列呼び出しによりコストと遅延が増加",
+      "councillor": "内部 Agent：Council と同時に有効または無効になり、個別には切り替え不可"
+    },
     "categories": "カテゴリ",
     "customAgents": "カスタムエージェント",
     "noCustomAgents": "カスタムエージェントなし",
@@ -2895,7 +3038,9 @@
       "explorer": "エクスプローラー",
       "designer": "デザイナー",
       "fixer": "フィクサー",
-      "council": "カウンシル"
+      "observer": "オブザーバー",
+      "council": "カウンシル",
+      "councillor": "カウンシラー"
     },
     "slimAgentTooltip": {
       "orchestrator": "実行コードの作成、マルチエージェントワークフローの調整、エキスパートの召喚",
@@ -2904,7 +3049,9 @@
       "explorer": "正規表現検索、ASTパターンマッチング、ファイル検出（読み取り専用）",
       "designer": "モダンなレスポンシブデザイン、CSS/Tailwindの専門知識",
       "fixer": "コード実装、リファクタリング、テスト、検証",
-      "council": "複数モデルの合議エージェント。複数の読み取り専用 councillor を並列実行し、master が最終回答を統合します。"
+      "observer": "視覚コンテンツと画像分析用のエージェント。視覚入力対応モデルを設定するまでデフォルトでは無効です。",
+      "council": "複数モデルの合議エージェント。複数の読み取り専用 councillor を並列実行し、master が最終回答を統合します。",
+      "councillor": "Council 内部で使用される読み取り専用の議員エージェント。同じ問題を独立して分析し、無効化できません。"
     }
   },
   "openclawConfig": {

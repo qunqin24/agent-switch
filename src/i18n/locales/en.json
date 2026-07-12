@@ -257,6 +257,7 @@
     "skipClaudeOnboardingFailed": "Failed to skip Claude Code first-run confirmation",
     "clearClaudeOnboardingSkipFailed": "Failed to restore Claude Code first-run confirmation",
     "updateSuccess": "Provider updated successfully",
+    "omoRestartRequired": "Configuration saved. Running OpenCode sessions do not hot-reload agent settings; restart OpenCode to apply the changes.",
     "updateFailed": "Failed to update provider: {{error}}",
     "deleteSuccess": "Provider deleted",
     "deleteFailed": "Failed to delete provider: {{error}}",
@@ -2414,7 +2415,140 @@
     "skillsFailedDescription": "Open the Skills page and click \"Import Existing\" to import manually (or restart and try again)."
   },
   "agents": {
-    "title": "Agents"
+    "title": "Agent Management",
+    "manage": "Manage OpenCode agents",
+    "add": "New Agent",
+    "search": "Search agents...",
+    "empty": "No custom agents in this scope",
+    "count": "{{count}} agent(s)",
+    "selectTitle": "Select or create an agent",
+    "selectDescription": "Manage native OpenCode primary agents and subagents without editing Markdown by hand.",
+    "newAgent": "New Agent",
+    "scope": {
+      "global": "Global",
+      "project": "Project",
+      "chooseProject": "Choose project folder",
+      "projectHint": "Choose a project folder to manage .opencode/agents"
+    },
+    "mode": {
+      "primary": "Primary",
+      "subagent": "Subagent",
+      "all": "Both"
+    },
+    "source": {
+      "omoSlim": "OMO Slim",
+      "managedByOmoSlim": "Managed by OMO Slim",
+      "readOnlyHint": "This Agent is managed by OMO Slim and is read-only here. Adjust it in the OMO Slim configuration."
+    },
+    "sections": {
+      "identity": "Identity",
+      "behavior": "Behavior",
+      "model": "Model & parameters",
+      "visibility": "Visibility",
+      "prompt": "System prompt"
+    },
+    "status": {
+      "hidden": "Hidden",
+      "disabled": "Disabled",
+      "unsaved": "Unsaved"
+    },
+    "form": {
+      "id": "Agent ID",
+      "description": "Description",
+      "mode": "Mode",
+      "modeHint": "Whether this agent runs as a primary session, a subagent, or both.",
+      "model": "Model",
+      "variant": "Reasoning level",
+      "inheritModel": "Inherit OpenCode default model",
+      "searchModel": "Search models...",
+      "noModels": "No models available",
+      "noVariant": "Not specified",
+      "temperature": "Temperature",
+      "topP": "Top P",
+      "steps": "Max steps",
+      "color": "UI color",
+      "colorHelp": "About UI color",
+      "colorHint": "Sets the Agent's identifying color in the OpenCode interface and only affects appearance. Supports hex colors or theme colors such as primary, secondary, accent, success, warning, error, and info.",
+      "hidden": "Hide agent",
+      "hiddenHint": "Callable, but hidden from @ completion",
+      "disabled": "Disable agent",
+      "disabledHint": "Keep the file without allowing use",
+      "prompt": "System prompt",
+      "promptPlaceholder": "Write the system prompt for this agent…",
+      "advanced": "Advanced frontmatter fields",
+      "advancedHint": "Only top-level fields not managed by this form appear here. Must be a JSON object.",
+      "restartHint": "Restart OpenCode after saving to fully reload the agent definition."
+    },
+    "permissions": {
+      "title": "Tool permissions",
+      "description": "Ask requests confirmation before execution. Unlisted complex permissions remain in the file.",
+      "allow": "Allow",
+      "ask": "Ask",
+      "deny": "Deny",
+      "inherit": "Inherit",
+      "bulkAllow": "Allow all",
+      "bulkAsk": "Ask for all",
+      "bulkDeny": "Deny all",
+      "bulkTitle": "All tools",
+      "bulkDescription": "Apply one setting to every built-in tool below",
+      "help": "About the {{tool}} permission",
+      "tools": {
+        "read": "Read",
+        "edit": "Edit",
+        "glob": "Match files",
+        "grep": "Search contents",
+        "list": "List directories",
+        "bash": "Terminal commands",
+        "task": "Subtasks",
+        "external_directory": "External directories",
+        "todowrite": "Todo lists",
+        "webfetch": "Fetch webpages",
+        "websearch": "Search the web",
+        "lsp": "Code intelligence (LSP)",
+        "skill": "Skills",
+        "question": "Ask the user",
+        "doom_loop": "Loop protection"
+      },
+      "toolDescriptions": {
+        "read": "Allows the agent to read files in the project. Path rules can provide finer control.",
+        "edit": "Controls every file modification tool, including edit, write, and apply_patch.",
+        "glob": "Allows the agent to find files and directories using glob patterns.",
+        "grep": "Allows the agent to search file contents using regular expressions.",
+        "list": "Allows the agent to list files and subdirectories in a directory.",
+        "bash": "Allows the agent to run terminal commands in the project environment. Command patterns can provide finer control.",
+        "task": "Allows the agent to start subagents or delegate subtasks.",
+        "external_directory": "Controls access to files and directories outside the current project worktree.",
+        "todowrite": "Allows the agent to create, update, and read task todo lists.",
+        "webfetch": "Allows the agent to retrieve and read a webpage from a specific URL.",
+        "websearch": "Allows the agent to search the web. Requires the OpenCode provider or OPENCODE_ENABLE_EXA.",
+        "lsp": "Allows LSP code intelligence such as definitions, references, and hover information.",
+        "skill": "Allows the agent to load and read instructions defined in SKILL.md files.",
+        "question": "Allows the agent to ask the user questions and wait for answers during execution.",
+        "doom_loop": "Allows OpenCode to request recovery confirmation after repeated identical tool calls."
+      }
+    },
+    "mcpPermissions": {
+      "title": "MCP permissions",
+      "description": "A server-name_* rule controls every tool from that MCP. Existing tool-specific rules are preserved and take precedence.",
+      "bulkAllow": "Allow all",
+      "bulkAsk": "Ask for all",
+      "bulkDeny": "Deny all",
+      "bulkTitle": "All MCP servers",
+      "bulkDescription": "Apply one setting to every MCP server below",
+      "empty": "No MCP servers are configured in OpenCode",
+      "pattern": "Permission rule: {{pattern}}"
+    },
+    "validation": {
+      "required": "Agent ID and description are required"
+    },
+    "notifications": {
+      "saved": "Agent saved",
+      "deleted": "Agent deleted"
+    },
+    "delete": {
+      "title": "Delete agent",
+      "message": "Delete agent “{{name}}”? Its Markdown file will be removed."
+    }
   },
   "modelTest": {
     "testProvider": "Test model"
@@ -2753,6 +2887,15 @@
     "profileName": "Name",
     "mainAgents": "Main Agents",
     "subAgents": "Sub Agents",
+    "optionalAgents": "Optional / Internal Agents",
+    "featureEnabled": "Enabled",
+    "featureDisabled": "Disabled",
+    "selectCouncilModelFirst": "Select a Council synthesis model before enabling Council",
+    "optionalAgentStatus": {
+      "observer": "Disabled by default: enable manually only for image, screenshot, or PDF analysis",
+      "council": "Disabled by default: parallel model calls increase cost and latency",
+      "councillor": "Internal agent: enabled and disabled together with Council; cannot be toggled separately"
+    },
     "categories": "Categories",
     "customAgents": "Custom Agents",
     "noCustomAgents": "No custom agents",
@@ -2895,7 +3038,9 @@
       "explorer": "Explorer",
       "designer": "Designer",
       "fixer": "Fixer",
-      "council": "Council"
+      "observer": "Observer",
+      "council": "Council",
+      "councillor": "Councillor"
     },
     "slimAgentTooltip": {
       "orchestrator": "Writes executable code, orchestrates multi-agent workflow, summons experts",
@@ -2904,7 +3049,9 @@
       "explorer": "Regex search, AST pattern matching, file discovery (read-only)",
       "designer": "Modern responsive design, CSS/Tailwind expertise",
       "fixer": "Code implementation, refactoring, testing, verification",
-      "council": "Multi-model consensus agent. Runs multiple read-only councillors in parallel, then lets the master synthesize the final answer."
+      "observer": "Visual and image analysis agent. Disabled by default until configured with a vision-capable model.",
+      "council": "Multi-model consensus agent. Runs multiple read-only councillors in parallel, then lets the master synthesize the final answer.",
+      "councillor": "Internal read-only Council member that independently analyzes the same problem and cannot be disabled."
     }
   },
   "openclawConfig": {

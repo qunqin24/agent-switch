@@ -5,6 +5,7 @@ use crate::provider::Provider;
 use crate::store::AppState;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,6 +66,18 @@ pub const SLIM: OmoVariant = OmoVariant {
 // ── Service ────────────────────────────────────────────────────
 
 pub struct OmoService;
+
+const SLIM_MANAGED_AGENTS: &[&str] = &[
+    "orchestrator",
+    "oracle",
+    "librarian",
+    "explorer",
+    "designer",
+    "fixer",
+    "council",
+    "councillor",
+    "observer",
+];
 
 impl OmoService {
     // ── Path helpers ────────────────────────────────────────
@@ -145,6 +158,36 @@ impl OmoService {
         (agents, categories, other_fields)
     }
 
+    fn slim_active_preset_name(obj: &Map<String, Value>) -> Option<&str> {
+        obj.get("preset").and_then(Value::as_str)
+    }
+
+    fn slim_active_preset(obj: &Map<String, Value>) -> Option<Value> {
+        let preset_name = Self::slim_active_preset_name(obj)?;
+        obj.get("presets")?.as_object()?.get(preset_name).cloned()
+    }
+
+    fn insert_slim_agents(result: &mut Map<String, Value>, agents: &Option<Value>) {
+        let Some(agents) = agents else {
+            return;
+        };
+
+        let active_preset = Self::slim_active_preset_name(result).map(str::to_string);
+        if let Some(active_preset) = active_preset {
+            let presets = result
+                .entry("presets".to_string())
+                .or_insert_with(|| Value::Object(Map::new()));
+            if let Value::Object(presets) = presets {
+                presets.insert(active_preset, agents.clone());
+                result.remove("agents");
+                return;
+            }
+        }
+
+        // Backward compatibility with early Slim versions that used top-level agents.
+        result.insert("agents".to_string(), agents.clone());
+    }
+
     fn snapshot_config_file(path: &Path) -> Result<Option<Vec<u8>>, AppError> {
         if !path.exists() {
             return Ok(None);
@@ -165,6 +208,72 @@ impl OmoService {
                 Ok(())
             }
         }
+    }
+
+    fn strip_agent_model_frontmatter(source: &str) -> Option<String> {
+        let mut lines = source.split_inclusive('\n');
+        let first = lines.next()?;
+        if first.trim_end_matches(['\r', '\n']) != "---" {
+            return None;
+        }
+
+        let mut output = String::with_capacity(source.len());
+        output.push_str(first);
+        let mut in_frontmatter = true;
+        let mut changed = false;
+
+        for line in lines {
+            if in_frontmatter {
+                let trimmed = line.trim();
+                if trimmed == "---" {
+                    in_frontmatter = false;
+                    output.push_str(line);
+                    continue;
+                }
+                let top_level = line.trim_end_matches(['\r', '\n']);
+                if top_level.starts_with("model:") || top_level.starts_with("variant:") {
+                    changed = true;
+                    continue;
+                }
+            }
+            output.push_str(line);
+        }
+
+        (!in_frontmatter && changed).then_some(output)
+    }
+
+    fn clear_slim_agent_model_overrides(
+        base_dir: &Path,
+        merged: &Value,
+    ) -> Result<Vec<PathBuf>, AppError> {
+        let Some(active_agents) = merged
+            .as_object()
+            .and_then(Self::slim_active_preset)
+            .and_then(|value| value.as_object().cloned())
+        else {
+            return Ok(Vec::new());
+        };
+
+        let agents_dir = base_dir.join("agents");
+        let mut changed_paths = Vec::new();
+        for agent_name in SLIM_MANAGED_AGENTS {
+            if !active_agents.contains_key(*agent_name) {
+                continue;
+            }
+
+            let path = agents_dir.join(format!("{agent_name}.md"));
+            if !path.exists() {
+                continue;
+            }
+
+            let source = std::fs::read_to_string(&path).map_err(|e| AppError::io(&path, e))?;
+            let Some(updated) = Self::strip_agent_model_frontmatter(&source) else {
+                continue;
+            };
+            atomic_write(&path, updated.as_bytes())?;
+            changed_paths.push(path);
+        }
+        Ok(changed_paths)
     }
 
     fn write_profile_config(
@@ -191,6 +300,15 @@ impl OmoService {
                 );
             }
             return Err(err);
+        }
+        if v.category == SLIM.category {
+            let changed_paths =
+                Self::clear_slim_agent_model_overrides(&get_opencode_dir(), &merged)?;
+            if !changed_paths.is_empty() {
+                log::info!(
+                    "Removed conflicting OpenCode Agent model overrides from: {changed_paths:?}"
+                );
+            }
         }
         log::info!("{} config written to {config_path:?}", v.label);
         Ok(())
@@ -234,7 +352,11 @@ impl OmoService {
         let mut result = Map::new();
         if let Some((agents, categories, other_fields)) = profile_data {
             Self::insert_object_entries(&mut result, other_fields.as_ref());
-            Self::insert_opt_value(&mut result, "agents", agents);
+            if v.category == SLIM.category {
+                Self::insert_slim_agents(&mut result, agents);
+            } else {
+                Self::insert_opt_value(&mut result, "agents", agents);
+            }
             if v.has_categories {
                 Self::insert_opt_value(&mut result, "categories", categories);
             }
@@ -249,19 +371,20 @@ impl OmoService {
         let actual_path = Self::resolve_local_config_path(v)?;
         let obj = Self::read_jsonc_object(&actual_path)?;
 
+        let local_data =
+            Self::build_local_file_data(v, &obj, actual_path.to_string_lossy().to_string(), None);
+
         let mut settings = Map::new();
-        if let Some(agents) = obj.get("agents") {
-            settings.insert("agents".to_string(), agents.clone());
+        if let Some(agents) = local_data.agents {
+            settings.insert("agents".to_string(), agents);
         }
         if v.has_categories {
-            if let Some(categories) = obj.get("categories") {
-                settings.insert("categories".to_string(), categories.clone());
+            if let Some(categories) = local_data.categories {
+                settings.insert("categories".to_string(), categories);
             }
         }
-
-        let other = Self::extract_other_fields_with_keys(&obj, &["agents", "categories"]);
-        if !other.is_empty() {
-            settings.insert("otherFields".to_string(), Value::Object(other));
+        if let Some(other_fields) = local_data.other_fields {
+            settings.insert("otherFields".to_string(), other_fields);
         }
 
         let provider_id = format!("{}{}", v.provider_prefix, uuid::Uuid::new_v4());
@@ -313,13 +436,30 @@ impl OmoService {
         ))
     }
 
+    /// Returns the Agent IDs owned by the active OMO Slim preset.
+    ///
+    /// The live config is the source of truth so custom or future Slim Agents
+    /// are protected without relying on a hard-coded name list.
+    pub fn slim_managed_agent_ids() -> HashSet<String> {
+        Self::read_local_file(&SLIM)
+            .ok()
+            .and_then(|data| data.agents)
+            .and_then(|agents| agents.as_object().cloned())
+            .map(|agents| agents.into_iter().map(|(id, _)| id).collect())
+            .unwrap_or_default()
+    }
+
     fn build_local_file_data(
         v: &OmoVariant,
         obj: &Map<String, Value>,
         file_path: String,
         last_modified: Option<String>,
     ) -> OmoLocalFileData {
-        let agents = obj.get("agents").cloned();
+        let agents = if v.category == SLIM.category {
+            Self::slim_active_preset(obj).or_else(|| obj.get("agents").cloned())
+        } else {
+            obj.get("agents").cloned()
+        };
         let categories = if v.has_categories {
             obj.get("categories").cloned()
         } else {
@@ -522,6 +662,159 @@ mod tests {
         assert_eq!(obj["$schema"], "https://slim.schema");
         assert!(obj.contains_key("agents"));
         assert!(obj.contains_key("disabled_agents"));
+    }
+
+    #[test]
+    fn test_read_slim_uses_active_preset_agents() {
+        let obj = serde_json::json!({
+            "$schema": "https://slim.schema",
+            "preset": "openai",
+            "presets": {
+                "openai": {
+                    "orchestrator": {
+                        "model": "openai/gpt-5.6-sol",
+                        "variant": "medium"
+                    },
+                    "oracle": { "model": "zhipuai-coding-plan/glm-5.2" }
+                },
+                "opencode-go": {
+                    "orchestrator": { "model": "opencode-go/glm-5.2" }
+                }
+            }
+        });
+
+        let data = OmoService::build_local_file_data(
+            &SLIM,
+            obj.as_object().unwrap(),
+            "/tmp/oh-my-opencode-slim.json".to_string(),
+            None,
+        );
+
+        let agents = data.agents.unwrap();
+        assert_eq!(agents["orchestrator"]["model"], "openai/gpt-5.6-sol");
+        assert_eq!(agents["oracle"]["model"], "zhipuai-coding-plan/glm-5.2");
+
+        let other = data.other_fields.unwrap();
+        assert_eq!(other["preset"], "openai");
+        assert!(other["presets"].get("opencode-go").is_some());
+    }
+
+    #[test]
+    fn test_write_slim_updates_active_preset_and_preserves_other_presets() {
+        let agents = Some(serde_json::json!({
+            "orchestrator": {
+                "model": "openai/gpt-5.6-terra",
+                "variant": "high"
+            }
+        }));
+        let other_fields = Some(serde_json::json!({
+            "$schema": "https://slim.schema",
+            "preset": "openai",
+            "presets": {
+                "openai": {
+                    "orchestrator": { "model": "old/model" }
+                },
+                "opencode-go": {
+                    "orchestrator": { "model": "opencode-go/glm-5.2" }
+                }
+            }
+        }));
+        let profile_data = (agents, None, other_fields);
+
+        let merged = OmoService::build_config(&SLIM, Some(&profile_data));
+
+        assert_eq!(
+            merged["presets"]["openai"]["orchestrator"]["model"],
+            "openai/gpt-5.6-terra"
+        );
+        assert_eq!(
+            merged["presets"]["opencode-go"]["orchestrator"]["model"],
+            "opencode-go/glm-5.2"
+        );
+        assert!(merged.get("agents").is_none());
+    }
+
+    #[test]
+    fn test_write_slim_clears_active_preset_when_agents_are_empty() {
+        let agents = Some(serde_json::json!({}));
+        let other_fields = Some(serde_json::json!({
+            "preset": "openai",
+            "presets": {
+                "openai": {
+                    "orchestrator": { "model": "old/model" }
+                },
+                "opencode-go": {
+                    "orchestrator": { "model": "opencode-go/glm-5.2" }
+                }
+            }
+        }));
+        let profile_data = (agents, None, other_fields);
+
+        let merged = OmoService::build_config(&SLIM, Some(&profile_data));
+
+        assert_eq!(merged["presets"]["openai"], serde_json::json!({}));
+        assert_eq!(
+            merged["presets"]["opencode-go"]["orchestrator"]["model"],
+            "opencode-go/glm-5.2"
+        );
+    }
+
+    #[test]
+    fn test_clear_slim_agent_model_overrides_preserves_prompt_and_other_frontmatter() {
+        let dir = tempfile::tempdir().unwrap();
+        let agents_dir = dir.path().join("agents");
+        std::fs::create_dir_all(&agents_dir).unwrap();
+        let explorer_path = agents_dir.join("explorer.md");
+        std::fs::write(
+            &explorer_path,
+            "---\nmode: subagent\nmodel: old/glm\nvariant: high\ntemperature: 0.1\n---\n\nExplorer prompt\n",
+        )
+        .unwrap();
+
+        let merged = serde_json::json!({
+            "preset": "openai",
+            "presets": {
+                "openai": {
+                    "explorer": {
+                        "model": "opencode-go/deepseek-v4-flash",
+                        "variant": "high"
+                    }
+                }
+            }
+        });
+
+        let changed = OmoService::clear_slim_agent_model_overrides(dir.path(), &merged).unwrap();
+        assert_eq!(changed, vec![explorer_path.clone()]);
+
+        let updated = std::fs::read_to_string(explorer_path).unwrap();
+        assert!(!updated.contains("model: old/glm"));
+        assert!(!updated.contains("variant: high"));
+        assert!(updated.contains("mode: subagent"));
+        assert!(updated.contains("temperature: 0.1"));
+        assert!(updated.ends_with("Explorer prompt\n"));
+    }
+
+    #[test]
+    fn test_clear_slim_agent_model_overrides_ignores_agents_outside_active_preset() {
+        let dir = tempfile::tempdir().unwrap();
+        let agents_dir = dir.path().join("agents");
+        std::fs::create_dir_all(&agents_dir).unwrap();
+        let fixer_path = agents_dir.join("fixer.md");
+        let source = "---\nmodel: old/glm\nvariant: max\n---\nFixer prompt\n";
+        std::fs::write(&fixer_path, source).unwrap();
+
+        let merged = serde_json::json!({
+            "preset": "openai",
+            "presets": {
+                "openai": {
+                    "explorer": { "model": "new/model" }
+                }
+            }
+        });
+
+        let changed = OmoService::clear_slim_agent_model_overrides(dir.path(), &merged).unwrap();
+        assert!(changed.is_empty());
+        assert_eq!(std::fs::read_to_string(fixer_path).unwrap(), source);
     }
 
     #[test]

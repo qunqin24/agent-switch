@@ -4,14 +4,16 @@ import { cn } from "@/lib/utils";
 export interface SegmentedOption<T extends string> {
   value: T;
   label: React.ReactNode;
+  ariaLabel?: string;
   icon?: React.ComponentType<{ className?: string }>;
 }
 
 interface SegmentedControlProps<T extends string> {
-  value: T;
+  value?: T;
   options: SegmentedOption<T>[];
   onChange: (value: T) => void;
   className?: string;
+  disabled?: boolean;
 }
 
 export function SegmentedControl<T extends string>({
@@ -19,6 +21,7 @@ export function SegmentedControl<T extends string>({
   options,
   onChange,
   className,
+  disabled = false,
 }: SegmentedControlProps<T>) {
   return (
     <div
@@ -37,6 +40,9 @@ export function SegmentedControl<T extends string>({
             key={option.value}
             type="button"
             variant="ghost"
+            disabled={disabled}
+            aria-label={option.ariaLabel}
+            aria-pressed={active}
             onClick={() => onChange(option.value)}
             className={cn(
               "h-7 min-w-[68px] rounded-[6px] border-none px-2.5 text-[12px] font-medium shadow-none transition-all",

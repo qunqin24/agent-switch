@@ -114,6 +114,7 @@ import { HERMES_DEFAULT_CONFIG } from "./hooks/useHermesFormState";
 import { resolveManagedAccountId } from "@/lib/authBinding";
 import { useOpenClawLiveProviderIds } from "@/hooks/useOpenClaw";
 import { useHermesLiveProviderIds } from "@/hooks/useHermes";
+import { useCurrentOmoSlimProviderId } from "@/lib/query/omo";
 
 type PresetEntry = {
   id: string;
@@ -782,6 +783,7 @@ function ProviderFormFull({
     omoModelOptions,
     omoModelVariantsMap,
     omoPresetMetaMap,
+    isOmoModelCatalogLoading,
     existingOpencodeKeys,
   } = useOmoModelSource({ isOmoCategory: isAnyOmoCategory, providerId });
 
@@ -814,6 +816,9 @@ function ProviderFormFull({
     appId,
     category,
   });
+  const { data: currentOmoSlimProviderId } = useCurrentOmoSlimProviderId(
+    appId === "opencode" && category === "omo-slim" && isEditMode,
+  );
 
   const openclawForm = useOpenclawFormState({
     initialData,
@@ -1234,10 +1239,9 @@ function ProviderFormFull({
       appId === "opencode" &&
       (category === "omo" || category === "omo-slim")
     ) {
-      const omoConfig: Record<string, unknown> = {};
-      if (Object.keys(omoDraft.omoAgents).length > 0) {
-        omoConfig.agents = omoDraft.omoAgents;
-      }
+      const omoConfig: Record<string, unknown> = {
+        agents: omoDraft.omoAgents,
+      };
       if (
         category === "omo" &&
         Object.keys(omoDraft.omoCategories).length > 0
@@ -2105,6 +2109,7 @@ function ProviderFormFull({
                 modelOptions={omoModelOptions}
                 modelVariantsMap={omoModelVariantsMap}
                 presetMetaMap={omoPresetMetaMap}
+                modelCatalogLoading={isOmoModelCatalogLoading}
                 agents={omoDraft.omoAgents}
                 onAgentsChange={omoDraft.setOmoAgents}
                 categories={
@@ -2116,6 +2121,12 @@ function ProviderFormFull({
                 otherFieldsStr={omoDraft.omoOtherFieldsStr}
                 onOtherFieldsStrChange={omoDraft.setOmoOtherFieldsStr}
                 isSlim={category === "omo-slim"}
+                syncCurrentLocalFile={
+                  category === "omo-slim" &&
+                  isEditMode &&
+                  Boolean(providerId) &&
+                  providerId === currentOmoSlimProviderId
+                }
               />
             )}
 

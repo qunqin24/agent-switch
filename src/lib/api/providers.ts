@@ -170,6 +170,10 @@ export const providersApi = {
     return await invoke("get_opencode_live_provider_ids");
   },
 
+  async listOpenCodeModelsForOmo(): Promise<OmoOpenCodeModel[]> {
+    return await invoke("list_opencode_models_for_omo");
+  },
+
   /**
    * 获取 OpenClaw live 配置中的供应商 ID 列表
    * 用于前端判断供应商是否已添加到 openclaw.json
@@ -243,3 +247,12 @@ export const universalProvidersApi = {
     return await invoke("sync_universal_provider", { id });
   },
 };
+export interface OmoOpenCodeModel {
+  value: string;
+  providerId: string;
+  modelId: string;
+  name: string;
+  variants: string[];
+  options?: Record<string, unknown>;
+  limit?: { context?: number; output?: number };
+}

@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo } from "react";
 import {
   buildOmoSlimProfilePreview,
   buildOmoProfilePreview,
+  extractOmoSlimActivePresetAgents,
 } from "@/types/omo";
 
 interface UseOmoDraftStateParams {
@@ -34,10 +35,13 @@ export function useOmoDraftState({
 
   const [omoAgents, setOmoAgents] = useState<
     Record<string, Record<string, unknown>>
-  >(
-    () =>
-      (initialOmoSettings?.agents as Record<string, Record<string, unknown>>) ||
-      {},
+  >(() =>
+    isSlim
+      ? extractOmoSlimActivePresetAgents(initialOmoSettings)
+      : (initialOmoSettings?.agents as Record<
+          string,
+          Record<string, unknown>
+        >) || {},
   );
   const [omoCategories, setOmoCategories] = useState<
     Record<string, Record<string, unknown>>

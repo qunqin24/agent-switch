@@ -1,10 +1,11 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -42,12 +43,15 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useReadOmoLocalFile, useReadOmoSlimLocalFile } from "@/lib/query/omo";
+import { omoSlimApi } from "@/lib/api/omo";
 import {
   OMO_BUILTIN_AGENTS,
   OMO_BUILTIN_CATEGORIES,
   OMO_SLIM_BUILTIN_AGENTS,
+  parseOmoOtherFieldsObject,
   type OmoAgentDef,
   type OmoCategoryDef,
+  type OmoLocalFileData,
 } from "@/types/omo";
 
 const ADVANCED_PLACEHOLDER = `{
@@ -68,6 +72,7 @@ interface OmoFormFieldsProps {
       limit?: { context?: number; output?: number };
     }
   >;
+  modelCatalogLoading?: boolean;
   agents: Record<string, Record<string, unknown>>;
   onAgentsChange: (agents: Record<string, Record<string, unknown>>) => void;
   categories?: Record<string, Record<string, unknown>>;
@@ -77,6 +82,7 @@ interface OmoFormFieldsProps {
   otherFieldsStr: string;
   onOtherFieldsStrChange: (value: string) => void;
   isSlim?: boolean;
+  syncCurrentLocalFile?: boolean;
 }
 
 export type CustomModelItem = {
@@ -128,17 +134,20 @@ const BUILTIN_AGENT_KEYS_SLIM = new Set(
 );
 const BUILTIN_CATEGORY_KEYS = new Set(OMO_BUILTIN_CATEGORIES.map((c) => c.key));
 const EMPTY_VARIANT_VALUE = "__cc_switch_omo_variant_empty__";
+const EMPTY_MODEL_CONFIG: Record<string, Record<string, unknown>> = {};
 
 function ModelCombobox({
   value,
   options,
   recommended,
   onChange,
+  disabled = false,
 }: {
   value: string;
   options: ModelOption[];
   recommended?: string;
   onChange: (value: string) => void;
+  disabled?: boolean;
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -153,19 +162,24 @@ function ModelCombobox({
     : selectModelText;
 
   return (
-    <Popover modal open={open} onOpenChange={setOpen}>
+    <Popover
+      modal
+      open={disabled ? false : open}
+      onOpenChange={disabled ? undefined : setOpen}
+    >
       <PopoverTrigger asChild>
         <button
           type="button"
           role="combobox"
           aria-expanded={open}
+          disabled={disabled}
           className="flex flex-1 h-8 items-center justify-between whitespace-nowrap rounded-md border border-border-default bg-background px-3 py-1 text-sm shadow-sm ring-offset-background focus:outline-none focus-visible:outline-none focus:border-border-default focus-visible:border-border-default focus:ring-0 focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <span className={cn("truncate", !value && "text-muted-foreground")}>
             {selectedLabel || placeholderText}
           </span>
           <span className="flex items-center shrink-0 ml-1 gap-0.5">
-            {value && (
+            {value && !disabled && (
               <X
                 className="h-3.5 w-3.5 opacity-50 hover:opacity-100 cursor-pointer"
                 onClick={(e) => {
@@ -306,13 +320,15 @@ export function OmoFormFields({
   modelOptions,
   modelVariantsMap = {},
   presetMetaMap: _presetMetaMap = {},
+  modelCatalogLoading = false,
   agents,
   onAgentsChange,
-  categories = {},
+  categories = EMPTY_MODEL_CONFIG,
   onCategoriesChange,
   otherFieldsStr,
   onOtherFieldsStrChange,
   isSlim = false,
+  syncCurrentLocalFile = false,
 }: OmoFormFieldsProps) {
   const { t } = useTranslation();
 
@@ -325,6 +341,7 @@ export function OmoFormFields({
 
   const [mainAgentsOpen, setMainAgentsOpen] = useState(true);
   const [subAgentsOpen, setSubAgentsOpen] = useState(true);
+  const [optionalAgentsOpen, setOptionalAgentsOpen] = useState(false);
   const [categoriesOpen, setCategoriesOpen] = useState(true);
   const [otherFieldsOpen, setOtherFieldsOpen] = useState(false);
 
@@ -395,15 +412,17 @@ export function OmoFormFields({
       return [
         {
           value: currentModel,
-          label: t("omo.currentValueNotEnabled", {
-            value: currentModel,
-            defaultValue: "{{value}} (current value, not enabled)",
-          }),
+          label: modelCatalogLoading
+            ? currentModel
+            : t("omo.currentValueNotEnabled", {
+                value: currentModel,
+                defaultValue: "{{value}} (current value, not enabled)",
+              }),
         },
         ...modelOptions,
       ];
     },
-    [modelOptions, t],
+    [modelCatalogLoading, modelOptions, t],
   );
 
   const resolveRecommendedModel = useCallback(
@@ -425,7 +444,17 @@ export function OmoFormFields({
     currentModel: string,
     onChange: (value: string) => void,
     recommended?: string,
+    disabled = false,
   ) => {
+    if (modelCatalogLoading) {
+      return (
+        <div
+          role="status"
+          aria-label={t("common.loading", { defaultValue: "Loading..." })}
+          className="h-8 flex-1 animate-pulse rounded-md bg-muted/60"
+        />
+      );
+    }
     const options = buildEffectiveModelOptions(currentModel);
     return (
       <ModelCombobox
@@ -433,6 +462,7 @@ export function OmoFormFields({
         options={options}
         recommended={recommended}
         onChange={onChange}
+        disabled={disabled}
       />
     );
   };
@@ -452,6 +482,7 @@ export function OmoFormFields({
     currentModel: string,
     currentVariant: string,
     onChange: (value: string) => void,
+    disabled = false,
   ) => {
     const hasModel = Boolean(currentModel);
     const modelVariantKeys = hasModel
@@ -469,11 +500,13 @@ export function OmoFormFields({
       currentVariant,
     );
     const firstIsUnavailable =
+      !modelCatalogLoading &&
       Boolean(currentVariant) &&
       !(modelVariantsMap[currentModel] || []).includes(currentVariant);
 
     return (
       <Select
+        disabled={disabled}
         value={currentVariant || EMPTY_VARIANT_VALUE}
         onValueChange={(value) =>
           onChange(value === EMPTY_VARIANT_VALUE ? "" : value)
@@ -822,24 +855,184 @@ export function OmoFormFields({
   const configuredAgentCount = Object.keys(agents).length;
   const configuredCategoryCount = isSlim ? 0 : Object.keys(categories).length;
   const mainAgents = builtinAgentDefs.filter((a) => a.group === "main");
-  const subAgents = builtinAgentDefs.filter((a) => a.group === "sub");
+  const optionalSlimAgentKeys = new Set(["observer", "council", "councillor"]);
+  const subAgents = builtinAgentDefs.filter(
+    (a) => a.group === "sub" && !optionalSlimAgentKeys.has(a.key),
+  );
+  const optionalSlimAgents = isSlim
+    ? builtinAgentDefs.filter((a) => optionalSlimAgentKeys.has(a.key))
+    : [];
+
+  const slimFeatureState = useMemo(() => {
+    if (!isSlim) return { observer: true, council: true };
+    try {
+      const other = parseOmoOtherFieldsObject(otherFieldsStr) || {};
+      const disabledAgents = Array.isArray(other.disabled_agents)
+        ? other.disabled_agents.filter(
+            (item): item is string => typeof item === "string",
+          )
+        : ["observer"];
+      const council = other.council;
+      const councilPresets =
+        typeof council === "object" &&
+        council !== null &&
+        !Array.isArray(council)
+          ? (council as Record<string, unknown>).presets
+          : undefined;
+      const councilEnabled =
+        !disabledAgents.includes("council") &&
+        typeof councilPresets === "object" &&
+        councilPresets !== null &&
+        !Array.isArray(councilPresets) &&
+        Object.keys(councilPresets).length > 0;
+      return {
+        observer: !disabledAgents.includes("observer"),
+        council: councilEnabled,
+      };
+    } catch {
+      return { observer: false, council: false };
+    }
+  }, [isSlim, otherFieldsStr]);
+
+  const updateSlimOtherFields = useCallback(
+    (updater: (other: Record<string, unknown>) => void) => {
+      try {
+        const other = parseOmoOtherFieldsObject(otherFieldsStr) || {};
+        updater(other);
+        onOtherFieldsStrChange(JSON.stringify(other, null, 2));
+      } catch {
+        toast.error(
+          t("omo.invalidJson", {
+            defaultValue: "Other Fields contains invalid JSON",
+          }),
+        );
+      }
+    },
+    [onOtherFieldsStrChange, otherFieldsStr, t],
+  );
+
+  const setObserverEnabled = useCallback(
+    (enabled: boolean) => {
+      updateSlimOtherFields((other) => {
+        const disabledAgents = Array.isArray(other.disabled_agents)
+          ? other.disabled_agents.filter(
+              (item): item is string => typeof item === "string",
+            )
+          : ["observer"];
+        other.disabled_agents = enabled
+          ? disabledAgents.filter((name) => name !== "observer")
+          : Array.from(new Set([...disabledAgents, "observer"]));
+      });
+    },
+    [updateSlimOtherFields],
+  );
+
+  const setCouncilEnabled = useCallback(
+    (enabled: boolean) => {
+      updateSlimOtherFields((other) => {
+        const disabledAgents = Array.isArray(other.disabled_agents)
+          ? other.disabled_agents.filter(
+              (item): item is string => typeof item === "string",
+            )
+          : ["observer"];
+        other.disabled_agents = enabled
+          ? disabledAgents.filter((name) => name !== "council")
+          : Array.from(new Set([...disabledAgents, "council"]));
+
+        if (
+          enabled &&
+          (typeof other.council !== "object" ||
+            other.council === null ||
+            Array.isArray(other.council))
+        ) {
+          const councillorModel =
+            typeof agents.councillor?.model === "string"
+              ? agents.councillor.model.trim()
+              : "";
+          const councillorVariant =
+            typeof agents.councillor?.variant === "string"
+              ? agents.councillor.variant.trim()
+              : "";
+          other.council = {
+            presets: {
+              default: councillorModel
+                ? {
+                    cc_switch: {
+                      model: councillorModel,
+                      ...(councillorVariant
+                        ? { variant: councillorVariant }
+                        : {}),
+                    },
+                  }
+                : {},
+            },
+            default_preset: "default",
+          };
+        }
+      });
+    },
+    [
+      agents.councillor?.model,
+      agents.councillor?.variant,
+      updateSlimOtherFields,
+    ],
+  );
+
+  const syncCouncillorCouncilPreset = useCallback(
+    (model: string, variant: string) => {
+      if (!slimFeatureState.council) return;
+      updateSlimOtherFields((other) => {
+        const council =
+          typeof other.council === "object" &&
+          other.council !== null &&
+          !Array.isArray(other.council)
+            ? (other.council as Record<string, unknown>)
+            : {};
+        const presetName =
+          typeof council.default_preset === "string"
+            ? council.default_preset
+            : "default";
+        const presets =
+          typeof council.presets === "object" &&
+          council.presets !== null &&
+          !Array.isArray(council.presets)
+            ? { ...(council.presets as Record<string, unknown>) }
+            : {};
+        const preset =
+          typeof presets[presetName] === "object" &&
+          presets[presetName] !== null &&
+          !Array.isArray(presets[presetName])
+            ? { ...(presets[presetName] as Record<string, unknown>) }
+            : {};
+
+        if (model) {
+          preset.cc_switch = {
+            model,
+            ...(variant ? { variant } : {}),
+          };
+        } else {
+          delete preset.cc_switch;
+        }
+        presets[presetName] = preset;
+        other.council = {
+          ...council,
+          presets,
+          default_preset: presetName,
+        };
+      });
+    },
+    [slimFeatureState.council, updateSlimOtherFields],
+  );
 
   const readLocalFile = useReadOmoLocalFile();
   const readSlimLocalFile = useReadOmoSlimLocalFile();
   const [localFilePath, setLocalFilePath] = useState<string | null>(null);
+  const hasSyncedCurrentLocalFile = useRef(false);
 
-  const handleImportFromLocal = useCallback(async () => {
-    try {
-      const data = isSlim
-        ? await readSlimLocalFile.mutateAsync()
-        : await readLocalFile.mutateAsync();
-      const importedAgents =
-        (data.agents as Record<string, Record<string, unknown>> | undefined) ||
-        {};
-      const importedCategories =
-        (data.categories as
-          | Record<string, Record<string, unknown>>
-          | undefined) || {};
+  const applyLocalFileData = useCallback(
+    (data: OmoLocalFileData) => {
+      const importedAgents = data.agents || {};
+      const importedCategories = data.categories || {};
 
       onAgentsChange(importedAgents);
       if (!isSlim && onCategoriesChange) {
@@ -857,6 +1050,41 @@ export function OmoFormFields({
         );
       }
       setLocalFilePath(data.filePath);
+    },
+    [
+      builtinAgentKeys,
+      isSlim,
+      onAgentsChange,
+      onCategoriesChange,
+      onOtherFieldsStrChange,
+    ],
+  );
+
+  useEffect(() => {
+    if (!syncCurrentLocalFile || !isSlim || hasSyncedCurrentLocalFile.current) {
+      return;
+    }
+    hasSyncedCurrentLocalFile.current = true;
+
+    void omoSlimApi
+      .readLocalFile()
+      .then(applyLocalFileData)
+      .catch((err) => {
+        toast.error(
+          t("omo.importLocalFailed", {
+            error: String(err),
+            defaultValue: "Failed to read local file: {{error}}",
+          }),
+        );
+      });
+  }, [applyLocalFileData, isSlim, syncCurrentLocalFile, t]);
+
+  const handleImportFromLocal = useCallback(async () => {
+    try {
+      const data = isSlim
+        ? await readSlimLocalFile.mutateAsync()
+        : await readLocalFile.mutateAsync();
+      applyLocalFileData(data);
       toast.success(
         t("omo.importLocalReplaceSuccess", {
           defaultValue:
@@ -871,13 +1099,7 @@ export function OmoFormFields({
         }),
       );
     }
-  }, [
-    readLocalFile,
-    onAgentsChange,
-    onCategoriesChange,
-    onOtherFieldsStrChange,
-    t,
-  ]);
+  }, [readLocalFile, readSlimLocalFile, applyLocalFileData, isSlim, t]);
 
   const renderBuiltinModelRow = (
     scope: AdvancedScope,
@@ -895,6 +1117,25 @@ export function OmoFormFields({
     const advStr = getAdvancedStr(store[key]);
     const draftValue = drafts[key] ?? advStr;
     const isExpanded = expanded[key] ?? false;
+    const isDisabledOptionalAgent =
+      isSlim &&
+      ((key === "observer" && !slimFeatureState.observer) ||
+        ((key === "council" || key === "councillor") &&
+          !slimFeatureState.council));
+
+    const onModelChange = (value: string) => {
+      handleModelChange(key, value, store, setter);
+      if (key === "councillor") {
+        syncCouncillorCouncilPreset(value, currentVariant);
+      }
+    };
+
+    const onVariantChange = (value: string) => {
+      handleVariantChange(key, value, store, setter);
+      if (key === "councillor") {
+        syncCouncillorCouncilPreset(currentModel, value);
+      }
+    };
 
     return (
       <div key={key} className="border-b border-border/30 last:border-b-0">
@@ -915,11 +1156,15 @@ export function OmoFormFields({
           </div>
           {renderModelSelect(
             currentModel,
-            (value) => handleModelChange(key, value, store, setter),
+            onModelChange,
             def.recommended,
+            isDisabledOptionalAgent,
           )}
-          {renderVariantSelect(currentModel, currentVariant, (value) =>
-            handleVariantChange(key, value, store, setter),
+          {renderVariantSelect(
+            currentModel,
+            currentVariant,
+            onVariantChange,
+            isDisabledOptionalAgent,
           )}
           <Button
             type="button"
@@ -928,6 +1173,7 @@ export function OmoFormFields({
             className={cn("h-7 w-7 shrink-0", advStr && "text-primary")}
             onClick={() => toggleAdvancedEditor(scope, key, advStr, isExpanded)}
             title={t("omo.advancedLabel", { defaultValue: "Advanced" })}
+            disabled={isDisabledOptionalAgent}
           >
             <Settings className="h-3.5 w-3.5" />
           </Button>
@@ -1059,18 +1305,19 @@ export function OmoFormFields({
     badge?: React.ReactNode | string;
     action?: React.ReactNode;
   }) => (
-    <button
-      type="button"
-      className="flex items-center justify-between w-full py-2 px-3 text-left"
-      onClick={onToggle}
-    >
-      <div className="flex items-center gap-2">
+    <div className="flex items-center w-full">
+      <button
+        type="button"
+        className="flex min-w-0 flex-1 items-center gap-2 py-2 px-3 text-left"
+        aria-expanded={isOpen}
+        onClick={onToggle}
+      >
         {isOpen ? (
-          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
         ) : (
-          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
         )}
-        <Label className="text-sm font-semibold cursor-pointer">{title}</Label>
+        <span className="text-sm font-semibold">{title}</span>
         {typeof badge === "string" ? (
           <Badge variant="outline" className="text-[10px] h-5">
             {badge}
@@ -1078,9 +1325,9 @@ export function OmoFormFields({
         ) : (
           badge
         )}
-      </div>
-      {action && <div onClick={(e) => e.stopPropagation()}>{action}</div>}
-    </button>
+      </button>
+      {action && <div className="shrink-0 pr-3">{action}</div>}
+    </div>
   );
 
   const renderModelSection = ({
@@ -1089,7 +1336,6 @@ export function OmoFormFields({
     onToggle,
     badge,
     action,
-    maxHeightClass = "max-h-[5000px]",
     children,
   }: {
     title: string;
@@ -1097,7 +1343,6 @@ export function OmoFormFields({
     onToggle: () => void;
     badge?: React.ReactNode | string;
     action?: React.ReactNode;
-    maxHeightClass?: string;
     children: React.ReactNode;
   }) => (
     <div className="rounded-lg border border-border/60">
@@ -1108,14 +1353,7 @@ export function OmoFormFields({
         badge={badge}
         action={action}
       />
-      <div
-        className={cn(
-          "overflow-hidden transition-all duration-200",
-          isOpen ? `${maxHeightClass} opacity-100` : "max-h-0 opacity-0",
-        )}
-      >
-        <div className="px-3 pb-3">{children}</div>
-      </div>
+      {isOpen && <div className="px-3 pb-3">{children}</div>}
     </div>
   );
 
@@ -1168,10 +1406,14 @@ export function OmoFormFields({
             variant="outline"
             size="sm"
             className="h-7 text-xs"
-            disabled={readLocalFile.isPending}
+            disabled={
+              isSlim ? readSlimLocalFile.isPending : readLocalFile.isPending
+            }
             onClick={handleImportFromLocal}
           >
-            {readLocalFile.isPending ? (
+            {(
+              isSlim ? readSlimLocalFile.isPending : readLocalFile.isPending
+            ) ? (
               <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
             ) : (
               <FolderInput className="h-3.5 w-3.5 mr-1" />
@@ -1218,7 +1460,7 @@ export function OmoFormFields({
       {renderModelSection({
         title: t("omo.mainAgents", { defaultValue: "Main Agents" }),
         isOpen: mainAgentsOpen,
-        onToggle: () => setMainAgentsOpen(!mainAgentsOpen),
+        onToggle: () => setMainAgentsOpen((open) => !open),
         badge: `${mainAgents.length}`,
         children: mainAgents.map(renderAgentRow),
       })}
@@ -1226,7 +1468,7 @@ export function OmoFormFields({
       {renderModelSection({
         title: t("omo.subAgents", { defaultValue: "Sub Agents" }),
         isOpen: subAgentsOpen,
-        onToggle: () => setSubAgentsOpen(!subAgentsOpen),
+        onToggle: () => setSubAgentsOpen((open) => !open),
         badge: `${subAgents.length + customAgents.length}`,
         action: renderCustomAddButton(() => addCustomModel("agent")),
         children: (
@@ -1246,11 +1488,67 @@ export function OmoFormFields({
         ),
       })}
 
+      {isSlim &&
+        renderModelSection({
+          title: t("omo.optionalAgents", {
+            defaultValue: "Optional / Internal Agents",
+          }),
+          isOpen: optionalAgentsOpen,
+          onToggle: () => setOptionalAgentsOpen((open) => !open),
+          badge: `${Number(slimFeatureState.observer) + Number(slimFeatureState.council) * 2}/3`,
+          children: optionalSlimAgents.map((agent) => {
+            const isObserver = agent.key === "observer";
+            const isCouncil = agent.key === "council";
+            const enabled = isObserver
+              ? slimFeatureState.observer
+              : slimFeatureState.council;
+            return (
+              <div
+                key={agent.key}
+                className="border-b border-border/30 last:border-b-0"
+              >
+                <div className="flex items-center justify-between px-1 pt-2 text-xs text-muted-foreground">
+                  <span>
+                    {t(`omo.optionalAgentStatus.${agent.key}`, {
+                      defaultValue:
+                        agent.key === "councillor"
+                          ? "Internal agent; follows Council"
+                          : "Disabled by default; enable manually",
+                    })}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <span>
+                      {enabled
+                        ? t("omo.featureEnabled", { defaultValue: "Enabled" })
+                        : t("omo.featureDisabled", {
+                            defaultValue: "Disabled",
+                          })}
+                    </span>
+                    <Switch
+                      checked={enabled}
+                      disabled={agent.key === "councillor"}
+                      onCheckedChange={
+                        isObserver
+                          ? setObserverEnabled
+                          : isCouncil
+                            ? setCouncilEnabled
+                            : undefined
+                      }
+                      aria-label={agent.display}
+                    />
+                  </div>
+                </div>
+                {renderAgentRow(agent)}
+              </div>
+            );
+          }),
+        })}
+
       {!isSlim &&
         renderModelSection({
           title: t("omo.categories", { defaultValue: "Categories" }),
           isOpen: categoriesOpen,
-          onToggle: () => setCategoriesOpen(!categoriesOpen),
+          onToggle: () => setCategoriesOpen((open) => !open),
           badge: `${OMO_BUILTIN_CATEGORIES.length + customCategories.length}`,
           action: renderCustomAddButton(() => addCustomModel("category")),
           children: (
@@ -1277,7 +1575,7 @@ export function OmoFormFields({
           defaultValue: "Other Fields (JSON)",
         }),
         isOpen: otherFieldsOpen,
-        onToggle: () => setOtherFieldsOpen(!otherFieldsOpen),
+        onToggle: () => setOtherFieldsOpen((open) => !open),
         badge:
           !otherFieldsOpen && otherFieldsStr.trim() ? (
             <Badge
@@ -1288,14 +1586,13 @@ export function OmoFormFields({
               {otherFieldsStr.trim().length > 40 ? "..." : ""}
             </Badge>
           ) : undefined,
-        maxHeightClass: "max-h-[500px]",
         children: (
           <>
             <Textarea
               value={otherFieldsStr}
               onChange={(e) => onOtherFieldsStrChange(e.target.value)}
               placeholder='{ "custom_key": "value" }'
-              className="font-mono text-xs min-h-[60px]"
+              className="font-mono text-xs min-h-[180px]"
             />
             {isSlim && (
               <p className="mt-1 text-[10px] text-muted-foreground">

@@ -13,6 +13,11 @@ export { openclawApi } from "./openclaw";
 export { sessionsApi } from "./sessions";
 export { workspaceApi } from "./workspace";
 export { modelsDevCacheApi } from "./modelsDev";
+export { opencodeAgentsApi } from "./opencodeAgents";
+export type {
+  OpenCodeAgentDocument,
+  OpenCodeAgentScope,
+} from "./opencodeAgents";
 export * as configApi from "./config";
 export * as authApi from "./auth";
 export * as copilotApi from "./copilot";

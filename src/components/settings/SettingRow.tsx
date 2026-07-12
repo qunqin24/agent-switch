@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 
 interface SettingRowProps {
-  title: string;
+  title: React.ReactNode;
   description?: string;
   children: React.ReactNode;
   layout?: "horizontal" | "vertical";
