@@ -5,6 +5,21 @@ All notable changes to CC Switch will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.16.10] - 2026-07-16
+
+### Added
+
+- Added an OpenCode lightweight-model setting for session titles and other background tasks, with live model discovery, searchable selection, custom model IDs, and a default automatic mode.
+
+### Changed
+
+- Codex custom API providers now follow the official `model_providers` configuration format and command-backed authentication flow. Third-party credentials stay in CC Switch storage, while the official ChatGPT login in `auth.json` is preserved across provider switches.
+- Legacy Codex `experimental_bearer_token` credentials are migrated out of provider TOML, and reserved built-in provider IDs are rejected for third-party configurations.
+
+### Fixed
+
+- Fixed provider subscription quota details wrapping onto a second line or drifting away from the provider address; quota percentages, reset times, and refresh controls now stay in one compact row.
+
 ## [3.16.9] - 2026-07-13
 
 ### Added

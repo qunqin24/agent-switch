@@ -372,8 +372,8 @@ pub struct AppSettings {
     /// Whether to show the failover toggle independently on the main page
     #[serde(default)]
     pub enable_failover_toggle: bool,
-    /// Keep Codex ChatGPT login material in auth.json when switching to third-party providers.
-    /// Opt-in: defaults to false so third-party switches cleanly overwrite auth.json.
+    /// Legacy compatibility field. Codex custom providers now always preserve
+    /// ChatGPT login material and use command-backed provider authentication.
     #[serde(default)]
     pub preserve_codex_official_auth_on_switch: bool,
     /// Run official Codex providers under the shared "custom" model_provider id
@@ -517,7 +517,7 @@ impl Default for AppSettings {
             usage_confirmed: None,
             stream_check_confirmed: None,
             enable_failover_toggle: false,
-            preserve_codex_official_auth_on_switch: false,
+            preserve_codex_official_auth_on_switch: true,
             unify_codex_session_history: false,
             unify_codex_migrate_existing: None,
             failover_confirmed: None,
@@ -564,6 +564,11 @@ impl AppSettings {
     }
 
     fn normalize_paths(&mut self) {
+        // Codex custom providers use command-backed authentication and never
+        // replace the user's ChatGPT login cache. Normalize legacy settings so
+        // clients do not keep seeing the removed opt-out as disabled.
+        self.preserve_codex_official_auth_on_switch = true;
+
         self.claude_config_dir = self
             .claude_config_dir
             .as_ref()
@@ -917,13 +922,10 @@ pub fn get_hermes_override_dir() -> Option<PathBuf> {
 }
 
 pub fn preserve_codex_official_auth_on_switch() -> bool {
-    settings_store()
-        .read()
-        .unwrap_or_else(|e| {
-            log::warn!("设置锁已毒化，使用恢复值: {e}");
-            e.into_inner()
-        })
-        .preserve_codex_official_auth_on_switch
+    // Kept as a function so older call sites and serialized settings remain
+    // compatible. The official Codex custom-provider flow always preserves
+    // auth.json; the legacy opt-out is intentionally ignored.
+    true
 }
 
 pub fn unify_codex_session_history() -> bool {

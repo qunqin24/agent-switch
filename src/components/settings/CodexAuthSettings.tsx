@@ -81,16 +81,6 @@ export function CodexAuthSettings({
     <>
       <ToggleRow
         variant="plain"
-        title={t("settings.preserveCodexOfficialAuthOnSwitch")}
-        description={t("settings.preserveCodexOfficialAuthOnSwitchDescription")}
-        checked={settings.preserveCodexOfficialAuthOnSwitch ?? false}
-        onCheckedChange={(value) =>
-          onChange({ preserveCodexOfficialAuthOnSwitch: value })
-        }
-      />
-
-      <ToggleRow
-        variant="plain"
         title={t("settings.unifyCodexSessionHistory")}
         description={t("settings.unifyCodexSessionHistoryDescription")}
         checked={settings.unifyCodexSessionHistory ?? false}

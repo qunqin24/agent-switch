@@ -211,12 +211,18 @@ export const SubscriptionQuotaView: React.FC<SubscriptionQuotaViewProps> = ({
   );
   if (tiers.length === 0) return null;
 
-  // ── inline 模式：紧凑两行显示 ──
+  // ── inline 模式：保持单行，避免与供应商地址互相挤压换行 ──
   if (inline) {
     return (
-      <div className="flex flex-col items-end gap-1 text-xs whitespace-nowrap flex-shrink-0">
-        {/* 第一行：查询时间 + 刷新 */}
-        <div className="flex items-center gap-2 justify-end">
+      <div className="inline-flex flex-shrink-0 items-center gap-2 whitespace-nowrap text-xs">
+        <div className="flex items-center gap-2">
+          {tiers
+            .filter((tier) => !HIDDEN_INLINE_TIERS.has(tier.name))
+            .map((tier) => (
+              <TierBadge key={tier.name} tier={tier} t={t} />
+            ))}
+        </div>
+        <div className="flex items-center gap-1">
           <span className="text-[10px] text-muted-foreground/70 flex items-center gap-1">
             <Clock size={10} />
             {quota.queriedAt
@@ -234,15 +240,6 @@ export const SubscriptionQuotaView: React.FC<SubscriptionQuotaViewProps> = ({
           >
             <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
           </button>
-        </div>
-
-        {/* 第二行：各 tier 使用百分比 */}
-        <div className="flex items-center gap-2">
-          {tiers
-            .filter((tier) => !HIDDEN_INLINE_TIERS.has(tier.name))
-            .map((tier) => (
-              <TierBadge key={tier.name} tier={tier} t={t} />
-            ))}
         </div>
       </div>
     );

@@ -358,6 +358,18 @@
         }
       }
     },
+    "openCodeSmallModel": {
+      "title": "OpenCode 軽量モデル",
+      "description": "セッションタイトルなどの軽量なバックグラウンド処理に使用します。空欄の場合は OpenCode が自動選択します。",
+      "loading": "読み込み中...",
+      "searchPlaceholder": "provider/model を検索または入力...",
+      "noModels": "一致するモデルがありません。完全なモデル ID を直接入力できます。",
+      "useDefault": "OpenCode に自動選択させる",
+      "useCustom": "カスタムモデルを使用：{{model}}",
+      "saved": "OpenCode 軽量モデルを更新しました",
+      "loadFailed": "OpenCode 軽量モデルの読み込みに失敗しました",
+      "saveFailed": "OpenCode 軽量モデルの保存に失敗しました"
+    },
     "authCenter": {
       "title": "OAuth 認証センター",
       "description": "Claude Code で他のサブスクリプションをご利用いただけます。コンプライアンスリスクにご注意ください。",

@@ -358,6 +358,18 @@
         }
       }
     },
+    "openCodeSmallModel": {
+      "title": "OpenCode 轻量模型",
+      "description": "用于会话标题等轻量后台任务。留空时由 OpenCode 自动选择模型。",
+      "loading": "正在读取...",
+      "searchPlaceholder": "搜索或输入 provider/model...",
+      "noModels": "没有匹配的模型，可直接输入完整模型 ID",
+      "useDefault": "由 OpenCode 自动选择",
+      "useCustom": "使用自定义模型：{{model}}",
+      "saved": "OpenCode 轻量模型已更新",
+      "loadFailed": "读取 OpenCode 轻量模型失败",
+      "saveFailed": "保存 OpenCode 轻量模型失败"
+    },
     "authCenter": {
       "title": "OAuth 认证中心",
       "description": "在 Claude Code 中使用您的其他订阅，请注意合规风险。",

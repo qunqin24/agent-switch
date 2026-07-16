@@ -443,13 +443,13 @@ export function ProviderCard({
               )}
             </div>
 
-            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-zinc-400">
+            <div className="flex min-w-0 items-center gap-2.5 text-xs text-zinc-400">
               {displayUrl && (
                 <button
                   type="button"
                   onClick={handleOpenWebsite}
                   className={cn(
-                    "inline-flex items-center transition-colors shrink-0",
+                    "inline-flex min-w-0 max-w-[240px] items-center transition-colors sm:max-w-[360px] lg:max-w-[520px]",
                     isClickableUrl
                       ? "hover:text-zinc-600 hover:underline dark:hover:text-zinc-300 cursor-pointer"
                       : "cursor-default",
@@ -457,7 +457,7 @@ export function ProviderCard({
                   title={displayUrl}
                   disabled={!isClickableUrl}
                 >
-                  <span className="truncate max-w-[240px] sm:max-w-[420px] lg:max-w-[560px]">
+                  <span className="block min-w-0 w-full truncate">
                     {displayUrl}
                   </span>
                 </button>
@@ -473,7 +473,7 @@ export function ProviderCard({
                   </span>
                 )}
 
-              <div className="flex items-center gap-1.5 shrink-0">
+              <div className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
                 {isCopilot ? (
                   <CopilotQuotaFooter
                     meta={provider.meta}

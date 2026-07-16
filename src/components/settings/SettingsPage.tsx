@@ -37,6 +37,7 @@ import { SkillStorageLocationSettings } from "@/components/settings/SkillStorage
 import { SkillSyncMethodSettings } from "@/components/settings/SkillSyncMethodSettings";
 import { TerminalSettings } from "@/components/settings/TerminalSettings";
 import { ModelsDevMetadataSettings } from "@/components/settings/ModelsDevMetadataSettings";
+import { OpenCodeSmallModelSettings } from "@/components/settings/OpenCodeSmallModelSettings";
 import {
   SettingSection,
   SettingsPane,
@@ -351,6 +352,7 @@ export function SettingsPage({
                           <SettingSection
                             title={t("settings.sections.modelMetadata")}
                           >
+                            <OpenCodeSmallModelSettings />
                             <ModelsDevMetadataSettings
                               autoUpdate={settings.modelsDevAutoUpdate ?? true}
                               intervalHours={

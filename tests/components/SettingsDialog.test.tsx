@@ -197,6 +197,10 @@ vi.mock("@/components/settings/ThemeSettings", () => ({
   ThemeSettings: () => <div>theme-settings</div>,
 }));
 
+vi.mock("@/components/settings/OpenCodeSmallModelSettings", () => ({
+  OpenCodeSmallModelSettings: () => <div>opencode-small-model-settings</div>,
+}));
+
 vi.mock("@/components/settings/WindowSettings", () => ({
   WindowSettings: ({ onChange }: any) => (
     <button onClick={() => onChange({ minimizeToTrayOnClose: false })}>

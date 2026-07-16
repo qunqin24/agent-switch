@@ -2148,6 +2148,7 @@ impl ProxyService {
 
             crate::codex_config::write_codex_provider_live_with_catalog(
                 &effective_settings,
+                &provider.id,
                 provider.category.as_deref(),
                 auth,
                 config_str,
@@ -2413,6 +2414,7 @@ impl ProxyService {
 
         crate::codex_config::write_codex_provider_live_with_catalog(
             config,
+            &provider.id,
             provider.category.as_deref(),
             auth,
             config_str,
@@ -3590,12 +3592,25 @@ wire_api = "responses"
             Some(&oauth_auth),
             "provider-derived takeover backup should preserve official OAuth auth"
         );
+        let backup_config = backup_value
+            .get("config")
+            .and_then(|value| value.as_str())
+            .expect("backup config");
+        let parsed_backup: toml::Value =
+            toml::from_str(backup_config).expect("parse backup config");
         assert!(
-            backup_value
-                .get("config")
-                .and_then(|value| value.as_str())
-                .is_some_and(|config| config.contains("deepseek-key")),
-            "provider token should be carried by config.toml in the restore backup"
+            parsed_backup
+                .get("model_providers")
+                .and_then(|providers| providers.get("deepseek"))
+                .and_then(|provider| provider.get("auth"))
+                .and_then(|auth| auth.get("command"))
+                .and_then(|command| command.as_str())
+                .is_some(),
+            "restore backup should carry Codex command-backed authentication"
+        );
+        assert!(
+            !backup_config.contains("deepseek-key"),
+            "restore backup must not embed the provider token in config.toml"
         );
 
         state
@@ -3872,14 +3887,14 @@ wire_api = "responses"
 
     #[tokio::test]
     #[serial]
-    async fn codex_takeover_preserve_disabled_uses_legacy_auth_write_path() {
+    async fn codex_takeover_ignores_legacy_preserve_opt_out() {
         let _home = TempHome::new();
         crate::settings::reload_settings().expect("reload settings");
         crate::settings::update_settings(crate::settings::AppSettings {
             preserve_codex_official_auth_on_switch: false,
             ..Default::default()
         })
-        .expect("disable Codex official auth preservation");
+        .expect("store legacy Codex auth preservation opt-out");
 
         let db = Arc::new(Database::memory().expect("init db"));
         let service = ProxyService::new(db.clone());
@@ -3936,26 +3951,15 @@ wire_api = "responses"
             crate::config::read_json_file(&crate::codex_config::get_codex_auth_path())
                 .expect("read live auth");
         assert_eq!(
-            live_auth
-                .get("OPENAI_API_KEY")
-                .and_then(|value| value.as_str()),
-            Some(PROXY_TOKEN_PLACEHOLDER),
-            "disabled preservation should keep the legacy auth.json takeover placeholder"
-        );
-        assert_eq!(
-            live_auth
-                .get("tokens")
-                .and_then(|tokens| tokens.get("access_token"))
-                .and_then(|value| value.as_str()),
-            Some("oauth-access"),
-            "the new config-only takeover branch must not run when preservation is disabled"
+            live_auth, oauth_auth,
+            "legacy opt-out must no longer allow proxy takeover to overwrite OAuth auth.json"
         );
 
         let live_config = std::fs::read_to_string(crate::codex_config::get_codex_config_path())
             .expect("read live config");
         assert!(
-            !live_config.contains(PROXY_TOKEN_PLACEHOLDER),
-            "disabled preservation should not move the takeover placeholder into config.toml"
+            live_config.contains(PROXY_TOKEN_PLACEHOLDER),
+            "proxy takeover should keep its local placeholder in config.toml"
         );
 
         crate::settings::update_settings(crate::settings::AppSettings::default())
@@ -4024,14 +4028,14 @@ experimental_bearer_token = "PROXY_MANAGED"
 
     #[test]
     #[serial]
-    fn codex_custom_provider_live_write_can_overwrite_auth_when_preserve_disabled() {
+    fn codex_custom_provider_live_write_ignores_legacy_preserve_opt_out() {
         let _home = TempHome::new();
         crate::settings::reload_settings().expect("reload settings");
         crate::settings::update_settings(crate::settings::AppSettings {
             preserve_codex_official_auth_on_switch: false,
             ..Default::default()
         })
-        .expect("disable Codex official auth preservation");
+        .expect("store legacy Codex auth preservation opt-out");
 
         let db = Arc::new(Database::memory().expect("init db"));
         let service = ProxyService::new(db);
@@ -4094,18 +4098,15 @@ wire_api = "responses"
             crate::config::read_json_file(&crate::codex_config::get_codex_auth_path())
                 .expect("read live auth");
         assert_eq!(
-            live_auth,
-            json!({
-                "OPENAI_API_KEY": PROXY_TOKEN_PLACEHOLDER
-            }),
-            "disabled preservation should let third-party switches overwrite auth.json"
+            live_auth, oauth_auth,
+            "legacy opt-out must not let third-party providers overwrite OAuth auth.json"
         );
 
         let live_config = std::fs::read_to_string(crate::codex_config::get_codex_config_path())
             .expect("read live config");
         assert!(
-            !live_config.contains("experimental_bearer_token"),
-            "provider token should stay in auth.json when preservation is disabled"
+            live_config.contains(PROXY_TOKEN_PLACEHOLDER),
+            "proxy takeover should keep its local placeholder in config.toml"
         );
 
         crate::settings::update_settings(crate::settings::AppSettings::default())

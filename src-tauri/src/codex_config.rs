@@ -9,7 +9,7 @@ use crate::error::AppError;
 use serde_json::{json, Value};
 use std::fs;
 use std::process::Command;
-use toml_edit::DocumentMut;
+use toml_edit::{Array, DocumentMut, Item, Table};
 
 pub const CC_SWITCH_CODEX_MODEL_PROVIDER_ID: &str = "custom";
 pub const CC_SWITCH_CODEX_MODEL_CATALOG_FILENAME: &str = "cc-switch-model-catalog.json";
@@ -176,8 +176,8 @@ pub(crate) fn is_custom_codex_model_provider_id(id: &str) -> bool {
 /// Write only Codex `config.toml` for provider switching.
 ///
 /// Codex login state lives in `auth.json`; provider routing, endpoint, model,
-/// and provider-scoped bearer tokens live in `config.toml`. Provider switches
-/// should not overwrite the user's ChatGPT login cache.
+/// and provider authentication live in `config.toml`. Provider switches never
+/// overwrite the user's ChatGPT login cache.
 pub fn write_codex_live_config_atomic(config_text_opt: Option<&str>) -> Result<(), AppError> {
     let config_path = get_codex_config_path();
     let cfg_text = match config_text_opt {
@@ -886,6 +886,7 @@ pub fn prepare_codex_live_config_text_with_optional_catalog(
 
 pub fn write_codex_provider_live_with_catalog(
     settings: &Value,
+    provider_id: &str,
     category: Option<&str>,
     auth: &Value,
     config_text: Option<&str>,
@@ -894,7 +895,7 @@ pub fn write_codex_provider_live_with_catalog(
         .map(|text| prepare_codex_config_text_with_model_catalog(settings, text))
         .transpose()?;
 
-    write_codex_live_for_provider(category, auth, prepared_config.as_deref())
+    write_codex_live_for_provider(provider_id, category, auth, prepared_config.as_deref())
 }
 
 /// Extract a provider-scoped `experimental_bearer_token` from Codex `config.toml`.
@@ -966,12 +967,105 @@ fn set_codex_experimental_bearer_token(config_text: &str, token: &str) -> Result
             .get_mut(provider_id.as_str())
             .and_then(|item| item.as_table_mut())
         {
+            // Codex treats command auth, env auth, and direct bearer auth as
+            // mutually exclusive. Proxy takeover intentionally uses a local
+            // non-secret bearer placeholder, so clear the other auth sources.
+            provider_table.remove("auth");
+            provider_table.remove("env_key");
+            provider_table.remove("env_key_instructions");
+            provider_table.remove("requires_openai_auth");
             provider_table["experimental_bearer_token"] = toml_edit::value(token);
             return Ok(doc.to_string());
         }
     }
 
     doc["experimental_bearer_token"] = toml_edit::value(token);
+    Ok(doc.to_string())
+}
+
+fn codex_auth_helper_executable() -> Result<PathBuf, AppError> {
+    #[cfg(target_os = "linux")]
+    if let Some(app_image) = std::env::var_os("APPIMAGE").filter(|value| !value.is_empty()) {
+        return Ok(PathBuf::from(app_image));
+    }
+
+    std::env::current_exe().map_err(|error| {
+        AppError::Message(format!(
+            "Unable to locate the CC Switch executable for Codex authentication: {error}"
+        ))
+    })
+}
+
+fn set_codex_command_backed_auth(
+    config_text: &str,
+    credential_provider_id: Option<&str>,
+) -> Result<String, AppError> {
+    if config_text.trim().is_empty() {
+        return Err(AppError::localized(
+            "provider.codex.config.missing",
+            "Codex 第三方供应商缺少 config.toml 配置，无法配置命令认证",
+            "Codex third-party provider is missing config.toml, cannot configure command authentication",
+        ));
+    }
+
+    let mut doc = config_text
+        .parse::<DocumentMut>()
+        .map_err(|error| AppError::Message(format!("Invalid Codex config.toml: {error}")))?;
+    let provider_id = active_codex_model_provider_id(&doc).ok_or_else(|| {
+        AppError::localized(
+            "provider.codex.model_provider.missing",
+            "Codex 第三方供应商缺少 model_provider",
+            "Codex third-party provider is missing model_provider",
+        )
+    })?;
+    if !is_custom_codex_model_provider_id(&provider_id) {
+        return Err(AppError::localized(
+            "provider.codex.model_provider.reserved",
+            "Codex 第三方供应商不能使用官方保留的 model_provider 标识",
+            "Codex third-party provider cannot use a reserved model_provider ID",
+        ));
+    }
+
+    let provider_table = doc
+        .get_mut("model_providers")
+        .and_then(Item::as_table_mut)
+        .and_then(|providers| providers.get_mut(provider_id.as_str()))
+        .and_then(Item::as_table_mut)
+        .ok_or_else(|| {
+            AppError::localized(
+                "provider.codex.model_provider.config_missing",
+                "Codex 第三方供应商缺少对应的 model_providers 配置",
+                "Codex third-party provider is missing its model_providers configuration",
+            )
+        })?;
+
+    provider_table.remove("experimental_bearer_token");
+    provider_table.remove("env_key");
+    provider_table.remove("env_key_instructions");
+    provider_table.remove("requires_openai_auth");
+
+    let executable = codex_auth_helper_executable()?;
+    let database_path = crate::config::get_app_config_dir().join("cc-switch.db");
+    let mut args = Array::new();
+    args.push(crate::codex_auth_helper::CODEX_PROVIDER_TOKEN_ARG);
+    args.push("--database");
+    args.push(database_path.to_string_lossy().as_ref());
+    if let Some(credential_provider_id) = credential_provider_id
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+    {
+        args.push("--provider-id");
+        args.push(credential_provider_id);
+    }
+
+    let mut auth_table = Table::new();
+    auth_table["command"] = toml_edit::value(executable.to_string_lossy().as_ref());
+    auth_table["args"] = toml_edit::value(args);
+    auth_table["timeout_ms"] = toml_edit::value(5_000_i64);
+    auth_table["refresh_interval_ms"] = toml_edit::value(300_000_i64);
+    provider_table["auth"] = Item::Table(auth_table);
+
+    doc.as_table_mut().remove("experimental_bearer_token");
     Ok(doc.to_string())
 }
 
@@ -1214,12 +1308,13 @@ pub fn strip_codex_unified_session_bucket_from_settings(
 /// Route a Codex live write between full auth+config or config-only.
 ///
 /// Official providers with usable login material own `auth.json`. Third-party
-/// providers only touch `config.toml` when the compatibility setting is enabled
-/// so the user's ChatGPT login cache survives provider switches.
+/// providers always touch only `config.toml`, using Codex's official custom
+/// provider command-auth mechanism so the ChatGPT login cache survives.
 ///
 /// 统一会话开关开启时，官方配置在落盘前注入共享的 `custom` 路由
 /// （见 `inject_codex_unified_session_bucket`）。
 pub fn write_codex_live_for_provider(
+    provider_id: &str,
     category: Option<&str>,
     auth: &Value,
     config_text: Option<&str>,
@@ -1234,14 +1329,16 @@ pub fn write_codex_live_for_provider(
         };
     let config_text = unified_official_config.as_deref().or(config_text);
 
-    let should_write_auth = (category == Some("official") && codex_auth_has_login_material(auth))
-        || (category != Some("official")
-            && !crate::settings::preserve_codex_official_auth_on_switch());
+    let should_write_auth = category == Some("official") && codex_auth_has_login_material(auth);
 
     if should_write_auth {
         write_codex_live_atomic(auth, config_text)
     } else {
-        let live_config = prepare_codex_provider_live_config(auth, config_text.unwrap_or(""))?;
+        let live_config = prepare_codex_provider_live_config_for_provider(
+            Some(provider_id),
+            auth,
+            config_text.unwrap_or(""),
+        )?;
         write_codex_live_config_atomic(Some(&live_config))
     }
 }
@@ -1249,10 +1346,17 @@ pub fn write_codex_live_for_provider(
 /// Build the live Codex config for provider switching.
 ///
 /// The stored provider keeps its API key in `auth.OPENAI_API_KEY`. Live Codex
-/// requests can use a provider-scoped `experimental_bearer_token`, so switching
-/// providers only needs to update `config.toml`; `auth.json` stays as the user's
-/// long-lived ChatGPT login cache.
+/// requests retrieve it through a provider-scoped command-backed auth table,
+/// so `auth.json` stays as the user's long-lived ChatGPT login cache.
 pub fn prepare_codex_provider_live_config(
+    auth: &Value,
+    config_text: &str,
+) -> Result<String, AppError> {
+    prepare_codex_provider_live_config_for_provider(None, auth, config_text)
+}
+
+fn prepare_codex_provider_live_config_for_provider(
+    provider_id: Option<&str>,
     auth: &Value,
     config_text: &str,
 ) -> Result<String, AppError> {
@@ -1260,7 +1364,10 @@ pub fn prepare_codex_provider_live_config(
         .or_else(|| extract_codex_experimental_bearer_token(config_text));
 
     Ok(match token {
-        Some(token) => set_codex_experimental_bearer_token(config_text, &token)?,
+        Some(token) if token == "PROXY_MANAGED" => {
+            set_codex_experimental_bearer_token(config_text, &token)?
+        }
+        Some(_) => set_codex_command_backed_auth(config_text, provider_id)?,
         None => config_text.to_string(),
     })
 }
@@ -1597,25 +1704,18 @@ base_url = "https://single.example.com/v1"
     }
 
     #[test]
-    fn prepare_provider_live_config_uses_top_level_token_for_reserved_provider() {
+    fn prepare_provider_live_config_rejects_reserved_provider_id() {
         let input = r#"model_provider = "openai"
 model = "gpt-5"
 "#;
 
-        let output =
+        let error =
             prepare_codex_provider_live_config(&json!({"OPENAI_API_KEY": "sk-test"}), input)
-                .expect("prepare live config");
-        let parsed: toml::Value = toml::from_str(&output).expect("parse output");
+                .expect_err("third-party credentials must not use a reserved provider ID");
 
-        assert_eq!(
-            parsed
-                .get("experimental_bearer_token")
-                .and_then(|v| v.as_str()),
-            Some("sk-test")
-        );
         assert!(
-            parsed.get("model_providers").is_none(),
-            "reserved provider tables should not be synthesized"
+            error.to_string().contains("保留") || error.to_string().contains("reserved"),
+            "error should explain the reserved provider ID: {error}"
         );
     }
 
@@ -1665,30 +1765,23 @@ experimental_bearer_token = "stale-table-key"
     }
 
     #[test]
-    fn prepare_provider_live_config_does_not_create_incomplete_provider_table() {
+    fn prepare_provider_live_config_rejects_incomplete_provider_table() {
         let input = r#"model_provider = "vendor_x"
 model = "gpt-5"
 "#;
 
-        let output =
+        let error =
             prepare_codex_provider_live_config(&json!({"OPENAI_API_KEY": "sk-test"}), input)
-                .expect("prepare live config");
-        let parsed: toml::Value = toml::from_str(&output).expect("parse output");
+                .expect_err("provider command auth requires a matching provider table");
 
-        assert_eq!(
-            parsed
-                .get("experimental_bearer_token")
-                .and_then(|v| v.as_str()),
-            Some("sk-test")
-        );
         assert!(
-            parsed.get("model_providers").is_none(),
-            "missing provider tables should not be synthesized without endpoint fields"
+            error.to_string().contains("model_providers"),
+            "error should explain the missing provider table: {error}"
         );
     }
 
     #[test]
-    fn prepare_provider_live_config_preserves_custom_provider_id() {
+    fn prepare_provider_live_config_uses_command_auth_without_embedding_secret() {
         let input = r#"model_provider = "vendor_alpha"
 model = "gpt-5.4"
 profile = "work"
@@ -1697,16 +1790,27 @@ profile = "work"
 name = "Vendor Alpha"
 base_url = "https://alpha.example/v1"
 wire_api = "responses"
+env_key = "OLD_VENDOR_KEY"
+requires_openai_auth = true
+experimental_bearer_token = "stale-secret"
 
 [profiles.work]
 model_provider = "vendor_alpha"
 model = "gpt-5.4"
 "#;
 
-        let result =
-            prepare_codex_provider_live_config(&json!({"OPENAI_API_KEY": "sk-test"}), input)
-                .expect("prepare live config");
+        let result = prepare_codex_provider_live_config_for_provider(
+            Some("provider-db-id"),
+            &json!({"OPENAI_API_KEY": "sk-test"}),
+            input,
+        )
+        .expect("prepare live config");
         let parsed: toml::Value = toml::from_str(&result).unwrap();
+        let provider = parsed
+            .get("model_providers")
+            .and_then(|v| v.get("vendor_alpha"))
+            .expect("active provider table");
+        let auth = provider.get("auth").expect("command auth table");
 
         assert_eq!(
             parsed.get("model_provider").and_then(|v| v.as_str()),
@@ -1719,13 +1823,46 @@ model = "gpt-5.4"
                 .is_none(),
             "provider writes should not force custom provider ids"
         );
+        assert!(
+            auth.get("command").and_then(|v| v.as_str()).is_some(),
+            "Codex should invoke the CC Switch token helper"
+        );
+        let args = auth
+            .get("args")
+            .and_then(|v| v.as_array())
+            .expect("command arguments");
+        assert!(
+            args.iter()
+                .any(|value| value.as_str()
+                    == Some(crate::codex_auth_helper::CODEX_PROVIDER_TOKEN_ARG))
+                && args
+                    .iter()
+                    .any(|value| value.as_str() == Some("--database"))
+                && args
+                    .iter()
+                    .any(|value| value.as_str() == Some("--provider-id"))
+                && args
+                    .iter()
+                    .any(|value| value.as_str() == Some("provider-db-id")),
+            "command auth should identify the database and provider"
+        );
         assert_eq!(
-            parsed
-                .get("model_providers")
-                .and_then(|v| v.get("vendor_alpha"))
-                .and_then(|v| v.get("experimental_bearer_token"))
-                .and_then(|v| v.as_str()),
-            Some("sk-test")
+            auth.get("timeout_ms").and_then(|v| v.as_integer()),
+            Some(5_000)
+        );
+        assert_eq!(
+            auth.get("refresh_interval_ms").and_then(|v| v.as_integer()),
+            Some(300_000)
+        );
+        assert!(
+            provider.get("env_key").is_none()
+                && provider.get("requires_openai_auth").is_none()
+                && provider.get("experimental_bearer_token").is_none(),
+            "mutually exclusive legacy authentication fields should be removed"
+        );
+        assert!(
+            !result.contains("sk-test") && !result.contains("stale-secret"),
+            "provider secrets must not be embedded in config.toml"
         );
         assert_eq!(
             parsed
@@ -1736,6 +1873,34 @@ model = "gpt-5.4"
             Some("vendor_alpha"),
             "profile provider references should be preserved"
         );
+    }
+
+    #[test]
+    fn prepare_provider_live_config_keeps_proxy_placeholder_as_direct_bearer() {
+        let input = r#"model_provider = "vendor_alpha"
+
+[model_providers.vendor_alpha]
+name = "Vendor Alpha"
+base_url = "http://127.0.0.1:15721/v1"
+wire_api = "responses"
+"#;
+
+        let result =
+            prepare_codex_provider_live_config(&json!({"OPENAI_API_KEY": "PROXY_MANAGED"}), input)
+                .expect("prepare proxy takeover config");
+        let parsed: toml::Value = toml::from_str(&result).expect("parse output");
+        let provider = parsed
+            .get("model_providers")
+            .and_then(|value| value.get("vendor_alpha"))
+            .expect("provider table");
+
+        assert_eq!(
+            provider
+                .get("experimental_bearer_token")
+                .and_then(|value| value.as_str()),
+            Some("PROXY_MANAGED")
+        );
+        assert!(provider.get("auth").is_none());
     }
 
     #[test]

@@ -152,6 +152,16 @@ pub async fn get_config_dir(app: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+pub fn get_opencode_small_model() -> Result<Option<String>, String> {
+    crate::opencode_config::get_small_model().map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn set_opencode_small_model(model: Option<String>) -> Result<(), String> {
+    crate::opencode_config::set_small_model(model.as_deref()).map_err(Into::into)
+}
+
+#[tauri::command]
 pub async fn open_config_folder(handle: AppHandle, app: String) -> Result<bool, String> {
     let config_dir = match AppType::from_str(&app).map_err(|e| e.to_string())? {
         AppType::Claude => config::get_claude_config_dir(),

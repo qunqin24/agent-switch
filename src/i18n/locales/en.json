@@ -358,6 +358,18 @@
         }
       }
     },
+    "openCodeSmallModel": {
+      "title": "OpenCode small model",
+      "description": "Used for lightweight background tasks such as session titles. Leave empty to let OpenCode choose automatically.",
+      "loading": "Loading...",
+      "searchPlaceholder": "Search or enter provider/model...",
+      "noModels": "No matching model. Enter a full model ID to use a custom model.",
+      "useDefault": "Let OpenCode choose automatically",
+      "useCustom": "Use custom model: {{model}}",
+      "saved": "OpenCode small model updated",
+      "loadFailed": "Failed to load the OpenCode small model",
+      "saveFailed": "Failed to save the OpenCode small model"
+    },
     "authCenter": {
       "title": "OAuth Authentication Center",
       "description": "Use your other subscriptions in Claude Code — please be mindful of compliance risks.",

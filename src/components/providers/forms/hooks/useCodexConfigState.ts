@@ -14,17 +14,30 @@ interface UseCodexConfigStateProps {
   };
 }
 
-// auth.json 缺 OPENAI_API_KEY 时回退到 config.toml 的 experimental_bearer_token
-// (Mobile 兼容形态：保留 ChatGPT 登录态但用第三方 token)
 function pickCodexApiKey(
   authObj: { OPENAI_API_KEY?: unknown } | null | undefined,
-  configText: string,
 ): string {
   if (authObj && typeof authObj.OPENAI_API_KEY === "string") {
     const key = authObj.OPENAI_API_KEY;
     if (key) return key;
   }
-  return extractCodexExperimentalBearerToken(configText) || "";
+  return "";
+}
+
+// Lift legacy direct bearer credentials into CC Switch's protected provider
+// settings. Live config.toml is generated with Codex command-backed auth.
+function migrateLegacyCodexCredential(
+  authObj: Record<string, unknown>,
+  configText: string,
+): { auth: Record<string, unknown>; config: string; apiKey: string } {
+  const legacyToken = extractCodexExperimentalBearerToken(configText) || "";
+  const currentToken = pickCodexApiKey(authObj);
+  const apiKey = currentToken || legacyToken;
+  return {
+    auth: apiKey ? { ...authObj, OPENAI_API_KEY: apiKey } : authObj,
+    config: updateCodexExperimentalBearerToken(configText, ""),
+    apiKey,
+  };
 }
 
 /**
@@ -49,16 +62,14 @@ export function useCodexConfigState({ initialData }: UseCodexConfigStateProps) {
 
     const config = initialData.settingsConfig;
     if (typeof config === "object" && config !== null) {
-      // 设置 auth.json
       const auth = (config as any).auth || {};
-      setCodexAuthState(JSON.stringify(auth, null, 2));
-
-      // 设置 config.toml
       const configStr =
         typeof (config as any).config === "string"
           ? (config as any).config
           : "";
-      setCodexConfigState(configStr);
+      const migrated = migrateLegacyCodexCredential(auth, configStr);
+      setCodexAuthState(JSON.stringify(migrated.auth, null, 2));
+      setCodexConfigState(migrated.config);
 
       const modelCatalog = (config as any).modelCatalog;
       const rawCatalogModels = Array.isArray(modelCatalog?.models)
@@ -87,12 +98,12 @@ export function useCodexConfigState({ initialData }: UseCodexConfigStateProps) {
       );
 
       // 提取 Base URL
-      const initialBaseUrl = extractCodexBaseUrl(configStr);
+      const initialBaseUrl = extractCodexBaseUrl(migrated.config);
       if (initialBaseUrl) {
         setCodexBaseUrl(initialBaseUrl);
       }
 
-      setCodexApiKey(pickCodexApiKey(auth, configStr));
+      setCodexApiKey(migrated.apiKey);
     }
   }, [initialData]);
 
@@ -123,9 +134,9 @@ export function useCodexConfigState({ initialData }: UseCodexConfigStateProps) {
     } catch {
       parsed = null;
     }
-    const extractedKey = pickCodexApiKey(parsed, codexConfig);
+    const extractedKey = pickCodexApiKey(parsed);
     setCodexApiKey((prev) => (prev === extractedKey ? prev : extractedKey));
-  }, [codexAuth, codexConfig]);
+  }, [codexAuth]);
 
   // 验证 Codex Auth JSON
   const validateCodexAuth = useCallback((value: string): string => {
@@ -162,9 +173,8 @@ export function useCodexConfigState({ initialData }: UseCodexConfigStateProps) {
     [],
   );
 
-  // 处理 Codex API Key 输入并写回 auth.json
-  // 同步: 若 config.toml 当前含 experimental_bearer_token (Mobile 兼容形态),
-  // 也一并更新/清除——否则用户清空输入框会被 pickCodexApiKey 的 fallback 又填回去
+  // 处理 Codex API Key 输入并写回 CC Switch 的供应商认证数据。
+  // 旧版 direct bearer 条目会被移除，Live 配置由后端生成 command auth。
   const handleCodexApiKeyChange = useCallback(
     (key: string) => {
       const trimmed = key.trim();
@@ -176,9 +186,7 @@ export function useCodexConfigState({ initialData }: UseCodexConfigStateProps) {
       } catch {
         // ignore
       }
-      setCodexConfig((prev) =>
-        updateCodexExperimentalBearerToken(prev, trimmed),
-      );
+      setCodexConfig((prev) => updateCodexExperimentalBearerToken(prev, ""));
     },
     [codexAuth, setCodexAuth, setCodexConfig],
   );
@@ -203,16 +211,29 @@ export function useCodexConfigState({ initialData }: UseCodexConfigStateProps) {
     (value: string) => {
       // 归一化中文/全角/弯引号，避免 TOML 解析报错
       const normalized = normalizeTomlText(value);
-      setCodexConfig(normalized);
+      const legacyToken = extractCodexExperimentalBearerToken(normalized);
+      const cleanConfig = updateCodexExperimentalBearerToken(normalized, "");
+      setCodexConfig(cleanConfig);
+
+      if (legacyToken) {
+        setCodexApiKey(legacyToken);
+        try {
+          const auth = JSON.parse(codexAuth || "{}");
+          auth.OPENAI_API_KEY = legacyToken;
+          setCodexAuth(JSON.stringify(auth, null, 2));
+        } catch {
+          // Leave the existing auth editor error intact.
+        }
+      }
 
       if (!isUpdatingCodexBaseUrlRef.current) {
-        const extracted = extractCodexBaseUrl(normalized) || "";
+        const extracted = extractCodexBaseUrl(cleanConfig) || "";
         if (extracted !== codexBaseUrl) {
           setCodexBaseUrl(extracted);
         }
       }
     },
-    [setCodexConfig, codexBaseUrl],
+    [codexAuth, setCodexAuth, setCodexConfig, codexBaseUrl],
   );
 
   // 重置配置（用于预设切换）
@@ -222,15 +243,15 @@ export function useCodexConfigState({ initialData }: UseCodexConfigStateProps) {
       config: string,
       modelCatalogModels: CodexCatalogModel[] = [],
     ) => {
-      const authString = JSON.stringify(auth, null, 2);
-      setCodexAuth(authString);
-      setCodexConfig(config);
+      const migrated = migrateLegacyCodexCredential(auth, config);
+      setCodexAuth(JSON.stringify(migrated.auth, null, 2));
+      setCodexConfig(migrated.config);
       setCodexCatalogModels(modelCatalogModels);
 
-      const baseUrl = extractCodexBaseUrl(config);
+      const baseUrl = extractCodexBaseUrl(migrated.config);
       setCodexBaseUrl(baseUrl || "");
 
-      setCodexApiKey(pickCodexApiKey(auth, config));
+      setCodexApiKey(migrated.apiKey);
     },
     [setCodexAuth, setCodexConfig, setCodexCatalogModels],
   );

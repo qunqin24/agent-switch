@@ -111,6 +111,46 @@ pub fn write_opencode_config(config: &Value) -> Result<(), AppError> {
     Ok(())
 }
 
+fn small_model_from_config(config: &Value) -> Result<Option<String>, AppError> {
+    match config.get("small_model") {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(model)) => {
+            let model = model.trim();
+            Ok((!model.is_empty()).then(|| model.to_string()))
+        }
+        Some(_) => Err(AppError::Config(
+            "OpenCode small_model must be a string".to_string(),
+        )),
+    }
+}
+
+fn set_small_model_in_config(config: &mut Value, model: Option<&str>) -> Result<(), AppError> {
+    let root = config.as_object_mut().ok_or_else(|| {
+        AppError::Config("OpenCode config root must be a JSON object".to_string())
+    })?;
+
+    match model.map(str::trim).filter(|value| !value.is_empty()) {
+        Some(model) => {
+            root.insert("small_model".to_string(), Value::String(model.to_string()));
+        }
+        None => {
+            root.remove("small_model");
+        }
+    }
+
+    Ok(())
+}
+
+pub fn get_small_model() -> Result<Option<String>, AppError> {
+    small_model_from_config(&read_opencode_config()?)
+}
+
+pub fn set_small_model(model: Option<&str>) -> Result<(), AppError> {
+    let mut config = read_opencode_config()?;
+    set_small_model_in_config(&mut config, model)?;
+    write_opencode_config(&config)
+}
+
 pub fn get_providers() -> Result<Map<String, Value>, AppError> {
     let config = read_opencode_config()?;
     Ok(config
@@ -264,4 +304,50 @@ pub fn remove_plugins_by_prefixes(prefixes: &[&str]) -> Result<(), AppError> {
     }
 
     write_opencode_config(&config)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{set_small_model_in_config, small_model_from_config};
+    use serde_json::json;
+
+    #[test]
+    fn reads_and_normalizes_small_model() {
+        let config = json!({ "small_model": "  opencode/north-mini-code-free  " });
+        assert_eq!(
+            small_model_from_config(&config).unwrap().as_deref(),
+            Some("opencode/north-mini-code-free")
+        );
+    }
+
+    #[test]
+    fn updates_small_model_without_touching_other_config() {
+        let mut config = json!({
+            "$schema": "https://opencode.ai/config.json",
+            "provider": { "custom": { "name": "Custom" } },
+            "plugin": ["oh-my-opencode-slim@latest"],
+            "agent": { "build": { "mode": "primary" } }
+        });
+        let expected_other_fields = config.clone();
+
+        set_small_model_in_config(&mut config, Some(" openai/gpt-5.6-mini ")).unwrap();
+
+        assert_eq!(config["small_model"], "openai/gpt-5.6-mini");
+        for key in ["$schema", "provider", "plugin", "agent"] {
+            assert_eq!(config[key], expected_other_fields[key]);
+        }
+    }
+
+    #[test]
+    fn empty_small_model_removes_the_field() {
+        let mut config = json!({
+            "small_model": "opencode/big-pickle",
+            "provider": { "custom": {} }
+        });
+
+        set_small_model_in_config(&mut config, Some("   ")).unwrap();
+
+        assert!(config.get("small_model").is_none());
+        assert!(config.get("provider").is_some());
+    }
 }

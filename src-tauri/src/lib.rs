@@ -4,6 +4,7 @@ mod auto_launch;
 mod claude_desktop_config;
 mod claude_mcp;
 mod claude_plugin;
+mod codex_auth_helper;
 mod codex_config;
 mod codex_history_migration;
 mod commands;
@@ -37,6 +38,7 @@ mod usage_events;
 mod usage_script;
 
 pub use app_config::{AppType, InstalledSkill, McpApps, McpServer, MultiAppConfig, SkillApps};
+pub use codex_auth_helper::run_if_requested as run_codex_provider_token_helper_if_requested;
 pub use codex_config::{get_codex_auth_path, get_codex_config_path, write_codex_live_atomic};
 pub use commands::open_provider_terminal;
 pub use commands::*;
@@ -1201,6 +1203,8 @@ pub fn run() {
             commands::get_config_status,
             commands::get_claude_code_config_path,
             commands::get_config_dir,
+            commands::get_opencode_small_model,
+            commands::set_opencode_small_model,
             commands::open_config_folder,
             commands::pick_directory,
             commands::open_external,

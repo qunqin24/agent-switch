@@ -48,6 +48,16 @@ export async function setCommonConfigSnippet(
   return invoke("set_common_config_snippet", { appType, snippet });
 }
 
+export async function getOpenCodeSmallModel(): Promise<string | null> {
+  return invoke<string | null>("get_opencode_small_model");
+}
+
+export async function setOpenCodeSmallModel(
+  model: string | null,
+): Promise<void> {
+  return invoke("set_opencode_small_model", { model });
+}
+
 /**
  * 提取通用配置片段
  *
