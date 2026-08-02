@@ -1,8 +1,8 @@
-# Contributing to CC Switch
+# Contributing to AgentSwitch
 
 > [中文版本](#贡献指南)
 
-Thank you for your interest in contributing to CC Switch! Please read our [Code of Conduct](./CODE_OF_CONDUCT.md) before participating.
+Thank you for your interest in contributing to AgentSwitch! Please read our [Code of Conduct](./CODE_OF_CONDUCT.md) before participating.
 
 ## How to Contribute
 
@@ -110,7 +110,7 @@ By submitting a PR, you agree to the following:
 
 ## Internationalization (i18n)
 
-CC Switch supports three languages. When modifying user-facing text:
+AgentSwitch supports three languages. When modifying user-facing text:
 
 1. Update **all three** locale files:
    - `src/locales/en/translation.json`
@@ -128,9 +128,9 @@ CC Switch supports three languages. When modifying user-facing text:
 
 # 贡献指南
 
-> [English Version](#contributing-to-cc-switch)
+> [English Version](#contributing-to-agentswitch)
 
-感谢你对 CC Switch 的贡献兴趣！参与之前请阅读我们的[行为准则](./CODE_OF_CONDUCT.md)。
+感谢你对 AgentSwitch 的贡献兴趣！参与之前请阅读我们的[行为准则](./CODE_OF_CONDUCT.md)。
 
 ## 如何贡献
 
@@ -238,7 +238,7 @@ chore(deps): update dependencies
 
 ## 国际化（i18n）
 
-CC Switch 支持三种语言。修改用户可见文本时：
+AgentSwitch 支持三种语言。修改用户可见文本时：
 
 1. **同时更新三个**语言文件：
    - `src/locales/en/translation.json`

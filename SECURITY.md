@@ -2,9 +2,9 @@
 
 ## Supported Versions / 支持的版本
 
-Only the latest release of CC Switch receives security updates.
+Only the latest release of AgentSwitch receives security updates.
 
-仅最新版本的 CC Switch 会收到安全更新。
+仅最新版本的 AgentSwitch 会收到安全更新。
 
 | Version / 版本 | Supported / 是否支持 |
 |----------------|---------------------|

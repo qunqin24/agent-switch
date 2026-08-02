@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="src-tauri/icons/128x128.png" width="96" alt="CC Switch">
+<img src="src-tauri/icons/128x128.png" width="96" alt="AgentSwitch">
 
-# CC Switch
+# AgentSwitch
 
 一个面向多种 AI 编程客户端的本地配置、路由、用量与工具管理桌面应用。
 
@@ -17,11 +17,11 @@
 </div>
 
 > [!IMPORTANT]
-> 本仓库是基于 [farion1231/cc-switch](https://github.com/farion1231/cc-switch) 的社区二次开发版本，不是上游作者发布的官方版本。应用继续沿用 **CC Switch** 名称和主要配置格式，以保持使用习惯与数据兼容；本分支的安装包、自动更新和问题反馈均由 [qwq202/cc-switch](https://github.com/qwq202/cc-switch) 独立维护。
+> 本仓库是基于 [farion1231/cc-switch](https://github.com/farion1231/cc-switch) 的社区二次开发版本，不是上游作者发布的官方版本。应用继续沿用 **AgentSwitch** 名称和主要配置格式，以保持使用习惯与数据兼容；本分支的安装包、自动更新和问题反馈均由 [qwq202/cc-switch](https://github.com/qwq202/cc-switch) 独立维护。
 
 ## 这个二开版本解决什么问题
 
-上游 CC Switch 已经提供了成熟的供应商切换、本地代理、MCP、Skills、会话与同步能力。本分支没有重新发明这些基础设施，而是围绕日常高频使用继续打磨：让界面更紧凑，让成本统计更可信，让 OpenCode 配置更自动，也让 Claude Desktop、Codex 和 Grok Build 的安装与升级少一些意外。
+上游 AgentSwitch 已经提供了成熟的供应商切换、本地代理、MCP、Skills、会话与同步能力。本分支没有重新发明这些基础设施，而是围绕日常高频使用继续打磨：让界面更紧凑，让成本统计更可信，让 OpenCode 配置更自动，也让 Claude Desktop、Codex 和 Grok Build 的安装与升级少一些意外。
 
 当前分支相对上游的主要改善来自 `v3.16.5` 至 `v3.16.8` 的提交记录。
 
@@ -85,7 +85,7 @@
 - 一键切换供应商，并支持从系统托盘快速操作。
 - 本地代理支持格式转换、热切换、自动故障转移、熔断和健康检查。
 - Claude、Codex、Gemini 可分别启用代理接管，不必把所有客户端绑在同一路由上。
-- 支持导入、导出、排序、共享配置片段和 `ccswitch://` Deep Link。
+- 支持导入、导出、排序、共享配置片段和 `agentswitch://` Deep Link。
 
 ### MCP、Prompt 与 Skills
 
@@ -108,27 +108,27 @@
 
 ### Windows
 
-- `CC-Switch-v{version}-Windows.msi`：安装版。
-- `CC-Switch-v{version}-Windows-Portable.zip`：便携版，解压后直接运行。
+- `AgentSwitch-v{version}-Windows.msi`：安装版。
+- `AgentSwitch-v{version}-Windows-Portable.zip`：便携版，解压后直接运行。
 
 ### macOS
 
-- `CC-Switch-v{version}-macOS.dmg`：推荐安装方式。
-- `CC-Switch-v{version}-macOS.zip`：应用压缩包。
+- `AgentSwitch-v{version}-macOS.dmg`：推荐安装方式。
+- `AgentSwitch-v{version}-macOS.zip`：应用压缩包。
 
 支持 macOS 12 及以上版本。当前分支发布的是未进行 Apple Developer 公证的社区构建；首次打开时如被系统拦截，请在“系统设置 → 隐私与安全性”中确认运行。
 
 ### Linux
 
-- `CC-Switch-v{version}-Linux-{arch}.AppImage`
-- `CC-Switch-v{version}-Linux-{arch}.deb`
-- `CC-Switch-v{version}-Linux-{arch}.rpm`
+- `AgentSwitch-v{version}-Linux-{arch}.AppImage`
+- `AgentSwitch-v{version}-Linux-{arch}.deb`
+- `AgentSwitch-v{version}-Linux-{arch}.rpm`
 
 发布流程覆盖 x86_64 和 ARM64。不同版本的具体资产以对应 Release 页面为准。
 
 ## 快速开始
 
-1. 安装并启动 CC Switch。
+1. 安装并启动 AgentSwitch。
 2. 在左侧选择需要管理的客户端。
 3. 添加官方预设、第三方供应商，或创建自定义配置。
 4. 填写 API Key 和 Base URL，检查模型映射后保存。
@@ -140,15 +140,15 @@
 
 ## 数据位置与隐私
 
-CC Switch 采用本地优先设计。供应商配置、统计数据和备份默认保存在当前用户目录，不会因为使用本应用而自动上传到项目维护者的服务器。
+AgentSwitch 采用本地优先设计。供应商配置、统计数据和备份默认保存在当前用户目录，不会因为使用本应用而自动上传到项目维护者的服务器。
 
 | 数据        | 默认位置                      |
 | ----------- | ----------------------------- |
-| 主数据库    | `~/.cc-switch/cc-switch.db`   |
-| 设备设置    | `~/.cc-switch/settings.json`  |
-| 自动备份    | `~/.cc-switch/backups/`       |
-| Skills 存储 | `~/.cc-switch/skills/`        |
-| Skill 备份  | `~/.cc-switch/skill-backups/` |
+| 主数据库    | `~/.agentswitch/agentswitch.db`   |
+| 设备设置    | `~/.agentswitch/settings.json`  |
+| 自动备份    | `~/.agentswitch/backups/`       |
+| Skills 存储 | `~/.agentswitch/skills/`        |
+| Skill 备份  | `~/.agentswitch/skill-backups/` |
 
 使用 WebDAV 或 S3 同步时，数据会上传到你自己配置的远端存储。API Key 属于敏感信息，请妥善保护本地数据库、备份和同步凭据。
 

@@ -15,6 +15,7 @@ GEMINI.md
 /.codex
 /.gemini
 /.cc-switch
+/.agentswitch
 /.idea
 /.vscode
 vitest-report.json
@@ -22,6 +23,7 @@ nul
 
 # Flatpak build artifacts
 flatpak/cc-switch.deb
+flatpak/agent-switch.deb
 flatpak-build/
 flatpak-repo/
 .worktrees/
