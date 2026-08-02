@@ -1,6 +1,61 @@
 import { describe, expect, it } from "vitest";
 import { providerPresets } from "@/config/claudeProviderPresets";
 
+describe("Claude provider preset curation", () => {
+  const providerNames = providerPresets.map((preset) => preset.name);
+
+  it("keeps recognized model and inference platforms", () => {
+    expect(providerNames).toEqual(
+      expect.arrayContaining([
+        "Claude Official",
+        "Kimi",
+        "Kimi For Coding",
+        "MiniMax",
+        "MiniMax en",
+        "SiliconFlow",
+        "SiliconFlow en",
+        "OpenRouter",
+        "TheRouter",
+        "AWS Bedrock (AKSK)",
+      ]),
+    );
+  });
+
+  it("excludes unverified relay and mirror presets", () => {
+    const removedPresets = [
+      "Shengsuanyun",
+      "PatewayAI",
+      "CCSub",
+      "Unity2.ai",
+      "CherryIN",
+      "DMXAPI",
+      "PackyCode",
+      "APIKEY.FUN",
+      "APINebula",
+      "SudoCode",
+      "ClaudeAPI",
+      "ClaudeCN",
+      "RunAPI",
+      "RelaxyCode",
+      "Cubence",
+      "AIGoCode",
+      "RightCode",
+      "AICodeMirror",
+      "CrazyRouter",
+      "SSSAiCode",
+      "Compshare",
+      "Compshare Coding Plan",
+      "Micu",
+      "CTok.ai",
+      "E-FlowCode",
+      "PIPELLM",
+      "AtlasCloud",
+    ];
+
+    removedPresets.forEach((name) => expect(providerNames).not.toContain(name));
+  });
+});
+
 describe("AWS Bedrock Provider Presets", () => {
   const bedrockAksk = providerPresets.find(
     (p) => p.name === "AWS Bedrock (AKSK)",
