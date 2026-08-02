@@ -13,7 +13,6 @@ use crate::config::{delete_file, get_claude_settings_path, read_json_file, write
 use crate::database::Database;
 use crate::error::AppError;
 use crate::provider::Provider;
-use crate::services::mcp::McpService;
 use crate::store::AppState;
 
 use super::gemini_auth::{
@@ -609,7 +608,7 @@ fn restore_live_settings_for_provider_backfill(
         }
     }
 
-    // `modelCatalog` is a cc-switch–private field whose SSOT is the DB. Live's
+    // `modelCatalog` is an Agent Switch-private field whose SSOT is the DB. Live's
     // `config.toml` only carries a lossy projection (`model_catalog_json` →
     // generated catalog file) that proxy takeover/restore cycles and Codex.app
     // config rewrites can drop, so `read_live_settings` may reconstruct it as
@@ -932,8 +931,6 @@ pub(crate) fn sync_current_provider_for_app_to_live(
         }
     }
 
-    McpService::sync_all_enabled(state)?;
-
     Ok(())
 }
 
@@ -1000,17 +997,6 @@ pub fn sync_current_to_live(state: &AppState) -> Result<(), AppError> {
         }
     }
 
-    // MCP sync
-    McpService::sync_all_enabled(state)?;
-
-    // Skill sync
-    for app_type in AppType::all() {
-        if let Err(e) = crate::services::skill::SkillService::sync_to_app(&state.db, &app_type) {
-            log::warn!("同步 Skill 到 {app_type:?} 失败: {e}");
-            // Continue syncing other apps, don't abort
-        }
-    }
-
     Ok(())
 }
 
@@ -1019,8 +1005,8 @@ pub fn read_live_settings(app_type: AppType) -> Result<Value, AppError> {
     match app_type {
         AppType::Codex => {
             let mut result = crate::codex_config::read_codex_live_settings()?;
-            // `modelCatalog` is a cc-switch private field that lives only in
-            // the DB SSOT plus the `cc-switch-model-catalog.json` projection
+            // `modelCatalog` is an Agent Switch-private field that lives only in
+            // the DB SSOT plus the `agentswitch-model-catalog.json` projection
             // file — it is never inlined into `auth.json` or `config.toml`.
             // Reverse-parse the projection so the edit form for the active
             // Codex provider doesn't see an empty mapping table.
@@ -1282,6 +1268,22 @@ pub fn should_import_default_config_on_startup(
     Ok(!state.db.has_any_provider_for_app(app_type.as_str())?)
 }
 
+fn merge_gemini_provider_config(
+    existing: &mut Value,
+    provider_config: &serde_json::Map<String, Value>,
+) {
+    let Some(existing_obj) = existing.as_object_mut() else {
+        return;
+    };
+
+    for (key, value) in provider_config {
+        if key == "mcpServers" {
+            continue;
+        }
+        existing_obj.insert(key.clone(), value.clone());
+    }
+}
+
 /// Write Gemini live configuration with authentication handling
 pub(crate) fn write_gemini_live(provider: &Provider) -> Result<(), AppError> {
     use crate::gemini_config::{
@@ -1296,14 +1298,17 @@ pub(crate) fn write_gemini_live(provider: &Provider) -> Result<(), AppError> {
 
     // Prepare config to write to ~/.gemini/settings.json
     // Behavior:
-    // - config is object: use it (merge with existing to preserve mcpServers etc.)
+    // - config is object: merge provider-owned fields into the existing file
+    // - mcpServers is always owned by the Gemini MCP manager, never by a provider snapshot
     // - config is null or absent: preserve existing file content
     let settings_path = get_gemini_settings_path();
     let mut config_to_write: Option<Value> = None;
 
     if let Some(config_value) = provider.settings_config.get("config") {
         if config_value.is_object() {
-            // Merge with existing settings to preserve mcpServers and other fields
+            // Merge provider fields into existing settings. Historical provider
+            // snapshots may contain mcpServers; skip that key so switching
+            // providers cannot overwrite Gemini's independently managed MCP list.
             let mut merged = if settings_path.exists() {
                 read_json_file::<Value>(&settings_path).unwrap_or_else(|_| json!({}))
             } else {
@@ -1311,12 +1316,8 @@ pub(crate) fn write_gemini_live(provider: &Provider) -> Result<(), AppError> {
             };
 
             // Merge provider config into existing settings
-            if let (Some(merged_obj), Some(config_obj)) =
-                (merged.as_object_mut(), config_value.as_object())
-            {
-                for (k, v) in config_obj {
-                    merged_obj.insert(k.clone(), v.clone());
-                }
+            if let Some(config_obj) = config_value.as_object() {
+                merge_gemini_provider_config(&mut merged, config_obj);
             }
             config_to_write = Some(merged);
         } else if !config_value.is_null() {
@@ -1386,7 +1387,7 @@ pub(crate) fn remove_opencode_provider_from_live(provider_id: &str) -> Result<()
 /// Import all providers from OpenCode live config to database
 ///
 /// This imports existing providers from ~/.config/opencode/opencode.json
-/// into the CC Switch database. Each provider found will be added to the
+/// into the Agent Switch database. Each provider found will be added to the
 /// database with is_current set to false.
 pub fn import_opencode_providers_from_live(state: &AppState) -> Result<usize, AppError> {
     use crate::opencode_config;
@@ -1443,7 +1444,7 @@ pub fn import_opencode_providers_from_live(state: &AppState) -> Result<usize, Ap
 /// Import all providers from OpenClaw live config to database
 ///
 /// This imports existing providers from ~/.openclaw/openclaw.json
-/// into the CC Switch database. Each provider found will be added to the
+/// into the Agent Switch database. Each provider found will be added to the
 /// database with is_current set to false.
 pub fn import_openclaw_providers_from_live(state: &AppState) -> Result<usize, AppError> {
     use crate::openclaw_config;
@@ -1512,7 +1513,7 @@ pub fn import_openclaw_providers_from_live(state: &AppState) -> Result<usize, Ap
 /// Import all providers from Hermes live config to database
 ///
 /// This imports existing providers from ~/.hermes/config.yaml
-/// into the CC Switch database. Each provider found will be added to the
+/// into the Agent Switch database. Each provider found will be added to the
 /// database with is_current set to false.
 pub fn import_hermes_providers_from_live(state: &AppState) -> Result<usize, AppError> {
     use crate::hermes_config;
@@ -1600,6 +1601,42 @@ pub fn remove_openclaw_provider_from_live(provider_id: &str) -> Result<(), AppEr
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn gemini_provider_config_cannot_replace_live_mcp_servers() {
+        let mut existing = json!({
+            "theme": "system",
+            "mcpServers": {
+                "live": {
+                    "command": "live-command"
+                }
+            }
+        });
+        let provider = json!({
+            "theme": "dark",
+            "mcpServers": {
+                "snapshot": {
+                    "command": "snapshot-command"
+                }
+            }
+        });
+
+        merge_gemini_provider_config(
+            &mut existing,
+            provider.as_object().expect("provider config object"),
+        );
+
+        assert_eq!(existing["theme"], json!("dark"));
+        assert_eq!(
+            existing["mcpServers"],
+            json!({
+                "live": {
+                    "command": "live-command"
+                }
+            }),
+            "Gemini's live MCP list should remain independent from provider snapshots"
+        );
+    }
 
     #[test]
     fn claude_common_config_apply_and_remove_roundtrip_for_non_overlapping_fields() {

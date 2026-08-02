@@ -27,7 +27,7 @@ interface OmoModelBuild {
   usedFallbackSource: boolean;
 }
 
-const OMO_MODEL_CATALOG_CACHE_KEY = "cc-switch:omo-model-catalog:v1";
+const OMO_MODEL_CATALOG_CACHE_KEY = "agentswitch:omo-model-catalog:v1";
 
 interface OmoModelCatalogCache {
   version: 1;
@@ -282,7 +282,7 @@ export function useOmoModelSource({
             : providerKey;
         const value = `${providerKey}/${modelId}`;
         const label = `${providerDisplayName} / ${modelName} (${modelId})`;
-        // Managed providers contribute the friendlier CC Switch display name.
+        // Managed providers contribute the friendlier Agent Switch display name.
         dedupedOptions.set(value, label);
 
         const rawVariants = model.variants;

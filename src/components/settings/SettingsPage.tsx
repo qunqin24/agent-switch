@@ -33,11 +33,10 @@ import { LanguageSettings } from "@/components/settings/LanguageSettings";
 import { ThemeSettings } from "@/components/settings/ThemeSettings";
 import { WindowSettings } from "@/components/settings/WindowSettings";
 import { AppVisibilitySettings } from "@/components/settings/AppVisibilitySettings";
-import { SkillStorageLocationSettings } from "@/components/settings/SkillStorageLocationSettings";
-import { SkillSyncMethodSettings } from "@/components/settings/SkillSyncMethodSettings";
 import { TerminalSettings } from "@/components/settings/TerminalSettings";
 import { ModelsDevMetadataSettings } from "@/components/settings/ModelsDevMetadataSettings";
 import { OpenCodeSmallModelSettings } from "@/components/settings/OpenCodeSmallModelSettings";
+import { OpenCodeWebSearchSettings } from "@/components/settings/OpenCodeWebSearchSettings";
 import {
   SettingSection,
   SettingsPane,
@@ -46,8 +45,6 @@ import {
   SettingsDisclosure,
   SettingsDisclosureGroup,
 } from "@/components/settings/SettingsDisclosure";
-import { getSkillStorageFooter } from "@/components/settings/SkillStorageLocationSettings";
-import { getSkillSyncFooter } from "@/components/settings/SkillSyncMethodSettings";
 import { getTerminalFooter } from "@/components/settings/TerminalSettings";
 import { DirectorySettings } from "@/components/settings/DirectorySettings";
 import { ImportExportSection } from "@/components/settings/ImportExportSection";
@@ -61,7 +58,6 @@ import { LogConfigPanel } from "@/components/settings/LogConfigPanel";
 import { AuthCenterPanel } from "@/components/settings/AuthCenterPanel";
 import { CodexAuthSettings } from "@/components/settings/CodexAuthSettings";
 import { ClaudeDesktopSettings } from "@/components/settings/ClaudeDesktopSettings";
-import { useInstalledSkills } from "@/hooks/useSkills";
 import { useSettings } from "@/hooks/useSettings";
 import { useImportExport } from "@/hooks/useImportExport";
 import { useTranslation } from "react-i18next";
@@ -112,8 +108,6 @@ export function SettingsPage({
     clearSelection,
     resetStatus,
   } = useImportExport({ onImportSuccess });
-
-  const { data: installedSkills } = useInstalledSkills();
 
   const [activeTab, setActiveTab] = useState<string>("general");
   const [showRestartPrompt, setShowRestartPrompt] = useState(false);
@@ -311,35 +305,6 @@ export function SettingsPage({
                           </SettingSection>
 
                           <SettingSection
-                            title={t("settings.sections.skills")}
-                            footer={`${getSkillStorageFooter(
-                              settings.skillStorageLocation ?? "cc_switch",
-                              t,
-                            )} ${getSkillSyncFooter(
-                              settings.skillSyncMethod ?? "auto",
-                              t,
-                            )}`}
-                          >
-                            <SkillStorageLocationSettings
-                              value={
-                                settings.skillStorageLocation ?? "cc_switch"
-                              }
-                              installedCount={installedSkills?.length ?? 0}
-                              onMigrated={(location) =>
-                                updateSettings({
-                                  skillStorageLocation: location,
-                                })
-                              }
-                            />
-                            <SkillSyncMethodSettings
-                              value={settings.skillSyncMethod ?? "auto"}
-                              onChange={(method) =>
-                                handleAutoSave({ skillSyncMethod: method })
-                              }
-                            />
-                          </SettingSection>
-
-                          <SettingSection
                             title={t("settings.sections.integration")}
                           >
                             <CodexAuthSettings
@@ -350,9 +315,15 @@ export function SettingsPage({
                           </SettingSection>
 
                           <SettingSection
+                            title={t("settings.sections.opencode")}
+                          >
+                            <OpenCodeWebSearchSettings />
+                            <OpenCodeSmallModelSettings />
+                          </SettingSection>
+
+                          <SettingSection
                             title={t("settings.sections.modelMetadata")}
                           >
-                            <OpenCodeSmallModelSettings />
                             <ModelsDevMetadataSettings
                               autoUpdate={settings.modelsDevAutoUpdate ?? true}
                               intervalHours={

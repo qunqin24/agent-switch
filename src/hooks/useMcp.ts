@@ -1,74 +1,55 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { mcpApi } from "@/lib/api/mcp";
-import type { McpServer } from "@/types";
-import type { AppId } from "@/lib/api/types";
+import type { McpAppId } from "@/lib/api/types";
+import type { McpServerSpec } from "@/types";
 
-/**
- * 查询所有 MCP 服务器（统一管理）
- */
-export function useAllMcpServers() {
+const appMcpQueryKey = (app: McpAppId | null) => ["mcp", "app", app] as const;
+
+export function useMcpServersForApp(app: McpAppId | null) {
   return useQuery({
-    queryKey: ["mcp", "all"],
-    queryFn: () => mcpApi.getAllServers(),
+    queryKey: appMcpQueryKey(app),
+    queryFn: () => {
+      if (app === null) {
+        throw new Error("This app does not support CLI MCP management");
+      }
+      return mcpApi.getServersForApp(app);
+    },
+    enabled: app !== null,
   });
 }
 
-/**
- * 添加或更新 MCP 服务器
- */
-export function useUpsertMcpServer() {
+interface UpsertMcpServerInput {
+  id: string;
+  serverSpec: McpServerSpec;
+}
+
+export function useUpsertMcpServer(app: McpAppId) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (server: McpServer) => mcpApi.upsertUnifiedServer(server),
+    mutationFn: ({ id, serverSpec }: UpsertMcpServerInput) =>
+      mcpApi.upsertServerForApp(app, id, serverSpec),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["mcp", "all"] });
+      void queryClient.invalidateQueries({
+        queryKey: appMcpQueryKey(app),
+      });
     },
   });
 }
 
-/**
- * 切换 MCP 服务器在特定应用的启用状态
- */
-export function useToggleMcpApp() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      serverId,
-      app,
-      enabled,
-    }: {
-      serverId: string;
-      app: AppId;
-      enabled: boolean;
-    }) => mcpApi.toggleApp(serverId, app, enabled),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["mcp", "all"] });
-    },
-  });
+interface DeleteMcpServerInput {
+  app: McpAppId;
+  id: string;
 }
 
-/**
- * 删除 MCP 服务器
- */
 export function useDeleteMcpServer() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => mcpApi.deleteUnifiedServer(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["mcp", "all"] });
-    },
-  });
-}
-
-/**
- * 从所有应用导入 MCP 服务器
- */
-export function useImportMcpFromApps() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: () => mcpApi.importFromApps(),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["mcp", "all"] });
+    mutationFn: ({ app, id }: DeleteMcpServerInput) =>
+      mcpApi.deleteServerForApp(app, id),
+    onSuccess: (_data, { app }) => {
+      void queryClient.invalidateQueries({
+        queryKey: appMcpQueryKey(app),
+      });
     },
   });
 }

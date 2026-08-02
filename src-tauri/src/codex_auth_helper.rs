@@ -48,7 +48,7 @@ fn read_provider_settings(
     provider_id: Option<&str>,
 ) -> Result<Value, String> {
     let connection = Connection::open_with_flags(database_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(|error| format!("failed to open CC Switch database: {error}"))?;
+        .map_err(|error| format!("failed to open Agent Switch database: {error}"))?;
 
     let settings_json: String = if let Some(provider_id) = provider_id {
         connection
@@ -117,21 +117,21 @@ mod tests {
         let request = parse_token_request([
             CODEX_PROVIDER_TOKEN_ARG.to_string(),
             DATABASE_ARG.to_string(),
-            "/tmp/cc-switch.db".to_string(),
+            "/tmp/agentswitch.db".to_string(),
             PROVIDER_ID_ARG.to_string(),
             "deepseek".to_string(),
         ])
         .expect("parse request")
         .expect("token mode");
 
-        assert_eq!(request.database_path, PathBuf::from("/tmp/cc-switch.db"));
+        assert_eq!(request.database_path, PathBuf::from("/tmp/agentswitch.db"));
         assert_eq!(request.provider_id.as_deref(), Some("deepseek"));
     }
 
     #[test]
     fn reads_provider_token_from_database() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let database_path = temp.path().join("cc-switch.db");
+        let database_path = temp.path().join("agentswitch.db");
         let connection = Connection::open(&database_path).expect("open database");
         connection
             .execute_batch(

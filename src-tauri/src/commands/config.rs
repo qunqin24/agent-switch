@@ -162,6 +162,16 @@ pub fn set_opencode_small_model(model: Option<String>) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn get_opencode_web_search_enabled() -> Result<bool, String> {
+    crate::opencode_config::get_web_search_enabled().map_err(Into::into)
+}
+
+#[tauri::command]
+pub fn set_opencode_web_search_enabled(enabled: bool) -> Result<(), String> {
+    crate::opencode_config::set_web_search_enabled(enabled).map_err(Into::into)
+}
+
+#[tauri::command]
 pub async fn open_config_folder(handle: AppHandle, app: String) -> Result<bool, String> {
     let config_dir = match AppType::from_str(&app).map_err(|e| e.to_string())? {
         AppType::Claude => config::get_claude_config_dir(),

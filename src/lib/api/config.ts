@@ -58,6 +58,16 @@ export async function setOpenCodeSmallModel(
   return invoke("set_opencode_small_model", { model });
 }
 
+export async function getOpenCodeWebSearchEnabled(): Promise<boolean> {
+  return invoke<boolean>("get_opencode_web_search_enabled");
+}
+
+export async function setOpenCodeWebSearchEnabled(
+  enabled: boolean,
+): Promise<void> {
+  return invoke("set_opencode_web_search_enabled", { enabled });
+}
+
 /**
  * 提取通用配置片段
  *

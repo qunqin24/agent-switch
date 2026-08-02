@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import type { AppId } from "@/lib/api/types";
+import type { AppId, SkillAppId } from "@/lib/api/types";
 
 export type AppType =
   | "claude"
@@ -42,11 +42,73 @@ export interface SkillUninstallResult {
   backupPath?: string;
 }
 
+export interface AppSkill {
+  id: string;
+  name: string;
+  description?: string;
+  directory: string;
+  path: string;
+  isSymlink: boolean;
+  linkTarget?: string;
+  managedGlobally: boolean;
+  globalSource: boolean;
+  providedBy?: CliProvidedSkillSource;
+  repoOwner?: string;
+  repoName?: string;
+  repoBranch?: string;
+  readmeUrl?: string;
+  installedAt: number;
+  contentHash?: string;
+  updatedAt: number;
+}
+
+export type CliProvidedSkillSource =
+  | { kind: "builtin" }
+  | { kind: "plugin"; pluginName: string };
+
+export interface CliProvidedSkill {
+  id: string;
+  name: string;
+  description?: string;
+  directory: string;
+  path: string;
+  source: CliProvidedSkillSource;
+}
+
+export interface AppSkillsResponse {
+  app: SkillAppId;
+  skillsDir: string;
+  skills: AppSkill[];
+}
+
+export interface GlobalSkill {
+  id: string;
+  name: string;
+  description?: string;
+  directory: string;
+  path: string;
+  repoOwner?: string;
+  repoName?: string;
+  repoBranch?: string;
+  readmeUrl?: string;
+  apps: SkillApps;
+  installedAt: number;
+  contentHash?: string;
+  updatedAt: number;
+}
+
+export interface GlobalSkillsResponse {
+  skillsDir: string;
+  directApps: SkillApps;
+  skills: GlobalSkill[];
+}
+
 export interface SkillBackupEntry {
   backupId: string;
   backupPath: string;
   createdAt: number;
   skill: InstalledSkill;
+  sourceApp?: SkillAppId;
 }
 
 /** 可发现的 Skill（来自仓库） */
@@ -113,14 +175,74 @@ export interface SkillsShDiscoverableSkill {
   repoName: string;
   repoBranch: string;
   installs: number;
+  weeklyInstalls: number[];
+  isOfficial: boolean;
   readmeUrl?: string;
+  detailUrl: string;
+}
+
+export interface SkillsShSecurityAudit {
+  provider: string;
+  status: string;
+}
+
+/** skills.sh 公开详情页 */
+export interface SkillsShSkillDetail {
+  topic?: string;
+  summaryHtml: string;
+  contentHtml: string;
+  githubStars?: string;
+  firstSeen?: string;
+  securityAudits: SkillsShSecurityAudit[];
+}
+
+export interface SkillsShSourceSummary {
+  name: string;
+  skillSummary: string;
+  installs: string;
+}
+
+/** skills.sh 发布者页 */
+export interface SkillsShPublisherDetail {
+  owner: string;
+  sourceCount: number;
+  skillCount: number;
+  totalInstalls: string;
+  sources: SkillsShSourceSummary[];
+}
+
+export interface SkillsShRepositorySkill {
+  skillId: string;
+  name: string;
+  installs: number;
+  installsLabel: string;
+}
+
+/** skills.sh 仓库页 */
+export interface SkillsShRepositoryDetail {
+  owner: string;
+  repository: string;
+  skillCount: number;
+  totalInstalls: string;
+  skills: SkillsShRepositorySkill[];
 }
 
 /** skills.sh 搜索结果 */
 export interface SkillsShSearchResult {
   skills: SkillsShDiscoverableSkill[];
-  totalCount: number;
+  resultCount: number;
   query: string;
+}
+
+export type SkillsShLeaderboardView = "all-time" | "trending" | "hot";
+
+/** skills.sh 公开榜单结果 */
+export interface SkillsShLeaderboardResult {
+  skills: SkillsShDiscoverableSkill[];
+  resultCount: number;
+  totalSkills: number;
+  allTimeTotal: number;
+  view: SkillsShLeaderboardView;
 }
 
 /** 仓库配置 */
@@ -134,6 +256,120 @@ export interface SkillRepo {
 // ========== API ==========
 
 export const skillsApi = {
+  // ========== 按 CLI 原生目录管理 ==========
+
+  /** 读取指定 CLI 原生 Skills 目录。 */
+  async getForApp(app: SkillAppId): Promise<AppSkillsResponse> {
+    return await invoke("get_app_skills", { app });
+  },
+
+  /** 读取 CLI 或其插件提供的只读 Skills。 */
+  async getProvidedForApp(app: SkillAppId): Promise<CliProvidedSkill[]> {
+    return await invoke("get_cli_provided_skills", { app });
+  },
+
+  /** 读取当前 CLI 可恢复的备份。 */
+  async getBackupsForApp(app: SkillAppId): Promise<SkillBackupEntry[]> {
+    return await invoke("get_app_skill_backups", { app });
+  },
+
+  /** 将仓库中的 Skill 直接安装到指定 CLI。 */
+  async installForApp(
+    app: SkillAppId,
+    skill: DiscoverableSkill,
+  ): Promise<AppSkill> {
+    return await invoke("install_app_skill", { app, skill });
+  },
+
+  /** 仅从指定 CLI 卸载 Skill。 */
+  async uninstallForApp(
+    app: SkillAppId,
+    directory: string,
+  ): Promise<SkillUninstallResult> {
+    return await invoke("uninstall_app_skill", { app, directory });
+  },
+
+  /** 将备份恢复到指定 CLI。 */
+  async restoreBackupForApp(
+    app: SkillAppId,
+    backupId: string,
+  ): Promise<AppSkill> {
+    return await invoke("restore_app_skill_backup", { app, backupId });
+  },
+
+  /** 将 ZIP 中的 Skills 直接安装到指定 CLI。 */
+  async installFromZipForApp(
+    app: SkillAppId,
+    filePath: string,
+  ): Promise<AppSkill[]> {
+    return await invoke("install_app_skills_from_zip", { app, filePath });
+  },
+
+  /** 检查指定 CLI 原生目录中可追踪来源的 Skills 更新。 */
+  async checkAppUpdates(app: SkillAppId): Promise<SkillUpdateInfo[]> {
+    return await invoke("check_app_skill_updates", { app });
+  },
+
+  /** 更新指定 CLI 原生目录中的单个 Skill。 */
+  async updateAppSkill(app: SkillAppId, id: string): Promise<AppSkill> {
+    return await invoke("update_app_skill", { app, id });
+  },
+
+  // ========== 全局 Skills 库 ==========
+
+  /** 读取 ~/.agents/skills 全局目录及其实际软链接状态。 */
+  async getGlobal(): Promise<GlobalSkillsResponse> {
+    return await invoke("get_global_skills");
+  },
+
+  /** 读取全局 Skill 备份。 */
+  async getGlobalBackups(): Promise<SkillBackupEntry[]> {
+    return await invoke("get_global_skill_backups");
+  },
+
+  /** 安装到 ~/.agents/skills，不自动创建额外的 CLI 软链接。 */
+  async installGlobal(skill: DiscoverableSkill): Promise<GlobalSkill> {
+    return await invoke("install_global_skill", { skill });
+  },
+
+  /** 创建或移除全局 Skill 到指定 CLI 的软链接。 */
+  async setGlobalLink(
+    directory: string,
+    app: SkillAppId,
+    enabled: boolean,
+  ): Promise<GlobalSkill> {
+    return await invoke("set_global_skill_link", {
+      directory,
+      app,
+      enabled,
+    });
+  },
+
+  /** 从全局库卸载，并移除其创建的所有 CLI 软链接。 */
+  async uninstallGlobal(directory: string): Promise<SkillUninstallResult> {
+    return await invoke("uninstall_global_skill", { directory });
+  },
+
+  /** 将备份恢复到全局库。 */
+  async restoreGlobalBackup(backupId: string): Promise<GlobalSkill> {
+    return await invoke("restore_global_skill_backup", { backupId });
+  },
+
+  /** 将 ZIP 中的 Skills 安装到全局库。 */
+  async installFromZipGlobal(filePath: string): Promise<GlobalSkill[]> {
+    return await invoke("install_global_skills_from_zip", { filePath });
+  },
+
+  /** 检查全局库中可追踪来源的 Skills 更新。 */
+  async checkGlobalUpdates(): Promise<SkillUpdateInfo[]> {
+    return await invoke("check_global_skill_updates");
+  },
+
+  /** 更新全局库中的单个 Skill。 */
+  async updateGlobalSkill(id: string): Promise<GlobalSkill> {
+    return await invoke("update_global_skill", { id });
+  },
+
   // ========== 统一管理 API (v3.10.0+) ==========
 
   /** 获取所有已安装的 Skills */
@@ -215,9 +451,42 @@ export const skillsApi = {
   async searchSkillsSh(
     query: string,
     limit: number,
-    offset: number,
   ): Promise<SkillsShSearchResult> {
-    return await invoke("search_skills_sh", { query, limit, offset });
+    return await invoke("search_skills_sh", { query, limit });
+  },
+
+  /** 读取 skills.sh 总榜、24 小时趋势或最热榜。 */
+  async getSkillsShLeaderboard(
+    view: SkillsShLeaderboardView,
+    limit: number,
+  ): Promise<SkillsShLeaderboardResult> {
+    return await invoke("get_skills_sh_leaderboard", { view, limit });
+  },
+
+  /** 读取 skills.sh 公开发布者页。 */
+  async getSkillsShPublisher(owner: string): Promise<SkillsShPublisherDetail> {
+    return await invoke("get_skills_sh_publisher", { owner });
+  },
+
+  /** 读取 skills.sh 公开仓库页。 */
+  async getSkillsShRepository(
+    owner: string,
+    repository: string,
+  ): Promise<SkillsShRepositoryDetail> {
+    return await invoke("get_skills_sh_repository", { owner, repository });
+  },
+
+  /** 读取 skills.sh 公开 Skill 详情。 */
+  async getSkillsShDetail(
+    repoOwner: string,
+    repoName: string,
+    skillId: string,
+  ): Promise<SkillsShSkillDetail> {
+    return await invoke("get_skills_sh_detail", {
+      repoOwner,
+      repoName,
+      skillId,
+    });
   },
 
   // ========== 兼容旧 API ==========

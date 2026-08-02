@@ -118,7 +118,11 @@ fn redact_url_for_log(url_str: &str) -> String {
     }
 }
 
-/// 统一处理 ccswitch:// 深链接 URL
+fn is_supported_deeplink_url(url_str: &str) -> bool {
+    url_str.starts_with("agentswitch://") || url_str.starts_with("ccswitch://")
+}
+
+/// 统一处理 agentswitch:// 和旧版 ccswitch:// 深链接 URL
 ///
 /// - 解析 URL
 /// - 向前端发射 `deeplink-import` / `deeplink-error` 事件
@@ -129,7 +133,7 @@ fn handle_deeplink_url(
     focus_main_window: bool,
     source: &str,
 ) -> bool {
-    if !url_str.starts_with("ccswitch://") {
+    if !is_supported_deeplink_url(url_str) {
         return false;
     }
 
@@ -220,9 +224,6 @@ fn macos_tray_icon() -> Option<Image<'static>> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // 设置 panic hook，在应用崩溃时记录日志到 <app_config_dir>/crash.log（默认 ~/.cc-switch/crash.log）
-    panic_hook::setup_panic_hook();
-
     let mut builder = tauri::Builder::default();
 
     #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
@@ -303,9 +304,36 @@ pub fn run() {
         .setup(|app| {
             let _ = rustls::crypto::ring::default_provider().install_default();
 
-            // 预先刷新 Store 覆盖配置，确保后续路径读取正确（日志/数据库等）
-            app_store::refresh_app_config_dir_override(app.handle());
+            // 预先刷新 Store 覆盖配置，确保后续路径读取正确（日志/数据库等）。
+            // 旧 Store 或自定义目录暂不可用时不得静默回退到默认目录。
+            loop {
+                match app_store::refresh_app_config_dir_override_checked(app.handle()) {
+                    Ok(_) => break,
+                    Err(e) => {
+                        eprintln!("读取应用数据目录配置失败: {e}");
+                        if !show_migration_error_dialog(app.handle(), &e.to_string()) {
+                            std::process::exit(1);
+                        }
+                    }
+                }
+            }
+            // 一次性迁移旧版（CC Switch 时代）数据目录 ~/.cc-switch → ~/.agentswitch，
+            // 必须在任何组件读写 app_config_dir 之前执行
+            loop {
+                match crate::config::migrate_legacy_app_data_dir() {
+                    Ok(()) => break,
+                    Err(e) => {
+                        eprintln!("迁移旧版应用数据失败: {e}");
+                        if !show_migration_error_dialog(app.handle(), &e.to_string()) {
+                            std::process::exit(1);
+                        }
+                    }
+                }
+            }
             panic_hook::init_app_config_dir(crate::config::get_app_config_dir());
+            // 只有在迁移确定目标目录后才安装 hook，避免启动早期 panic
+            // 创建 ~/.agentswitch 并让下一次启动误判为“已经迁移”。
+            panic_hook::setup_panic_hook();
             #[cfg(target_os = "windows")]
             set_windows_app_user_model_id(app.handle());
 
@@ -320,7 +348,7 @@ pub fn run() {
                     log::warn!("初始化 Updater 插件失败，已跳过：{e}");
                 }
             }
-            // 初始化日志（单文件输出到 <app_config_dir>/logs/cc-switch.log）
+            // 初始化日志（单文件输出到 <app_config_dir>/logs/agentswitch.log）
             {
                 use tauri_plugin_log::{RotationStrategy, Target, TargetKind, TimezoneStrategy};
 
@@ -332,7 +360,7 @@ pub fn run() {
                 }
 
                 // 启动时删除旧日志文件，实现单文件覆盖效果
-                let log_file_path = log_dir.join("cc-switch.log");
+                let log_file_path = log_dir.join("agentswitch.log");
                 let _ = std::fs::remove_file(&log_file_path);
 
                 app.handle().plugin(
@@ -343,7 +371,7 @@ pub fn run() {
                             Target::new(TargetKind::Stdout),
                             Target::new(TargetKind::Folder {
                                 path: log_dir,
-                                file_name: Some("cc-switch".into()),
+                                file_name: Some("agentswitch".into()),
                             }),
                         ])
                         // 单文件模式：启动时删除旧文件，达到大小时轮转
@@ -364,7 +392,7 @@ pub fn run() {
 
             // 初始化数据库
             let app_config_dir = crate::config::get_app_config_dir();
-            let db_path = app_config_dir.join("cc-switch.db");
+            let db_path = app_config_dir.join("agentswitch.db");
             let json_path = app_config_dir.join("config.json");
 
             // 检查是否需要从 config.json 迁移到 SQLite
@@ -464,42 +492,16 @@ pub fn run() {
                 Err(e) => log::warn!("✗ Failed to initialize default skill repos: {e}"),
             }
 
-            // 1.1. Skills 统一管理迁移：当数据库迁移到 v3 结构后，自动从各应用目录导入到 SSOT
-            // 触发条件由 schema 迁移设置 settings.skills_ssot_migration_pending = true 控制。
+            // 1.1. Skills 现在直接以各 CLI 的原生目录为事实来源。
+            // 旧版 SSOT 迁移标记仅需关闭，不能再改写或同步用户的 CLI 目录。
             match app_state.db.get_setting("skills_ssot_migration_pending") {
                 Ok(Some(flag)) if flag == "true" || flag == "1" => {
-                    // 安全保护：如果用户已经有 v3 结构的 Skills 数据，就不要自动清空重建。
-                    let has_existing = app_state
+                    log::info!(
+                        "Clearing obsolete skills_ssot_migration_pending; CLI skill directories remain unchanged."
+                    );
+                    let _ = app_state
                         .db
-                        .get_all_installed_skills()
-                        .map(|skills| !skills.is_empty())
-                        .unwrap_or(false);
-
-                    if has_existing {
-                        log::info!(
-                            "Detected skills_ssot_migration_pending but skills table not empty; skipping auto import."
-                        );
-                        let _ = app_state
-                            .db
-                            .set_setting("skills_ssot_migration_pending", "false");
-                    } else {
-                        match crate::services::skill::migrate_skills_to_ssot(&app_state.db) {
-                            Ok(count) => {
-                                log::info!("✓ Auto imported {count} skill(s) into SSOT");
-                                if count > 0 {
-                                    crate::init_status::set_skills_migration_result(count);
-                                }
-                                let _ = app_state
-                                    .db
-                                    .set_setting("skills_ssot_migration_pending", "false");
-                            }
-                            Err(e) => {
-                                log::warn!("✗ Failed to auto import legacy skills to SSOT: {e}");
-                                crate::init_status::set_skills_migration_error(e.to_string());
-                                // 保留 pending 标志，方便下次启动重试
-                            }
-                        }
-                    }
+                        .set_setting("skills_ssot_migration_pending", "false");
                 }
                 Ok(_) => {} // 未开启迁移标志，静默跳过
                 Err(e) => log::warn!("✗ Failed to read skills migration flag: {e}"),
@@ -511,7 +513,7 @@ pub fn run() {
             // 落成 "default" provider 设为 current，再追加官方预设（is_current=false）。
             // 这样用户切到官方预设时，回填机制会保护原 live 配置不丢失。
             //
-            // 捕获首次运行快照：所有全新装用户都会看到欢迎弹窗介绍 CC Switch 的工作方式。
+            // 捕获首次运行快照：所有全新装用户都会看到欢迎弹窗介绍 Agent Switch 的工作方式。
             // 读失败时默认不弹，宁可漏弹也不要因为故障打扰用户。
             let first_run_already_confirmed = crate::settings::get_settings()
                 .first_run_notice_confirmed
@@ -798,12 +800,12 @@ pub fn run() {
                 #[cfg(target_os = "linux")]
                 {
                     // Use Tauri's path API to get correct path (includes app identifier)
-                    // tauri-plugin-deep-link writes to: ~/.local/share/com.ccswitch.desktop/applications/cc-switch-handler.desktop
+                    // tauri-plugin-deep-link writes to: ~/.local/share/com.agentswitch.desktop/applications/agent-switch-handler.desktop
                     // Only register if .desktop file doesn't exist to avoid overwriting user customizations
                     let should_register = app
                         .path()
                         .data_dir()
-                        .map(|d| !d.join("applications/cc-switch-handler.desktop").exists())
+                        .map(|d| !d.join("applications/agent-switch-handler.desktop").exists())
                         .unwrap_or(true);
 
                     if should_register {
@@ -846,7 +848,7 @@ pub fn run() {
                         log::debug!("  URL[{i}]: {}", redact_url_for_log(url_str));
 
                         if handle_deeplink_url(&app_handle, url_str, true, "on_open_url") {
-                            break; // Process only first ccswitch:// URL
+                            break; // Process only first agentswitch:// URL
                         }
                     }
                 }
@@ -858,7 +860,7 @@ pub fn run() {
 
             // 构建托盘
             let mut tray_builder = TrayIconBuilder::with_id(tray::TRAY_ID)
-                .tooltip("CC Switch") // 鼠标悬停提示
+                .tooltip("Agent Switch") // 鼠标悬停提示
                 .on_tray_icon_event(|tray, event| match event {
                     // 鼠标悬停/点击到托盘图标时，后台异步刷新用量缓存，
                     // 让用户下一次（或快速打开菜单的那一刻）看到较新的数字。
@@ -1205,12 +1207,13 @@ pub fn run() {
             commands::get_config_dir,
             commands::get_opencode_small_model,
             commands::set_opencode_small_model,
+            commands::get_opencode_web_search_enabled,
+            commands::set_opencode_web_search_enabled,
             commands::open_config_folder,
             commands::pick_directory,
             commands::open_external,
             commands::get_init_error,
             commands::get_migration_result,
-            commands::get_skills_migration_result,
             commands::get_app_config_path,
             commands::open_app_config_folder,
             commands::get_claude_common_config_snippet,
@@ -1268,6 +1271,10 @@ pub fn run() {
             commands::delete_mcp_server,
             commands::toggle_mcp_app,
             commands::import_mcp_from_apps,
+            // Per-CLI MCP management
+            commands::get_mcp_servers_for_app,
+            commands::upsert_mcp_server_for_app,
+            commands::delete_mcp_server_for_app,
             // Prompt management
             commands::get_prompts,
             commands::upsert_prompt,
@@ -1324,7 +1331,27 @@ pub fn run() {
             commands::check_env_conflicts,
             commands::delete_env_vars,
             commands::restore_env_backup,
-            // Skill management (v3.10.0+ unified)
+            // Skill management (per-CLI native directories)
+            commands::get_app_skills,
+            commands::get_cli_provided_skills,
+            commands::get_app_skill_backups,
+            commands::install_app_skill,
+            commands::uninstall_app_skill,
+            commands::restore_app_skill_backup,
+            commands::install_app_skills_from_zip,
+            commands::check_app_skill_updates,
+            commands::update_app_skill,
+            // Global Skill library (symlinked into selected CLIs)
+            commands::get_global_skills,
+            commands::get_global_skill_backups,
+            commands::install_global_skill,
+            commands::set_global_skill_link,
+            commands::uninstall_global_skill,
+            commands::restore_global_skill_backup,
+            commands::install_global_skills_from_zip,
+            commands::check_global_skill_updates,
+            commands::update_global_skill,
+            // Legacy unified Skill management
             commands::get_installed_skills,
             commands::get_skill_backups,
             commands::delete_skill_backup,
@@ -1339,6 +1366,10 @@ pub fn run() {
             commands::update_skill,
             commands::migrate_skill_storage,
             commands::search_skills_sh,
+            commands::get_skills_sh_leaderboard,
+            commands::get_skills_sh_publisher,
+            commands::get_skills_sh_repository,
+            commands::get_skills_sh_detail,
             // Skill management (legacy API compatibility)
             commands::get_skills,
             commands::get_skills_for_app,
@@ -1598,13 +1629,13 @@ pub fn run() {
                         }
                     }
                 }
-                // 处理通过自定义 URL 协议触发的打开事件（例如 ccswitch://...）
+                // 处理通过自定义 URL 协议触发的打开事件（新旧 scheme 均兼容）
                 RunEvent::Opened { urls } => {
                     if let Some(url) = urls.first() {
                         let url_str = url.to_string();
                         log::info!("RunEvent::Opened with URL: {url_str}");
 
-                        if url_str.starts_with("ccswitch://") {
+                        if is_supported_deeplink_url(&url_str) {
                             if crate::lightweight::is_lightweight_mode() {
                                 if let Err(e) = crate::lightweight::exit_lightweight_mode(app_handle)
                                 {
@@ -1890,7 +1921,7 @@ fn show_migration_error_dialog(app: &tauri::AppHandle, error: &str) -> bool {
         format!(
             "从旧版本迁移配置时发生错误：\n\n{error}\n\n\
             您的数据尚未丢失，旧配置文件仍然保留。\n\
-            建议回退到旧版本 CC Switch 以保护数据。\n\n\
+            建议回退到旧版本 Agent Switch 以保护数据。\n\n\
             点击「重试」重新尝试迁移\n\
             点击「退出」关闭程序（可回退版本后重新打开）"
         )
@@ -1898,7 +1929,7 @@ fn show_migration_error_dialog(app: &tauri::AppHandle, error: &str) -> bool {
         format!(
             "An error occurred while migrating configuration:\n\n{error}\n\n\
             Your data is NOT lost - the old config file is still preserved.\n\
-            Consider rolling back to an older CC Switch version.\n\n\
+            Consider rolling back to an older Agent Switch version.\n\n\
             Click 'Retry' to attempt migration again\n\
             Click 'Exit' to close the program"
         )
@@ -1948,7 +1979,7 @@ fn show_database_init_error_dialog(
             您的数据尚未丢失，应用不会自动删除数据库文件。\n\
             常见原因包括：数据库版本过新、文件损坏、权限不足、磁盘空间不足等。\n\n\
             建议：\n\
-            1) 先备份整个配置目录（包含 cc-switch.db）\n\
+            1) 先备份整个配置目录（包含 agentswitch.db）\n\
             2) 如果提示“数据库版本过新”，请升级到更新版本\n\
             3) 如果刚升级出现异常，可回退旧版本导出/备份后再升级\n\n\
             点击「重试」重新尝试初始化\n\
@@ -1962,8 +1993,8 @@ fn show_database_init_error_dialog(
             Your data is NOT lost - the app will not delete the database automatically.\n\
             Common causes include: newer database version, corrupted file, permission issues, or low disk space.\n\n\
             Suggestions:\n\
-            1) Back up the entire config directory (including cc-switch.db)\n\
-            2) If you see “database version is newer”, please upgrade CC Switch\n\
+            1) Back up the entire config directory (including agentswitch.db)\n\
+            2) If you see “database version is newer”, please upgrade Agent Switch\n\
             3) If this happened right after upgrading, consider rolling back to export/backup then upgrade again\n\n\
             Click 'Retry' to attempt initialization again\n\
             Click 'Exit' to close the program",

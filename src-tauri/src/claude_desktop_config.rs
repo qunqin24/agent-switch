@@ -12,7 +12,7 @@ use crate::error::AppError;
 use crate::provider::{ClaudeDesktopMode, Provider};
 
 pub const PROFILE_ID: &str = "00000000-0000-4000-8000-000000157210";
-pub const PROFILE_NAME: &str = "CC Switch";
+pub const PROFILE_NAME: &str = "Agent Switch";
 
 #[cfg(any(target_os = "macos", windows, test))]
 const CONFIG_FILE: &str = "claude_desktop_config.json";
@@ -1087,7 +1087,7 @@ fn apply_provider_to_paths_inner(
 fn restore_official_at_paths_inner(paths: &ClaudeDesktopPaths) -> Result<(), AppError> {
     write_deployment_mode(&paths.normal_config_path, "1p")?;
     write_deployment_mode(&paths.threep_config_path, "1p")?;
-    remove_cc_switch_enterprise_config(&paths.threep_config_path)?;
+    remove_agentswitch_enterprise_config(&paths.threep_config_path)?;
 
     if paths.profile_path.exists() {
         delete_file(&paths.profile_path)?;
@@ -1188,7 +1188,7 @@ fn write_deployment_mode(path: &Path, mode: &str) -> Result<(), AppError> {
     write_json_file(path, &value)
 }
 
-fn remove_cc_switch_enterprise_config(path: &Path) -> Result<(), AppError> {
+fn remove_agentswitch_enterprise_config(path: &Path) -> Result<(), AppError> {
     if !path.exists() {
         return Ok(());
     }
@@ -1657,7 +1657,7 @@ mod tests {
         let temp = TempDir::new().expect("tempdir");
         let paths = test_paths(temp.path());
         let db = test_db();
-        write_json_file(&paths.profile_path, &json!({ "name": "CC Switch" }))
+        write_json_file(&paths.profile_path, &json!({ "name": "Agent Switch" }))
             .expect("seed profile");
 
         set_disable_auto_updates_at_paths(&db, &paths, true).expect("set disable updates");
@@ -2289,7 +2289,7 @@ mod tests {
     }
 
     #[test]
-    fn claude_desktop_restore_switches_to_1p_and_removes_cc_switch_profile() {
+    fn claude_desktop_restore_switches_to_1p_and_removes_agentswitch_profile() {
         let temp = TempDir::new().expect("tempdir");
         let paths = test_paths(temp.path());
         let provider = direct_provider("direct");

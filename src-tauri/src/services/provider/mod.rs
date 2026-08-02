@@ -16,7 +16,6 @@ use crate::app_config::AppType;
 use crate::database::{validate_cost_multiplier, validate_pricing_source};
 use crate::error::AppError;
 use crate::provider::{Provider, UsageResult};
-use crate::services::mcp::McpService;
 use crate::settings::CustomEndpoint;
 use crate::store::AppState;
 
@@ -1465,8 +1464,6 @@ impl ProviderService {
                 }
             } else {
                 write_live_with_common_config(state.db.as_ref(), &app_type, &provider)?;
-                // Sync MCP
-                McpService::sync_all_enabled(state)?;
             }
         }
 
@@ -1611,7 +1608,7 @@ impl ProviderService {
     ///    b. Update local settings current_provider_xxx (device-level)
     ///    c. Update database is_current (as default for new devices)
     ///    d. Write target provider config to live files
-    ///    e. Sync MCP configuration
+    ///       while preserving the CLI-owned MCP configuration
     pub fn switch(state: &AppState, app_type: AppType, id: &str) -> Result<SwitchResult, AppError> {
         // Check if provider exists
         let providers = state.db.get_all_providers(app_type.as_str())?;
@@ -1690,7 +1687,7 @@ impl ProviderService {
             .map_err(|e| AppError::Message(format!("热切换失败: {e}")))?;
 
             // The proxy server will route requests to the new provider via is_current.
-            // MCP sync is intentionally skipped while Live config is owned by takeover.
+            // MCP is managed independently from provider switching.
             return Ok(SwitchResult::default());
         }
 
@@ -1828,9 +1825,6 @@ impl ProviderService {
                 }
             }
         }
-
-        // Sync MCP
-        McpService::sync_all_enabled(state)?;
 
         Ok(result)
     }

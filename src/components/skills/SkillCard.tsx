@@ -21,6 +21,7 @@ interface SkillCardProps {
   onInstall: (key: string) => Promise<void>;
   onUninstall: (key: string) => Promise<void>;
   installs?: number;
+  detailUrl?: string;
 }
 
 export function SkillCard({
@@ -28,6 +29,7 @@ export function SkillCard({
   onInstall,
   onUninstall,
   installs,
+  detailUrl,
 }: SkillCardProps) {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
@@ -50,10 +52,11 @@ export function SkillCard({
     }
   };
 
-  const handleOpenGithub = async () => {
-    if (skill.readmeUrl) {
+  const handleOpenDetails = async () => {
+    const url = detailUrl ?? skill.readmeUrl;
+    if (url) {
       try {
-        await settingsApi.openExternal(skill.readmeUrl);
+        await settingsApi.openExternal(url);
       } catch (error) {
         console.error("Failed to open URL:", error);
       }
@@ -118,16 +121,16 @@ export function SkillCard({
         <div className="flex-1" />
       )}
       <CardFooter className="flex gap-2 pt-3 border-t border-border/50 relative z-10">
-        {skill.readmeUrl && (
+        {(detailUrl || skill.readmeUrl) && (
           <Button
             variant="ghost"
             size="sm"
-            onClick={handleOpenGithub}
+            onClick={handleOpenDetails}
             disabled={loading}
             className="flex-1"
           >
             <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
-            {t("skills.view")}
+            {detailUrl ? t("skills.skillssh.details") : t("skills.view")}
           </Button>
         )}
         {skill.installed ? (

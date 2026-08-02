@@ -41,8 +41,7 @@ pub struct ModelsDevCacheRefreshResult {
 }
 
 fn cache_path() -> PathBuf {
-    crate::config::get_home_dir()
-        .join(".cc-switch")
+    crate::config::get_app_config_dir()
         .join("cache")
         .join("models-dev.json")
 }
@@ -96,7 +95,7 @@ fn write_cache(cache: &ModelsDevCache) -> Result<(), AppError> {
 async fn fetch_json(url: &str) -> Result<Value, AppError> {
     let response = crate::proxy::http_client::get()
         .get(url)
-        .header(USER_AGENT, "cc-switch")
+        .header(USER_AGENT, "agentswitch")
         .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
         .send()
         .await

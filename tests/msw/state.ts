@@ -1,6 +1,9 @@
-import type { AppId } from "@/lib/api/types";
+import type { AppId, McpAppId } from "@/lib/api/types";
 import type {
+  AppMcpConfigResponse,
+  McpApps,
   McpServer,
+  McpServerSpec,
   Provider,
   SessionMessage,
   SessionMeta,
@@ -359,6 +362,45 @@ export const getMcpConfig = (appType: AppId) => {
   return {
     configPath: `/mock/${appType}.mcp.json`,
     servers,
+  };
+};
+
+const createMcpApps = (app: McpAppId): McpApps => ({
+  claude: app === "claude",
+  codex: app === "codex",
+  gemini: app === "gemini",
+  opencode: app === "opencode",
+  openclaw: false,
+  hermes: app === "hermes",
+});
+
+export const getMcpConfigForApp = (
+  appType: McpAppId,
+): AppMcpConfigResponse => ({
+  configPath: `/mock/${appType}.mcp.${
+    appType === "codex" ? "toml" : appType === "hermes" ? "yaml" : "json"
+  }`,
+  storageFormat:
+    appType === "codex" ? "toml" : appType === "hermes" ? "yaml" : "json",
+  servers: Object.fromEntries(
+    Object.entries(mcpConfigs[appType] ?? {}).map(([id, server]) => [
+      id,
+      deepClone(server.server),
+    ]),
+  ),
+});
+
+export const upsertMcpServerForApp = (
+  appType: McpAppId,
+  id: string,
+  serverSpec: McpServerSpec,
+) => {
+  const existing = mcpConfigs[appType]?.[id];
+  mcpConfigs[appType][id] = {
+    id,
+    name: existing?.name ?? id,
+    server: deepClone(serverSpec),
+    apps: createMcpApps(appType),
   };
 };
 

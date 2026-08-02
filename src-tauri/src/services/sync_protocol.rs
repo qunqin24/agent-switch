@@ -20,9 +20,12 @@ pub(crate) use super::webdav_sync::archive::{
 
 // ─── Protocol constants ──────────────────────────────────────
 
-/// Wire-format identifier stored in remote manifests.
-/// Retains historic "webdav" naming for backward compatibility with existing remotes.
+/// Canonical wire-format identifier stored in remote manifests. This is not a
+/// display brand: retaining the historic value lets older clients continue to
+/// consume snapshots uploaded by Agent Switch.
 pub(crate) const PROTOCOL_FORMAT: &str = "cc-switch-webdav-sync";
+/// Accepted for snapshots written by early Agent Switch rebrand builds.
+pub(crate) const AGENTSWITCH_PROTOCOL_FORMAT: &str = "agentswitch-webdav-sync";
 pub(crate) const PROTOCOL_VERSION: u32 = 2;
 pub(crate) const DB_COMPAT_VERSION: u32 = 6;
 pub(crate) const LEGACY_DB_COMPAT_VERSION: u32 = 5;
@@ -187,7 +190,7 @@ pub(crate) fn validate_manifest_compat(
     manifest: &SyncManifest,
     layout: RemoteLayout,
 ) -> Result<(), AppError> {
-    if manifest.format != PROTOCOL_FORMAT {
+    if manifest.format != PROTOCOL_FORMAT && manifest.format != AGENTSWITCH_PROTOCOL_FORMAT {
         return Err(localized(
             "sync.manifest_format_incompatible",
             format!("远端 manifest 格式不兼容: {}", manifest.format),
@@ -506,6 +509,24 @@ mod tests {
     fn validate_manifest_compat_rejects_wrong_format() {
         let manifest = manifest_with("other-format", PROTOCOL_VERSION, Some(DB_COMPAT_VERSION));
         assert!(validate_manifest_compat(&manifest, RemoteLayout::Current).is_err());
+    }
+
+    #[test]
+    fn validate_manifest_compat_accepts_early_agentswitch_format() {
+        // Early rebrand builds briefly wrote the new brand into the wire
+        // format. Keep accepting those snapshots while writing the historic
+        // format for mixed-version compatibility.
+        let manifest = manifest_with(
+            AGENTSWITCH_PROTOCOL_FORMAT,
+            PROTOCOL_VERSION,
+            Some(DB_COMPAT_VERSION),
+        );
+        assert!(validate_manifest_compat(&manifest, RemoteLayout::Current).is_ok());
+    }
+
+    #[test]
+    fn canonical_manifest_format_stays_compatible_with_older_clients() {
+        assert_eq!(PROTOCOL_FORMAT, "cc-switch-webdav-sync");
     }
 
     #[test]

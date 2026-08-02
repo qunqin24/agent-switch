@@ -1,7 +1,7 @@
 use serde_json::json;
 use std::path::{Path, PathBuf};
 
-use cc_switch_lib::{
+use agent_switch_lib::{
     get_codex_auth_path, get_codex_config_path, import_default_config_test_hook, read_json_file,
     switch_provider_test_hook, write_codex_live_atomic, AppError, AppType, McpApps, McpServer,
     MultiAppConfig, Provider, ProviderService,
@@ -16,7 +16,7 @@ use support::{
 };
 
 fn settings_path(home: &Path) -> PathBuf {
-    home.join(".cc-switch").join("settings.json")
+    home.join(".agentswitch").join("settings.json")
 }
 
 #[test]
@@ -275,7 +275,14 @@ command = "echo"
                 "Latest".to_string(),
                 json!({
                     "auth": {"OPENAI_API_KEY": "fresh-key"},
-                    "config": r#"[mcp_servers.latest]
+                    "config": r#"model_provider = "custom"
+
+[model_providers.custom]
+name = "Custom"
+base_url = "https://example.com/v1"
+wire_api = "responses"
+
+[mcp_servers.latest]
 type = "stdio"
 command = "say"
 "#
@@ -285,7 +292,8 @@ command = "say"
         );
     }
 
-    // v3.7.0+: 使用统一的 MCP 结构
+    // Seed a legacy unified MCP row to prove the provider command no longer
+    // projects shared database state into Codex's independent MCP list.
     config.mcp.servers = Some(HashMap::new());
     config.mcp.servers.as_mut().unwrap().insert(
         "echo-server".into(),
@@ -328,12 +336,20 @@ command = "say"
 
     let config_text = std::fs::read_to_string(get_codex_config_path()).expect("read config.toml");
     assert!(
-        config_text.contains("mcp_servers.echo-server"),
-        "config.toml should contain synced MCP servers"
+        config_text.contains("mcp_servers.legacy"),
+        "the existing Codex MCP configuration should survive provider switching"
     );
     assert!(
-        config_text.contains("experimental_bearer_token"),
-        "config.toml should carry the selected provider API key as bearer token"
+        !config_text.contains("mcp_servers.echo-server"),
+        "provider switching must not project legacy unified MCP rows"
+    );
+    assert!(
+        !config_text.contains("mcp_servers.latest"),
+        "MCP sections embedded in provider snapshots must not replace the live Codex list"
+    );
+    assert!(
+        config_text.contains("[model_providers.custom.auth]"),
+        "config.toml should carry the selected provider's command-backed authentication"
     );
 
     let current_id = app_state
@@ -357,12 +373,8 @@ command = "say"
         .get("config")
         .and_then(|v| v.as_str())
         .unwrap_or_default();
-    // 供应商配置应该包含在 live 文件中
-    // 注意：live 文件还会包含 MCP 同步后的内容
-    assert!(
-        config_text.contains("mcp_servers.latest"),
-        "live file should contain provider's original config"
-    );
+    // The provider snapshot remains compatible in storage, while its historical
+    // MCP section is deliberately excluded from the live file.
     assert!(
         new_config_text.contains("mcp_servers.latest"),
         "provider snapshot should contain provider's original config"
@@ -416,7 +428,7 @@ fn switch_provider_updates_claude_live_and_state() {
     reset_test_fs();
     let _home = ensure_test_home();
 
-    let settings_path = cc_switch_lib::get_claude_settings_path();
+    let settings_path = agent_switch_lib::get_claude_settings_path();
     if let Some(parent) = settings_path.parent() {
         std::fs::create_dir_all(parent).expect("create claude settings dir");
     }
@@ -521,11 +533,11 @@ fn switch_provider_updates_claude_live_and_state() {
     // 验证数据已持久化到数据库
     let home_dir = std::env::var("HOME").expect("HOME should be set by ensure_test_home");
     let db_path = std::path::Path::new(&home_dir)
-        .join(".cc-switch")
-        .join("cc-switch.db");
+        .join(".agentswitch")
+        .join("agentswitch.db");
     assert!(
         db_path.exists(),
-        "switching provider should persist to cc-switch.db"
+        "switching provider should persist to agentswitch.db"
     );
 
     // 验证当前供应商已更新

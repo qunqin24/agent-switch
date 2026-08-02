@@ -18,7 +18,6 @@ import {
   RefreshCw,
   History,
   BarChart2,
-  Download,
   FolderArchive,
   Search,
   FolderOpen,
@@ -70,10 +69,19 @@ import { ProxyToggle } from "@/components/proxy/ProxyToggle";
 import { ClaudeDesktopRouteToggle } from "@/components/proxy/ClaudeDesktopRouteToggle";
 import { FailoverToggle } from "@/components/proxy/FailoverToggle";
 import UsageScriptModal from "@/components/UsageScriptModal";
-import UnifiedMcpPanel from "@/components/mcp/UnifiedMcpPanel";
+import McpPanel, { type McpPanelHandle } from "@/components/mcp/McpPanel";
 import PromptPanel from "@/components/prompts/PromptPanel";
-import { SkillsPage } from "@/components/skills/SkillsPage";
-import UnifiedSkillsPanel from "@/components/skills/UnifiedSkillsPanel";
+import {
+  SkillsPage,
+  type SkillsPageHandle,
+} from "@/components/skills/SkillsPage";
+import SkillsPanel, {
+  type SkillsPanelHandle,
+} from "@/components/skills/SkillsPanel";
+import type { SkillManagementScope } from "@/components/skills/SkillScopeSelect";
+import GlobalSkillsPanel, {
+  type GlobalSkillsPanelHandle,
+} from "@/components/skills/GlobalSkillsPanel";
 import { DeepLinkImportDialog } from "@/components/DeepLinkImportDialog";
 import { FirstRunNoticeDialog } from "@/components/FirstRunNoticeDialog";
 import { AgentsPanel } from "@/components/agents/AgentsPanel";
@@ -91,6 +99,7 @@ import ToolsPanel from "@/components/openclaw/ToolsPanel";
 import AgentsDefaultsPanel from "@/components/openclaw/AgentsDefaultsPanel";
 import OpenClawHealthBanner from "@/components/openclaw/OpenClawHealthBanner";
 import HermesMemoryPanel from "@/components/hermes/HermesMemoryPanel";
+import { isMcpAppId, isSkillAppId, SKILL_APP_IDS } from "@/config/appConfig";
 
 type View =
   | "providers"
@@ -98,6 +107,8 @@ type View =
   | "prompts"
   | "skills"
   | "skillsDiscovery"
+  | "globalSkills"
+  | "globalSkillsDiscovery"
   | "mcp"
   | "agents"
   | "universal"
@@ -117,7 +128,7 @@ interface SyncStatusUpdatedPayload {
 const DEFAULT_DRAG_BAR_HEIGHT = isWindows() || isLinux() ? 0 : 28; // px
 // const HEADER_HEIGHT = 64; // px
 
-const STORAGE_KEY = "cc-switch-last-app";
+const STORAGE_KEY = "agentswitch-last-app";
 const VALID_APPS: AppId[] = [
   "claude",
   "claude-desktop",
@@ -136,13 +147,15 @@ const getInitialApp = (): AppId => {
   return "claude";
 };
 
-const VIEW_STORAGE_KEY = "cc-switch-last-view";
+const VIEW_STORAGE_KEY = "agentswitch-last-view";
 const VALID_VIEWS: View[] = [
   "providers",
   "settings",
   "prompts",
   "skills",
   "skillsDiscovery",
+  "globalSkills",
+  "globalSkillsDiscovery",
   "mcp",
   "agents",
   "universal",
@@ -197,6 +210,27 @@ function App() {
     openclaw: true,
     hermes: true,
   };
+  const visibleSkillApps = useMemo(
+    () => SKILL_APP_IDS.filter((app) => visibleApps[app]),
+    [visibleApps],
+  );
+
+  const handleSkillsScopeChange = useCallback((scope: SkillManagementScope) => {
+    switch (scope.kind) {
+      case "app":
+        localStorage.setItem(STORAGE_KEY, scope.app);
+        setActiveApp(scope.app);
+        setCurrentView("skills");
+        break;
+      case "global":
+        setCurrentView("globalSkills");
+        break;
+      default: {
+        const exhaustiveScope: never = scope;
+        void exhaustiveScope;
+      }
+    }
+  }, []);
 
   const getFirstVisibleApp = (): AppId => {
     if (visibleApps.claude) return "claude";
@@ -230,6 +264,15 @@ function App() {
     }
   }, [sharedFeatureApp, currentView]);
 
+  useEffect(() => {
+    if (
+      (currentView === "skills" || currentView === "skillsDiscovery") &&
+      !isSkillAppId(activeApp)
+    ) {
+      setCurrentView("providers");
+    }
+  }, [activeApp, currentView]);
+
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
   const [usageProvider, setUsageProvider] = useState<Provider | null>(null);
   const [confirmAction, setConfirmAction] = useState<{
@@ -248,9 +291,10 @@ function App() {
   useUsageCacheBridge();
 
   const promptPanelRef = useRef<any>(null);
-  const mcpPanelRef = useRef<any>(null);
-  const skillsPageRef = useRef<any>(null);
-  const unifiedSkillsPanelRef = useRef<any>(null);
+  const mcpPanelRef = useRef<McpPanelHandle>(null);
+  const skillsPageRef = useRef<SkillsPageHandle>(null);
+  const skillsPanelRef = useRef<SkillsPanelHandle>(null);
+  const globalSkillsPanelRef = useRef<GlobalSkillsPanelHandle>(null);
   // const addActionButtonClass = "";
 
   const {
@@ -281,7 +325,7 @@ function App() {
       currentView === "openclawAgents");
   const { data: openclawHealthWarnings = [] } =
     useOpenClawHealth(isOpenClawView);
-  const hasSkillsSupport = sharedFeatureApp !== "openclaw";
+  const hasSkillsSupport = isSkillAppId(activeApp);
   const hasSessionSupport =
     sharedFeatureApp === "claude" ||
     sharedFeatureApp === "codex" ||
@@ -507,34 +551,6 @@ function App() {
 
     checkMigration();
   }, [t]);
-
-  useEffect(() => {
-    const checkSkillsMigration = async () => {
-      try {
-        const result = await invoke<{ count: number; error?: string } | null>(
-          "get_skills_migration_result",
-        );
-        if (result?.error) {
-          toast.error(t("migration.skillsFailed"), {
-            description: t("migration.skillsFailedDescription"),
-            closeButton: true,
-          });
-          console.error("[App] Skills SSOT migration failed:", result.error);
-          return;
-        }
-        if (result && result.count > 0) {
-          toast.success(t("migration.skillsSuccess", { count: result.count }), {
-            closeButton: true,
-          });
-          await queryClient.invalidateQueries({ queryKey: ["skills"] });
-        }
-      } catch (error) {
-        console.error("[App] Failed to check skills migration result:", error);
-      }
-    };
-
-    checkSkillsMigration();
-  }, [t, queryClient]);
 
   useEffect(() => {
     const checkEnvOnSwitch = async () => {
@@ -877,31 +893,36 @@ function App() {
         case "hermesMemory":
           return <HermesMemoryPanel />;
         case "skills":
+          return isSkillAppId(activeApp) ? (
+            <SkillsPanel
+              ref={skillsPanelRef}
+              appId={activeApp}
+              appOptions={visibleSkillApps}
+              onScopeChange={handleSkillsScopeChange}
+            />
+          ) : null;
+        case "skillsDiscovery":
+          return isSkillAppId(activeApp) ? (
+            <SkillsPage ref={skillsPageRef} initialApp={activeApp} />
+          ) : null;
+        case "globalSkills":
           return (
-            <UnifiedSkillsPanel
-              ref={unifiedSkillsPanelRef}
-              onOpenDiscovery={() => setCurrentView("skillsDiscovery")}
-              currentApp={
-                sharedFeatureApp === "openclaw" ? "claude" : sharedFeatureApp
-              }
+            <GlobalSkillsPanel
+              ref={globalSkillsPanelRef}
+              appOptions={visibleSkillApps}
+              onScopeChange={handleSkillsScopeChange}
             />
           );
-        case "skillsDiscovery":
+        case "globalSkillsDiscovery":
           return (
             <SkillsPage
               ref={skillsPageRef}
-              initialApp={
-                sharedFeatureApp === "openclaw" ? "claude" : sharedFeatureApp
-              }
+              initialApp={isSkillAppId(activeApp) ? activeApp : "claude"}
+              installTarget="global"
             />
           );
         case "mcp":
-          return (
-            <UnifiedMcpPanel
-              ref={mcpPanelRef}
-              onOpenChange={() => setCurrentView("providers")}
-            />
-          );
+          return <McpPanel ref={mcpPanelRef} appId={activeApp} />;
         case "agents":
           return (
             <AgentsPanel onOpenChange={() => setCurrentView("providers")} />
@@ -1072,32 +1093,6 @@ function App() {
           )}
         </div>
       )}
-      {showEnvBanner && envConflicts.length > 0 && (
-        <div className="absolute z-50 top-8 left-1/2 -translate-x-1/2">
-          <EnvWarningBanner
-            conflicts={envConflicts}
-            onDismiss={() => {
-              setShowEnvBanner(false);
-              sessionStorage.setItem("env_banner_dismissed", "true");
-            }}
-            onDeleted={async () => {
-              try {
-                const allConflicts = await checkAllEnvConflicts();
-                const flatConflicts = Object.values(allConflicts).flat();
-                setEnvConflicts(flatConflicts);
-                if (flatConflicts.length === 0) {
-                  setShowEnvBanner(false);
-                }
-              } catch (error) {
-                console.error(
-                  "[App] Failed to re-check conflicts after deletion:",
-                  error,
-                );
-              }
-            }}
-          />
-        </div>
-      )}
 
       {/* Sidebar — 设置页占满整窗时隐藏 */}
       {currentView !== "settings" && (
@@ -1112,19 +1107,16 @@ function App() {
           >
             {/* Brand */}
             <div className="flex items-center gap-2 pt-6 pl-2">
-              <a
-                href="https://ccswitch.io"
-                target="_blank"
-                rel="noreferrer"
+              <span
                 className={cn(
                   "text-lg font-semibold tracking-tight transition-colors",
                   isProxyRunning && isCurrentAppTakeoverActive
-                    ? "text-emerald-500 hover:text-emerald-600 dark:text-emerald-400 dark:hover:text-emerald-300"
-                    : "text-zinc-900 hover:text-black dark:text-white",
+                    ? "text-emerald-500 dark:text-emerald-400"
+                    : "text-zinc-900 dark:text-white",
                 )}
               >
-                CC Switch
-              </a>
+                Agent Switch
+              </span>
             </div>
 
             {/* App Switcher (Vertical) */}
@@ -1179,6 +1171,31 @@ function App() {
         )}
         style={{ paddingTop: dragBarHeight }}
       >
+        {showEnvBanner && envConflicts.length > 0 && (
+          <EnvWarningBanner
+            conflicts={envConflicts}
+            onDismiss={() => {
+              setShowEnvBanner(false);
+              sessionStorage.setItem("env_banner_dismissed", "true");
+            }}
+            onDeleted={async () => {
+              try {
+                const allConflicts = await checkAllEnvConflicts();
+                const flatConflicts = Object.values(allConflicts).flat();
+                setEnvConflicts(flatConflicts);
+                if (flatConflicts.length === 0) {
+                  setShowEnvBanner(false);
+                }
+              } catch (error) {
+                console.error(
+                  "[App] Failed to re-check conflicts after deletion:",
+                  error,
+                );
+              }
+            }}
+          />
+        )}
+
         {/* Main Content Header */}
         {currentView !== "settings" && (
           <header className="h-20 shrink-0 flex items-center justify-between px-8 border-b border-black/5 dark:border-white/5">
@@ -1192,7 +1209,9 @@ function App() {
                       setCurrentView(
                         currentView === "skillsDiscovery"
                           ? "skills"
-                          : "providers",
+                          : currentView === "globalSkillsDiscovery"
+                            ? "globalSkills"
+                            : "providers",
                       )
                     }
                     className="rounded-full hover:bg-black/5 dark:hover:bg-white/5"
@@ -1204,9 +1223,21 @@ function App() {
                       t("prompts.title", {
                         appName: t(`apps.${sharedFeatureApp}`),
                       })}
-                    {currentView === "skills" && t("skills.title")}
-                    {currentView === "skillsDiscovery" && t("skills.title")}
-                    {currentView === "mcp" && t("mcp.unifiedPanel.title")}
+                    {currentView === "skills" &&
+                      t("skills.appPanel.title", {
+                        appName: t(`apps.${activeApp}`),
+                      })}
+                    {currentView === "skillsDiscovery" &&
+                      t("skills.discoveryForApp", {
+                        appName: t(`apps.${activeApp}`),
+                      })}
+                    {currentView === "globalSkills" && t("skills.global.title")}
+                    {currentView === "globalSkillsDiscovery" &&
+                      t("skills.global.discovery")}
+                    {currentView === "mcp" &&
+                      t("mcp.appPanel.title", {
+                        appName: t(`apps.${activeApp}`),
+                      })}
                     {currentView === "agents" && t("agents.title")}
                     {currentView === "universal" &&
                       t("universalProvider.title")}
@@ -1240,16 +1271,16 @@ function App() {
                   {t("prompts.add")}
                 </Button>
               )}
-              {currentView === "mcp" && (
+              {currentView === "mcp" && isMcpAppId(activeApp) && (
                 <>
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => mcpPanelRef.current?.openImport()}
+                    onClick={() => mcpPanelRef.current?.refresh()}
                     className="rounded-full"
                   >
-                    <Download className="w-4 h-4 mr-2" />
-                    {t("mcp.importExisting")}
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    {t("mcp.appPanel.refresh")}
                   </Button>
                   <Button
                     variant="secondary"
@@ -1267,8 +1298,17 @@ function App() {
                   <Button
                     variant="ghost"
                     size="sm"
+                    onClick={() => skillsPanelRef.current?.refresh()}
+                    className="rounded-full"
+                  >
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    {t("skills.refresh")}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() =>
-                      unifiedSkillsPanelRef.current?.openRestoreFromBackup()
+                      skillsPanelRef.current?.openRestoreFromBackup()
                     }
                     className="rounded-full"
                   >
@@ -1278,22 +1318,11 @@ function App() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() =>
-                      unifiedSkillsPanelRef.current?.openInstallFromZip()
-                    }
+                    onClick={() => skillsPanelRef.current?.openInstallFromZip()}
                     className="rounded-full"
                   >
                     <FolderArchive className="w-4 h-4 mr-2" />
                     {t("skills.installFromZip.button")}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => unifiedSkillsPanelRef.current?.openImport()}
-                    className="rounded-full"
-                  >
-                    <Download className="w-4 h-4 mr-2" />
-                    {t("skills.import")}
                   </Button>
                   <Button
                     variant="secondary"
@@ -1307,11 +1336,22 @@ function App() {
                 </>
               )}
               {currentView === "skillsDiscovery" && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => skillsPageRef.current?.refresh()}
+                  className="rounded-full"
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  {t("skills.refresh")}
+                </Button>
+              )}
+              {currentView === "globalSkills" && (
                 <>
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => skillsPageRef.current?.refresh()}
+                    onClick={() => globalSkillsPanelRef.current?.refresh()}
                     className="rounded-full"
                   >
                     <RefreshCw className="w-4 h-4 mr-2" />
@@ -1320,13 +1360,46 @@ function App() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => skillsPageRef.current?.openRepoManager()}
+                    onClick={() =>
+                      globalSkillsPanelRef.current?.openRestoreFromBackup()
+                    }
                     className="rounded-full"
                   >
-                    <Settings className="w-4 h-4 mr-2" />
-                    {t("skills.repoManager")}
+                    <History className="w-4 h-4 mr-2" />
+                    {t("skills.restoreFromBackup.button")}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() =>
+                      globalSkillsPanelRef.current?.openInstallFromZip()
+                    }
+                    className="rounded-full"
+                  >
+                    <FolderArchive className="w-4 h-4 mr-2" />
+                    {t("skills.installFromZip.button")}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setCurrentView("globalSkillsDiscovery")}
+                    className="rounded-full px-4"
+                  >
+                    <Search className="w-4 h-4 mr-2" />
+                    {t("skills.discover")}
                   </Button>
                 </>
+              )}
+              {currentView === "globalSkillsDiscovery" && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => skillsPageRef.current?.refresh()}
+                  className="rounded-full"
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  {t("skills.refresh")}
+                </Button>
               )}
               {currentView === "providers" && (
                 <>
@@ -1369,15 +1442,17 @@ function App() {
                             >
                               <LayoutDashboard className="w-4 h-4" />
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => setCurrentView("mcp")}
-                              className="rounded-full w-8 h-8 hover:bg-white text-zinc-500 hover:text-zinc-900 shadow-sm dark:text-zinc-400 dark:hover:bg-zinc-700 dark:hover:text-zinc-50"
-                              title={t("mcp.title")}
-                            >
-                              <McpIcon size={16} />
-                            </Button>
+                            {isMcpAppId(activeApp) && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setCurrentView("mcp")}
+                                className="rounded-full w-8 h-8 hover:bg-white text-zinc-500 hover:text-zinc-900 shadow-sm dark:text-zinc-400 dark:hover:bg-zinc-700 dark:hover:text-zinc-50"
+                                title={t("mcp.title")}
+                              >
+                                <McpIcon size={16} />
+                              </Button>
+                            )}
                           </>
                         ) : activeApp === "openclaw" ? (
                           <>
@@ -1471,15 +1546,17 @@ function App() {
                                 <History className="w-4 h-4" />
                               </Button>
                             )}
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => setCurrentView("mcp")}
-                              className="rounded-full w-8 h-8 hover:bg-white text-zinc-500 hover:text-zinc-900 shadow-sm dark:text-zinc-400 dark:hover:bg-zinc-700 dark:hover:text-zinc-50"
-                              title={t("mcp.title")}
-                            >
-                              <McpIcon size={16} />
-                            </Button>
+                            {isMcpAppId(activeApp) && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setCurrentView("mcp")}
+                                className="rounded-full w-8 h-8 hover:bg-white text-zinc-500 hover:text-zinc-900 shadow-sm dark:text-zinc-400 dark:hover:bg-zinc-700 dark:hover:text-zinc-50"
+                                title={t("mcp.title")}
+                              >
+                                <McpIcon size={16} />
+                              </Button>
+                            )}
                           </>
                         )}
                       </motion.div>

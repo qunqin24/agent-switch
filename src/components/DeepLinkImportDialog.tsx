@@ -103,13 +103,13 @@ export function DeepLinkImportDialog() {
         importedIds: string[];
         failed: Array<{ id: string; error: string }>;
       }) => {
-        // 强制刷新 MCP 相关缓存，确保管理页重新从数据库加载
+        // Refresh every per-CLI MCP query after a deep-link import.
         await queryClient.invalidateQueries({
-          queryKey: ["mcp", "all"],
+          queryKey: ["mcp"],
           refetchType: "all",
         });
         await queryClient.refetchQueries({
-          queryKey: ["mcp", "all"],
+          queryKey: ["mcp"],
           type: "all",
         });
 

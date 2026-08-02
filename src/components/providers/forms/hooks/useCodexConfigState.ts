@@ -24,7 +24,7 @@ function pickCodexApiKey(
   return "";
 }
 
-// Lift legacy direct bearer credentials into CC Switch's protected provider
+// Lift legacy direct bearer credentials into Agent Switch's protected provider
 // settings. Live config.toml is generated with Codex command-backed auth.
 function migrateLegacyCodexCredential(
   authObj: Record<string, unknown>,
@@ -173,7 +173,7 @@ export function useCodexConfigState({ initialData }: UseCodexConfigStateProps) {
     [],
   );
 
-  // 处理 Codex API Key 输入并写回 CC Switch 的供应商认证数据。
+  // 处理 Codex API Key 输入并写回 Agent Switch 的供应商认证数据。
   // 旧版 direct bearer 条目会被移除，Live 配置由后端生成 command auth。
   const handleCodexApiKeyChange = useCallback(
     (key: string) => {

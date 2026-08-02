@@ -1,5 +1,5 @@
 import React from "react";
-import type { AppId } from "@/lib/api/types";
+import type { AppId, McpAppId, SkillAppId } from "@/lib/api/types";
 import {
   ClaudeIcon,
   CodexIcon,
@@ -25,8 +25,8 @@ export const APP_IDS: AppId[] = [
   "hermes",
 ];
 
-/** App IDs shown in Skills panels (excludes OpenClaw — it doesn't support Skills) */
-export const SKILLS_APP_IDS: AppId[] = [
+/** CLI apps with independent MCP configuration support. */
+export const MCP_APP_IDS: McpAppId[] = [
   "claude",
   "codex",
   "gemini",
@@ -34,8 +34,31 @@ export const SKILLS_APP_IDS: AppId[] = [
   "hermes",
 ];
 
-/** App IDs shown in MCP panels (excludes OpenClaw) */
-export const MCP_APP_IDS: AppId[] = [...SKILLS_APP_IDS];
+export const SKILL_APP_IDS: SkillAppId[] = [
+  "claude",
+  "codex",
+  "gemini",
+  "opencode",
+  "hermes",
+];
+
+export function isMcpAppId(app: AppId): app is McpAppId {
+  switch (app) {
+    case "claude":
+    case "codex":
+    case "gemini":
+    case "opencode":
+    case "hermes":
+      return true;
+    case "claude-desktop":
+    case "openclaw":
+      return false;
+  }
+}
+
+export function isSkillAppId(app: AppId): app is SkillAppId {
+  return isMcpAppId(app);
+}
 
 export const APP_ICON_MAP: Record<AppId, AppConfig> = {
   claude: {

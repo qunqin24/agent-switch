@@ -201,6 +201,10 @@ vi.mock("@/components/settings/OpenCodeSmallModelSettings", () => ({
   OpenCodeSmallModelSettings: () => <div>opencode-small-model-settings</div>,
 }));
 
+vi.mock("@/components/settings/OpenCodeWebSearchSettings", () => ({
+  OpenCodeWebSearchSettings: () => <div>opencode-web-search-settings</div>,
+}));
+
 vi.mock("@/components/settings/WindowSettings", () => ({
   WindowSettings: ({ onChange }: any) => (
     <button onClick={() => onChange({ minimizeToTrayOnClose: false })}>

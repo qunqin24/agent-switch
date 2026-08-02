@@ -134,16 +134,18 @@ vi.mock("@/components/UpdateBadge", () => ({
   ),
 }));
 
-vi.mock("@/components/mcp/McpPanel", () => ({
-  default: ({ open, onOpenChange }: any) =>
-    open ? (
-      <div data-testid="mcp-panel">
-        <button onClick={() => onOpenChange(false)}>close-mcp</button>
-      </div>
-    ) : (
-      <button onClick={() => onOpenChange(true)}>open-mcp</button>
-    ),
-}));
+vi.mock("@/components/mcp/McpPanel", async () => {
+  const React = await import("react");
+  return {
+    default: React.forwardRef(({ appId }: { appId: string }, ref) => {
+      React.useImperativeHandle(ref, () => ({
+        openAdd: vi.fn(),
+        refresh: vi.fn(),
+      }));
+      return <div data-testid="mcp-panel">{appId}</div>;
+    }),
+  };
+});
 
 const renderApp = (AppComponent: ComponentType) => {
   const client = new QueryClient();

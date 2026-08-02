@@ -47,7 +47,7 @@ pub struct McpConfigResponse {
     pub servers: HashMap<String, serde_json::Value>,
 }
 
-/// 获取 MCP 配置（来自 ~/.cc-switch/config.json）
+/// 获取 MCP 配置（来自 ~/.agentswitch/config.json）
 use std::str::FromStr;
 
 #[tauri::command]
@@ -204,4 +204,49 @@ pub async fn import_mcp_from_apps(state: State<'_, AppState>) -> Result<usize, S
     total += McpService::import_from_opencode(&state).unwrap_or(0);
     total += McpService::import_from_hermes(&state).unwrap_or(0);
     Ok(total)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppMcpConfigResponse {
+    pub config_path: String,
+    pub storage_format: &'static str,
+    pub servers: IndexMap<String, serde_json::Value>,
+}
+
+/// Read MCP servers from one CLI's live configuration.
+#[tauri::command]
+pub async fn get_mcp_servers_for_app(app: String) -> Result<AppMcpConfigResponse, String> {
+    let app_ty = AppType::from_str(&app).map_err(|error| error.to_string())?;
+    let config_path = McpService::get_app_config_path(&app_ty)
+        .map_err(|error| error.to_string())?
+        .to_string_lossy()
+        .to_string();
+    let storage_format =
+        McpService::get_app_storage_format(&app_ty).map_err(|error| error.to_string())?;
+    let servers = McpService::get_servers_for_app(app_ty).map_err(|error| error.to_string())?;
+
+    Ok(AppMcpConfigResponse {
+        config_path,
+        storage_format,
+        servers,
+    })
+}
+
+/// Add or update one MCP server in one CLI only.
+#[tauri::command]
+pub async fn upsert_mcp_server_for_app(
+    app: String,
+    id: String,
+    server_spec: serde_json::Value,
+) -> Result<(), String> {
+    let app_ty = AppType::from_str(&app).map_err(|error| error.to_string())?;
+    McpService::upsert_server_for_app(app_ty, &id, server_spec).map_err(|error| error.to_string())
+}
+
+/// Delete one MCP server from one CLI only.
+#[tauri::command]
+pub async fn delete_mcp_server_for_app(app: String, id: String) -> Result<(), String> {
+    let app_ty = AppType::from_str(&app).map_err(|error| error.to_string())?;
+    McpService::delete_server_for_app(app_ty, &id).map_err(|error| error.to_string())
 }

@@ -831,12 +831,12 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
             <div className="flex items-center gap-4">
               <img
                 src={appIcon}
-                alt="CC Switch"
+                alt="Agent Switch"
                 className="h-10 w-10 shrink-0"
               />
               <div className="space-y-1">
                 <h4 className="text-base font-bold text-foreground leading-none tracking-tight">
-                  CC Switch
+                  Agent Switch
                 </h4>
                 <div className="flex items-center gap-1.5">
                   <Badge

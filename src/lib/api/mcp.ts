@@ -1,12 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  AppMcpConfigResponse,
   McpConfigResponse,
   McpServer,
   McpServerSpec,
   McpServersMap,
   McpStatus,
 } from "@/types";
-import type { AppId } from "./types";
+import type { AppId, McpAppId } from "./types";
 
 export const mcpApi = {
   async getStatus(): Promise<McpStatus> {
@@ -19,7 +20,7 @@ export const mcpApi = {
 
   async upsertServer(
     id: string,
-    spec: McpServerSpec | Record<string, any>,
+    spec: McpServerSpec | Record<string, unknown>,
   ): Promise<boolean> {
     return await invoke("upsert_claude_mcp_server", { id, spec });
   },
@@ -125,5 +126,34 @@ export const mcpApi = {
    */
   async importFromApps(): Promise<number> {
     return await invoke("import_mcp_from_apps");
+  },
+
+  /**
+   * Read the live MCP configuration owned by one CLI.
+   */
+  async getServersForApp(app: McpAppId): Promise<AppMcpConfigResponse> {
+    return await invoke("get_mcp_servers_for_app", { app });
+  },
+
+  /**
+   * Add or update one MCP server in one CLI only.
+   */
+  async upsertServerForApp(
+    app: McpAppId,
+    id: string,
+    serverSpec: McpServerSpec,
+  ): Promise<void> {
+    return await invoke("upsert_mcp_server_for_app", {
+      app,
+      id,
+      serverSpec,
+    });
+  },
+
+  /**
+   * Delete one MCP server from one CLI only.
+   */
+  async deleteServerForApp(app: McpAppId, id: string): Promise<void> {
+    return await invoke("delete_mcp_server_for_app", { app, id });
   },
 };

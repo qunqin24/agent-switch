@@ -1,6 +1,6 @@
 import { http, HttpResponse } from "msw";
-import type { AppId } from "@/lib/api/types";
-import type { McpServer, Provider, Settings } from "@/types";
+import type { AppId, McpAppId, SkillAppId } from "@/lib/api/types";
+import type { McpServer, McpServerSpec, Provider, Settings } from "@/types";
 import {
   addProvider,
   deleteProvider,
@@ -20,8 +20,10 @@ import {
   getAppConfigDirOverride,
   setAppConfigDirOverrideState,
   getMcpConfig,
+  getMcpConfigForApp,
   setMcpServerEnabled,
   upsertMcpServer,
+  upsertMcpServerForApp,
   deleteMcpServer,
 } from "./state";
 
@@ -41,9 +43,32 @@ const success = <T>(payload: T) => HttpResponse.json(payload as any);
 
 export const handlers = [
   http.post(`${TAURI_ENDPOINT}/get_migration_result`, () => success(false)),
-  http.post(`${TAURI_ENDPOINT}/get_skills_migration_result`, () =>
-    success(null),
+  http.post(`${TAURI_ENDPOINT}/get_app_skills`, async ({ request }) => {
+    const { app } = await withJson<{ app: SkillAppId }>(request);
+    return success({
+      app,
+      skillsDir: `/mock/${app}/skills`,
+      skills: [],
+    });
+  }),
+  http.post(`${TAURI_ENDPOINT}/get_app_skill_backups`, () => success([])),
+  http.post(`${TAURI_ENDPOINT}/check_app_skill_updates`, () => success([])),
+  http.post(`${TAURI_ENDPOINT}/get_global_skills`, () =>
+    success({
+      skillsDir: "/mock/.agents/skills",
+      directApps: {
+        claude: false,
+        codex: true,
+        gemini: false,
+        opencode: false,
+        openclaw: false,
+        hermes: false,
+      },
+      skills: [],
+    }),
   ),
+  http.post(`${TAURI_ENDPOINT}/get_global_skill_backups`, () => success([])),
+  http.post(`${TAURI_ENDPOINT}/check_global_skill_updates`, () => success([])),
   http.post(`${TAURI_ENDPOINT}/get_providers`, async ({ request }) => {
     const { app } = await withJson<{ app: AppId }>(request);
     return success(getProviders(app));
@@ -75,6 +100,14 @@ export const handlers = [
   http.post(`${TAURI_ENDPOINT}/get_opencode_small_model`, () => success(null)),
 
   http.post(`${TAURI_ENDPOINT}/set_opencode_small_model`, () => success(null)),
+
+  http.post(`${TAURI_ENDPOINT}/get_opencode_web_search_enabled`, () =>
+    success(false),
+  ),
+
+  http.post(`${TAURI_ENDPOINT}/set_opencode_web_search_enabled`, () =>
+    success(null),
+  ),
 
   http.post(`${TAURI_ENDPOINT}/list_opencode_models_for_omo`, () =>
     success([]),
@@ -183,6 +216,38 @@ export const handlers = [
 
   http.post(`${TAURI_ENDPOINT}/import_mcp_from_claude`, () => success(1)),
   http.post(`${TAURI_ENDPOINT}/import_mcp_from_codex`, () => success(1)),
+
+  http.post(
+    `${TAURI_ENDPOINT}/get_mcp_servers_for_app`,
+    async ({ request }) => {
+      const { app } = await withJson<{ app: McpAppId }>(request);
+      return success(getMcpConfigForApp(app));
+    },
+  ),
+
+  http.post(
+    `${TAURI_ENDPOINT}/upsert_mcp_server_for_app`,
+    async ({ request }) => {
+      const { app, id, serverSpec } = await withJson<{
+        app: McpAppId;
+        id: string;
+        serverSpec: McpServerSpec;
+      }>(request);
+      upsertMcpServerForApp(app, id, serverSpec);
+      return success(null);
+    },
+  ),
+
+  http.post(
+    `${TAURI_ENDPOINT}/delete_mcp_server_for_app`,
+    async ({ request }) => {
+      const { app, id } = await withJson<{ app: McpAppId; id: string }>(
+        request,
+      );
+      deleteMcpServer(app, id);
+      return success(null);
+    },
+  ),
 
   http.post(`${TAURI_ENDPOINT}/set_mcp_enabled`, async ({ request }) => {
     const { app, id, enabled } = await withJson<{

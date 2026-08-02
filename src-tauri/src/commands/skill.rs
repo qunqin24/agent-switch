@@ -1,15 +1,18 @@
 //! Skills 命令层
 //!
-//! v3.10.0+ 统一管理架构：
-//! - 支持三应用开关（Claude/Codex/Gemini）
-//! - SSOT 存储在 ~/.cc-switch/skills/
+//! 新版命令直接管理各 CLI 的原生 Skills 目录。
+//! 旧版统一管理命令暂时保留，用于兼容历史调用。
 
 use crate::app_config::{AppType, InstalledSkill, UnmanagedSkill};
 use crate::error::format_skill_error;
 use crate::services::skill::{
-    DiscoverableSkill, ImportSkillSelection, MigrationResult, Skill, SkillBackupEntry, SkillRepo,
-    SkillService, SkillStorageLocation, SkillUninstallResult, SkillUpdateInfo,
-    SkillsShSearchResult,
+    AppSkill, AppSkillsResponse, DiscoverableSkill, GlobalSkill, GlobalSkillsResponse,
+    ImportSkillSelection, MigrationResult, Skill, SkillBackupEntry, SkillRepo, SkillService,
+    SkillStorageLocation, SkillUninstallResult, SkillUpdateInfo, SkillsShLeaderboardResult,
+    SkillsShPublisherDetail, SkillsShRepositoryDetail, SkillsShSearchResult, SkillsShSkillDetail,
+};
+use crate::services::skill_builtin::{
+    list_cli_provided_skills, CliProvidedSkill, CliProvidedSkillSource,
 };
 use crate::store::AppState;
 use std::str::FromStr;
@@ -22,6 +25,230 @@ pub struct SkillServiceState(pub Arc<SkillService>);
 /// 解析 app 参数为 AppType
 fn parse_app_type(app: &str) -> Result<AppType, String> {
     AppType::from_str(app).map_err(|e| e.to_string())
+}
+
+// ========== 按 CLI 原生目录管理 ==========
+
+#[tauri::command]
+pub fn get_app_skills(
+    app: String,
+    app_state: State<'_, AppState>,
+) -> Result<AppSkillsResponse, String> {
+    let app_type = parse_app_type(&app)?;
+    SkillService::get_for_app(&app_state.db, &app_type).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_cli_provided_skills(app: String) -> Result<Vec<CliProvidedSkill>, String> {
+    let app_type = parse_app_type(&app)?;
+    list_cli_provided_skills(&app_type)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+async fn ensure_skill_is_user_managed(app: &AppType, directory: &str) -> Result<(), String> {
+    let provided = list_cli_provided_skills(app)
+        .await
+        .map_err(|error| error.to_string())?;
+    let Some(skill) = provided
+        .into_iter()
+        .find(|skill| skill.directory == directory)
+    else {
+        return Ok(());
+    };
+
+    let owner = match skill.source {
+        CliProvidedSkillSource::Builtin => format!("{} CLI", app.as_str()),
+        CliProvidedSkillSource::Plugin { plugin_name } => {
+            format!("OpenCode plugin {plugin_name}")
+        }
+    };
+    Err(format!(
+        "Skill {} is managed by {owner} and cannot be changed from Agent Switch",
+        skill.name
+    ))
+}
+
+#[tauri::command]
+pub fn get_app_skill_backups(app: String) -> Result<Vec<SkillBackupEntry>, String> {
+    let app_type = parse_app_type(&app)?;
+    SkillService::list_backups_for_app(&app_type).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn install_app_skill(
+    app: String,
+    skill: DiscoverableSkill,
+    service: State<'_, SkillServiceState>,
+    app_state: State<'_, AppState>,
+) -> Result<AppSkill, String> {
+    let app_type = parse_app_type(&app)?;
+    service
+        .0
+        .install_for_app(&app_state.db, &skill, &app_type)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn uninstall_app_skill(
+    app: String,
+    directory: String,
+    app_state: State<'_, AppState>,
+) -> Result<SkillUninstallResult, String> {
+    let app_type = parse_app_type(&app)?;
+    ensure_skill_is_user_managed(&app_type, &directory).await?;
+    SkillService::uninstall_for_app(&app_state.db, &app_type, &directory).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn restore_app_skill_backup(
+    app: String,
+    backup_id: String,
+    app_state: State<'_, AppState>,
+) -> Result<AppSkill, String> {
+    let app_type = parse_app_type(&app)?;
+    SkillService::restore_for_app(&app_state.db, &backup_id, &app_type).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn install_app_skills_from_zip(
+    app: String,
+    file_path: String,
+    app_state: State<'_, AppState>,
+) -> Result<Vec<AppSkill>, String> {
+    let app_type = parse_app_type(&app)?;
+    SkillService::install_from_zip_for_app(
+        &app_state.db,
+        std::path::Path::new(&file_path),
+        &app_type,
+    )
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn check_app_skill_updates(
+    app: String,
+    service: State<'_, SkillServiceState>,
+    app_state: State<'_, AppState>,
+) -> Result<Vec<SkillUpdateInfo>, String> {
+    let app_type = parse_app_type(&app)?;
+    service
+        .0
+        .check_app_updates(&app_state.db, &app_type)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn update_app_skill(
+    app: String,
+    id: String,
+    service: State<'_, SkillServiceState>,
+    app_state: State<'_, AppState>,
+) -> Result<AppSkill, String> {
+    let app_type = parse_app_type(&app)?;
+    let directory = SkillService::get_for_app(&app_state.db, &app_type)
+        .map_err(|error| error.to_string())?
+        .skills
+        .into_iter()
+        .find(|skill| skill.id == id)
+        .map(|skill| skill.directory);
+    if let Some(directory) = directory {
+        ensure_skill_is_user_managed(&app_type, &directory).await?;
+    }
+    service
+        .0
+        .update_app_skill(&app_state.db, &app_type, &id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+// ========== 全局 Skills 库 ==========
+
+#[tauri::command]
+pub fn get_global_skills(app_state: State<'_, AppState>) -> Result<GlobalSkillsResponse, String> {
+    SkillService::get_global(&app_state.db).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_global_skill_backups() -> Result<Vec<SkillBackupEntry>, String> {
+    SkillService::list_global_backups().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn install_global_skill(
+    skill: DiscoverableSkill,
+    service: State<'_, SkillServiceState>,
+    app_state: State<'_, AppState>,
+) -> Result<GlobalSkill, String> {
+    service
+        .0
+        .install_global(&app_state.db, &skill)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_global_skill_link(
+    directory: String,
+    app: String,
+    enabled: bool,
+    app_state: State<'_, AppState>,
+) -> Result<GlobalSkill, String> {
+    let app_type = parse_app_type(&app)?;
+    SkillService::set_global_link(&app_state.db, &directory, &app_type, enabled)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn uninstall_global_skill(
+    directory: String,
+    app_state: State<'_, AppState>,
+) -> Result<SkillUninstallResult, String> {
+    SkillService::uninstall_global(&app_state.db, &directory).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn restore_global_skill_backup(
+    backup_id: String,
+    app_state: State<'_, AppState>,
+) -> Result<GlobalSkill, String> {
+    SkillService::restore_global(&app_state.db, &backup_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn install_global_skills_from_zip(
+    file_path: String,
+    app_state: State<'_, AppState>,
+) -> Result<Vec<GlobalSkill>, String> {
+    SkillService::install_from_zip_global(&app_state.db, std::path::Path::new(&file_path))
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn check_global_skill_updates(
+    service: State<'_, SkillServiceState>,
+    app_state: State<'_, AppState>,
+) -> Result<Vec<SkillUpdateInfo>, String> {
+    service
+        .0
+        .check_global_updates(&app_state.db)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn update_global_skill(
+    id: String,
+    service: State<'_, SkillServiceState>,
+    app_state: State<'_, AppState>,
+) -> Result<GlobalSkill, String> {
+    service
+        .0
+        .update_global_skill(&app_state.db, &id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 // ========== 统一管理命令 ==========
@@ -168,12 +395,50 @@ pub async fn migrate_skill_storage(
 
 /// 搜索 skills.sh 公共目录
 #[tauri::command]
-pub async fn search_skills_sh(
-    query: String,
+pub async fn search_skills_sh(query: String, limit: usize) -> Result<SkillsShSearchResult, String> {
+    SkillService::search_skills_sh(&query, limit)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// 读取 skills.sh 公开榜单
+#[tauri::command]
+pub async fn get_skills_sh_leaderboard(
+    view: String,
     limit: usize,
-    offset: usize,
-) -> Result<SkillsShSearchResult, String> {
-    SkillService::search_skills_sh(&query, limit, offset)
+) -> Result<SkillsShLeaderboardResult, String> {
+    SkillService::get_skills_sh_leaderboard(&view, limit)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// 读取 skills.sh 公开发布者页
+#[tauri::command]
+pub async fn get_skills_sh_publisher(owner: String) -> Result<SkillsShPublisherDetail, String> {
+    SkillService::get_skills_sh_publisher(&owner)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// 读取 skills.sh 公开仓库页
+#[tauri::command]
+pub async fn get_skills_sh_repository(
+    owner: String,
+    repository: String,
+) -> Result<SkillsShRepositoryDetail, String> {
+    SkillService::get_skills_sh_repository(&owner, &repository)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// 读取 skills.sh 公开 Skill 详情页
+#[tauri::command]
+pub async fn get_skills_sh_detail(
+    repo_owner: String,
+    repo_name: String,
+    skill_id: String,
+) -> Result<SkillsShSkillDetail, String> {
+    SkillService::get_skills_sh_detail(&repo_owner, &repo_name, &skill_id)
         .await
         .map_err(|e| e.to_string())
 }

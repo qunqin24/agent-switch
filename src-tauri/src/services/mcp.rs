@@ -1,15 +1,165 @@
 use indexmap::IndexMap;
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 use crate::app_config::{AppType, McpServer};
 use crate::error::AppError;
 use crate::mcp;
 use crate::store::AppState;
+use serde_json::Value;
 
 /// MCP 相关业务逻辑（v3.7.0 统一结构）
 pub struct McpService;
 
 impl McpService {
+    fn ensure_app_supports_mcp(app: &AppType) -> Result<(), AppError> {
+        match app {
+            AppType::Claude
+            | AppType::Codex
+            | AppType::Gemini
+            | AppType::OpenCode
+            | AppType::Hermes => Ok(()),
+            AppType::ClaudeDesktop => Err(AppError::localized(
+                "mcp_app_unsupported",
+                "Claude Desktop 不属于 CLI MCP 管理范围",
+                "Claude Desktop is outside CLI MCP management",
+            )),
+            AppType::OpenClaw => Err(AppError::localized(
+                "mcp_app_unsupported",
+                "OpenClaw 当前不支持 MCP 管理",
+                "OpenClaw MCP management is not supported yet",
+            )),
+        }
+    }
+
+    /// Return the live MCP configuration path owned by one CLI.
+    pub fn get_app_config_path(app: &AppType) -> Result<PathBuf, AppError> {
+        Self::ensure_app_supports_mcp(app)?;
+        Ok(match app {
+            AppType::Claude => crate::config::get_claude_mcp_path(),
+            AppType::Codex => crate::codex_config::get_codex_config_path(),
+            AppType::Gemini => crate::gemini_config::get_gemini_settings_path(),
+            AppType::OpenCode => crate::opencode_config::get_opencode_config_path(),
+            AppType::Hermes => crate::hermes_config::get_hermes_config_path(),
+            AppType::ClaudeDesktop | AppType::OpenClaw => unreachable!(),
+        })
+    }
+
+    /// Return the native storage format used by one CLI.
+    pub fn get_app_storage_format(app: &AppType) -> Result<&'static str, AppError> {
+        Self::ensure_app_supports_mcp(app)?;
+        Ok(match app {
+            AppType::Claude | AppType::Gemini | AppType::OpenCode => "json",
+            AppType::Codex => "toml",
+            AppType::Hermes => "yaml",
+            AppType::ClaudeDesktop | AppType::OpenClaw => unreachable!(),
+        })
+    }
+
+    fn prepare_app_config_dir(app: &AppType) -> Result<(), AppError> {
+        Self::ensure_app_supports_mcp(app)?;
+        let directory = match app {
+            AppType::Claude => crate::config::get_claude_config_dir(),
+            AppType::Codex => crate::codex_config::get_codex_config_dir(),
+            AppType::Gemini => crate::gemini_config::get_gemini_dir(),
+            AppType::OpenCode => crate::opencode_config::get_opencode_dir(),
+            AppType::Hermes => crate::hermes_config::get_hermes_dir(),
+            AppType::ClaudeDesktop | AppType::OpenClaw => unreachable!(),
+        };
+        std::fs::create_dir_all(&directory).map_err(|error| AppError::io(&directory, error))
+    }
+
+    /// Read MCP servers directly from one CLI's live configuration.
+    ///
+    /// The app adapters normalize their native JSON/TOML/YAML shapes into the
+    /// editor schema, but entries from different CLIs are never merged.
+    pub fn get_servers_for_app(app: AppType) -> Result<IndexMap<String, Value>, AppError> {
+        Self::ensure_app_supports_mcp(&app)?;
+
+        let mut config = crate::app_config::MultiAppConfig::default();
+        match app {
+            AppType::Claude => {
+                crate::mcp::import_from_claude(&mut config)?;
+            }
+            AppType::Codex => {
+                crate::mcp::import_from_codex(&mut config)?;
+            }
+            AppType::Gemini => {
+                crate::mcp::import_from_gemini(&mut config)?;
+            }
+            AppType::OpenCode => {
+                crate::mcp::import_from_opencode(&mut config)?;
+            }
+            AppType::Hermes => {
+                crate::mcp::import_from_hermes(&mut config)?;
+            }
+            AppType::ClaudeDesktop | AppType::OpenClaw => unreachable!(),
+        }
+
+        let mut entries = config
+            .mcp
+            .servers
+            .unwrap_or_default()
+            .into_values()
+            .map(|server| (server.id, server.server))
+            .collect::<Vec<_>>();
+        entries.sort_by(|left, right| left.0.cmp(&right.0));
+
+        Ok(entries.into_iter().collect())
+    }
+
+    /// Add or update one server in exactly one CLI's live configuration.
+    pub fn upsert_server_for_app(
+        app: AppType,
+        id: &str,
+        server_spec: Value,
+    ) -> Result<(), AppError> {
+        Self::ensure_app_supports_mcp(&app)?;
+        Self::prepare_app_config_dir(&app)?;
+        let id = id.trim();
+        if id.is_empty() {
+            return Err(AppError::InvalidInput("MCP 服务器 ID 不能为空".to_string()));
+        }
+        mcp::validate_server_spec(&server_spec)?;
+
+        match app {
+            AppType::Claude => {
+                mcp::sync_single_server_to_claude(&Default::default(), id, &server_spec)
+            }
+            AppType::Codex => {
+                mcp::sync_single_server_to_codex(&Default::default(), id, &server_spec)
+            }
+            AppType::Gemini => {
+                mcp::sync_single_server_to_gemini(&Default::default(), id, &server_spec)
+            }
+            AppType::OpenCode => {
+                mcp::sync_single_server_to_opencode(&Default::default(), id, &server_spec)
+            }
+            AppType::Hermes => {
+                mcp::sync_single_server_to_hermes(&Default::default(), id, &server_spec)
+            }
+            AppType::ClaudeDesktop | AppType::OpenClaw => unreachable!(),
+        }
+    }
+
+    /// Remove one server from exactly one CLI's live configuration.
+    pub fn delete_server_for_app(app: AppType, id: &str) -> Result<(), AppError> {
+        Self::ensure_app_supports_mcp(&app)?;
+        let id = id.trim();
+        if id.is_empty() {
+            return Err(AppError::InvalidInput("MCP 服务器 ID 不能为空".to_string()));
+        }
+
+        match app {
+            AppType::Claude => mcp::remove_server_from_claude(id),
+            AppType::Codex => mcp::remove_server_from_codex(id),
+            AppType::Gemini => mcp::remove_server_from_gemini(id),
+            AppType::OpenCode => mcp::remove_server_from_opencode(id),
+            AppType::Hermes => mcp::remove_server_from_hermes(id),
+            AppType::ClaudeDesktop | AppType::OpenClaw => unreachable!(),
+        }
+    }
+
     /// 获取所有 MCP 服务器（统一结构）
     pub fn get_all_servers(state: &AppState) -> Result<IndexMap<String, McpServer>, AppError> {
         state.db.get_all_mcp_servers()
@@ -113,7 +263,9 @@ impl McpService {
                 mcp::sync_single_server_to_claude(&Default::default(), &server.id, &server.server)?;
             }
             AppType::ClaudeDesktop => {
-                log::debug!("Claude Desktop 3P profiles do not use CC Switch MCP sync, skipping");
+                log::debug!(
+                    "Claude Desktop 3P profiles do not use Agent Switch MCP sync, skipping"
+                );
             }
             AppType::Codex => {
                 // Codex uses TOML format, must use the correct function
@@ -158,7 +310,9 @@ impl McpService {
         match app {
             AppType::Claude => mcp::remove_server_from_claude(id)?,
             AppType::ClaudeDesktop => {
-                log::debug!("Claude Desktop 3P profiles do not use CC Switch MCP sync, skipping");
+                log::debug!(
+                    "Claude Desktop 3P profiles do not use Agent Switch MCP sync, skipping"
+                );
             }
             AppType::Codex => mcp::remove_server_from_codex(id)?,
             AppType::Gemini => mcp::remove_server_from_gemini(id)?,

@@ -1,221 +1,194 @@
 import {
-  useState,
-  useMemo,
-  useEffect,
   forwardRef,
+  useEffect,
   useImperativeHandle,
+  useMemo,
+  useState,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { AlertTriangle, Loader2, RefreshCw, Search } from "lucide-react";
+import { toast } from "sonner";
+
+import { SkillLeaderboardTable } from "./SkillLeaderboardTable";
+import { SkillDetailPage } from "./SkillDetailPage";
+import { SkillPublisherPage } from "./SkillPublisherPage";
+import { SkillRepositoryPage } from "./SkillRepositoryPage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { RefreshCw, Search, Loader2 } from "lucide-react";
-import { toast } from "sonner";
-import { SkillCard } from "./SkillCard";
-import { RepoManagerPanel } from "./RepoManagerPanel";
-import {
-  useDiscoverableSkills,
-  useInstalledSkills,
+  useAppSkills,
+  useGlobalSkills,
+  useInstallGlobalSkill,
   useInstallSkill,
-  useSkillRepos,
-  useAddSkillRepo,
-  useRemoveSkillRepo,
   useSearchSkillsSh,
+  useSkillsShLeaderboard,
 } from "@/hooks/useSkills";
-import type { AppId } from "@/lib/api/types";
 import type {
   DiscoverableSkill,
-  SkillRepo,
   SkillsShDiscoverableSkill,
+  SkillsShLeaderboardView,
 } from "@/lib/api/skills";
+import type { SkillAppId } from "@/lib/api/types";
 import { formatSkillError } from "@/lib/errors/skillErrorParser";
+import { cn } from "@/lib/utils";
 
 interface SkillsPageProps {
-  initialApp?: AppId;
+  initialApp?: SkillAppId;
+  installTarget?: "app" | "global";
 }
 
 export interface SkillsPageHandle {
   refresh: () => void;
-  openRepoManager: () => void;
 }
 
-type SearchSource = "repos" | "skillssh";
+const SKILLSSH_RESULT_LIMIT = 100;
+const LEADERBOARD_TABS: SkillsShLeaderboardView[] = [
+  "all-time",
+  "trending",
+  "hot",
+];
 
-const SKILLSSH_PAGE_SIZE = 20;
+type SkillsBrowserRoute =
+  | { kind: "leaderboard" }
+  | { kind: "publisher"; owner: string }
+  | { kind: "repository"; owner: string; repository: string }
+  | { kind: "skill"; skill: SkillsShDiscoverableSkill };
 
 /**
- * Skills 发现面板
- * 用于浏览和安装来自仓库或 skills.sh 的 Skills
+ * Skills 发现面板。
+ *
+ * skills.sh 是唯一的远程目录；应用入口决定安装到当前 CLI 还是全局目录。
  */
 export const SkillsPage = forwardRef<SkillsPageHandle, SkillsPageProps>(
-  ({ initialApp = "claude" }, ref) => {
-    const { t } = useTranslation();
-    const [repoManagerOpen, setRepoManagerOpen] = useState(false);
+  ({ initialApp = "claude", installTarget = "app" }, ref) => {
+    const { t, i18n } = useTranslation();
+    const [activeView, setActiveView] =
+      useState<SkillsShLeaderboardView>("all-time");
+    const [allTimeTotal, setAllTimeTotal] = useState<number>();
+    const [searchInput, setSearchInput] = useState("");
     const [searchQuery, setSearchQuery] = useState("");
-    const [filterRepo, setFilterRepo] = useState<string>("all");
-    const [filterStatus, setFilterStatus] = useState<
-      "all" | "installed" | "uninstalled"
-    >("all");
-
-    // skills.sh 搜索状态
-    const [searchSource, setSearchSource] = useState<SearchSource>("repos");
-    const [skillsShInput, setSkillsShInput] = useState("");
-    const [skillsShQuery, setSkillsShQuery] = useState("");
-    const [skillsShOffset, setSkillsShOffset] = useState(0);
-    const [accumulatedResults, setAccumulatedResults] = useState<
-      SkillsShDiscoverableSkill[]
-    >([]);
-
-    // currentApp 用于安装时的默认应用
+    const [browserRoute, setBrowserRoute] = useState<SkillsBrowserRoute>({
+      kind: "leaderboard",
+    });
     const currentApp = initialApp;
+    const isSearchMode = searchQuery.length >= 2;
 
-    // Queries
+    const { data: appSkills, refetch: refetchAppSkills } = useAppSkills(
+      currentApp,
+      installTarget === "app",
+    );
+    const { data: globalSkills, refetch: refetchGlobalSkills } =
+      useGlobalSkills(installTarget === "global");
     const {
-      data: discoverableSkills,
-      isLoading: loadingDiscoverable,
-      isFetching: fetchingDiscoverable,
-      refetch: refetchDiscoverable,
-    } = useDiscoverableSkills();
-    const { data: installedSkills } = useInstalledSkills();
-    const { data: repos = [], refetch: refetchRepos } = useSkillRepos();
-
-    // skills.sh 搜索
+      data: leaderboardResult,
+      isLoading: leaderboardLoading,
+      isFetching: leaderboardFetching,
+      isError: leaderboardError,
+      refetch: refetchLeaderboard,
+    } = useSkillsShLeaderboard(activeView, SKILLSSH_RESULT_LIMIT);
     const {
-      data: skillsShResult,
-      isLoading: loadingSkillsSh,
-      isFetching: fetchingSkillsSh,
-    } = useSearchSkillsSh(skillsShQuery, SKILLSSH_PAGE_SIZE, skillsShOffset);
+      data: searchResult,
+      isLoading: searchLoading,
+      isFetching: searchFetching,
+      isError: searchError,
+      refetch: refetchSearch,
+    } = useSearchSkillsSh(searchQuery, SKILLSSH_RESULT_LIMIT);
 
-    // 当搜索结果返回时累积
     useEffect(() => {
-      if (skillsShResult) {
-        if (skillsShOffset === 0) {
-          setAccumulatedResults(skillsShResult.skills);
-        } else {
-          setAccumulatedResults((prev) => [...prev, ...skillsShResult.skills]);
-        }
+      if (leaderboardResult) {
+        setAllTimeTotal(leaderboardResult.allTimeTotal);
       }
-    }, [skillsShResult, skillsShOffset]);
+    }, [leaderboardResult]);
 
-    // 手动提交搜索
-    const handleSkillsShSearch = () => {
-      const trimmed = skillsShInput.trim();
-      if (trimmed.length < 2) return;
-      setSkillsShOffset(0);
-      setAccumulatedResults([]);
-      setSkillsShQuery(trimmed);
-    };
-
-    // Mutations
     const installMutation = useInstallSkill();
-    const addRepoMutation = useAddSkillRepo();
-    const removeRepoMutation = useRemoveSkillRepo();
+    const installGlobalMutation = useInstallGlobalSkill();
+    const installedSkills =
+      installTarget === "global" ? globalSkills?.skills : appSkills?.skills;
 
-    // 已安装的 skill key 集合（使用 directory + repoOwner + repoName 组合判断）
-    const installedKeys = useMemo(() => {
-      if (!installedSkills) return new Set<string>();
-      return new Set(
-        installedSkills.map((s) => {
-          // 构建唯一 key：directory + repoOwner + repoName
-          const owner = s.repoOwner?.toLowerCase() || "";
-          const name = s.repoName?.toLowerCase() || "";
-          return `${s.directory.toLowerCase()}:${owner}:${name}`;
-        }),
-      );
-    }, [installedSkills]);
+    const installedDirectories = useMemo(
+      () =>
+        new Set(
+          (installedSkills ?? []).map((skill) =>
+            (
+              skill.directory.split(/[/\\]/).pop() ?? skill.directory
+            ).toLowerCase(),
+          ),
+        ),
+      [installedSkills],
+    );
 
-    type DiscoverableSkillItem = DiscoverableSkill & { installed: boolean };
-
-    // 从可发现技能中提取所有仓库选项
-    const repoOptions = useMemo(() => {
-      if (!discoverableSkills) return [];
-      const repoSet = new Set<string>();
-      discoverableSkills.forEach((s) => {
-        if (s.repoOwner && s.repoName) {
-          repoSet.add(`${s.repoOwner}/${s.repoName}`);
-        }
-      });
-      return Array.from(repoSet).sort();
-    }, [discoverableSkills]);
-
-    // 为发现列表补齐 installed 状态，供 SkillCard 使用
-    const skills: DiscoverableSkillItem[] = useMemo(() => {
-      if (!discoverableSkills) return [];
-      return discoverableSkills.map((d) => {
-        // 同时处理 / 和 \ 路径分隔符（兼容 Windows 和 Unix）
-        const installName =
-          d.directory.split(/[/\\]/).pop()?.toLowerCase() ||
-          d.directory.toLowerCase();
-        // 使用 directory + repoOwner + repoName 组合判断是否已安装
-        const key = `${installName}:${d.repoOwner.toLowerCase()}:${d.repoName.toLowerCase()}`;
-        return {
-          ...d,
-          installed: installedKeys.has(key),
-        };
-      });
-    }, [discoverableSkills, installedKeys]);
-
-    // 检查 skills.sh 结果的安装状态
-    const isSkillsShInstalled = (skill: SkillsShDiscoverableSkill): boolean => {
-      const key = `${skill.directory.toLowerCase()}:${skill.repoOwner.toLowerCase()}:${skill.repoName.toLowerCase()}`;
-      return installedKeys.has(key);
-    };
-
-    const loading =
-      searchSource === "repos"
-        ? loadingDiscoverable || fetchingDiscoverable
-        : false;
+    const displayedSkills = isSearchMode
+      ? (searchResult?.skills ?? [])
+      : (leaderboardResult?.skills ?? []);
+    const contentLoading = isSearchMode
+      ? searchLoading && searchResult === undefined
+      : leaderboardLoading && leaderboardResult === undefined;
+    const contentFetching = isSearchMode ? searchFetching : leaderboardFetching;
+    const contentError = isSearchMode ? searchError : leaderboardError;
 
     useImperativeHandle(ref, () => ({
       refresh: () => {
-        refetchDiscoverable();
-        refetchRepos();
+        if (isSearchMode) {
+          void refetchSearch();
+        } else {
+          void refetchLeaderboard();
+        }
+        if (installTarget === "global") {
+          void refetchGlobalSkills();
+        } else {
+          void refetchAppSkills();
+        }
       },
-      openRepoManager: () => setRepoManagerOpen(true),
     }));
 
-    // skills.sh 结果转为 DiscoverableSkill（复用现有安装流程）
+    const handleSearch = () => {
+      const query = searchInput.trim();
+      if (query.length < 2) return;
+
+      if (query === searchQuery) {
+        void refetchSearch();
+        return;
+      }
+      setSearchQuery(query);
+    };
+
+    const handleTabChange = (view: SkillsShLeaderboardView) => {
+      setActiveView(view);
+      setSearchInput("");
+      setSearchQuery("");
+    };
+
     const toDiscoverableSkill = (
-      s: SkillsShDiscoverableSkill,
+      skill: SkillsShDiscoverableSkill,
     ): DiscoverableSkill => ({
-      key: s.key,
-      name: s.name,
+      key: skill.key,
+      name: skill.name,
       description: "",
-      directory: s.directory,
-      repoOwner: s.repoOwner,
-      repoName: s.repoName,
-      repoBranch: s.repoBranch,
-      readmeUrl: s.readmeUrl,
+      directory: skill.directory,
+      repoOwner: skill.repoOwner,
+      repoName: skill.repoName,
+      repoBranch: skill.repoBranch,
+      readmeUrl: skill.detailUrl,
     });
 
     const handleInstall = async (key: string) => {
-      let skill: DiscoverableSkill | undefined;
-
-      if (searchSource === "skillssh") {
-        const found = accumulatedResults.find((s) => s.key === key);
-        if (found) {
-          skill = toDiscoverableSkill(found);
-        }
-      } else {
-        skill = discoverableSkills?.find((s) => s.key === key);
-      }
-
-      if (!skill) {
+      const result =
+        displayedSkills.find((skill) => skill.key === key) ??
+        (browserRoute.kind === "skill" && browserRoute.skill.key === key
+          ? browserRoute.skill
+          : undefined);
+      if (!result) {
         toast.error(t("skills.notFound"));
         return;
       }
 
+      const skill = toDiscoverableSkill(result);
       try {
-        await installMutation.mutateAsync({
-          skill,
-          currentApp,
-        });
+        if (installTarget === "global") {
+          await installGlobalMutation.mutateAsync(skill);
+        } else {
+          await installMutation.mutateAsync({ skill, currentApp });
+        }
         toast.success(t("skills.installSuccess", { name: skill.name }), {
           closeButton: true,
         });
@@ -235,381 +208,202 @@ export const SkillsPage = forwardRef<SkillsPageHandle, SkillsPageProps>(
       }
     };
 
-    const handleUninstall = async (_directory: string) => {
-      // 在发现面板中，不支持卸载，需要在主面板中操作
-      toast.info(t("skills.uninstallInMainPanel"));
-    };
-
-    const handleAddRepo = async (repo: SkillRepo) => {
-      try {
-        await addRepoMutation.mutateAsync(repo);
-        // Await discovery so we can report the real count
-        const { data: freshSkills } = await refetchDiscoverable();
-        const count =
-          freshSkills?.filter(
-            (s) =>
-              s.repoOwner === repo.owner &&
-              s.repoName === repo.name &&
-              (s.repoBranch || "main") === (repo.branch || "main"),
-          ).length ?? 0;
-        toast.success(
-          t("skills.repo.addSuccess", {
-            owner: repo.owner,
-            name: repo.name,
-            count,
-          }),
-          { closeButton: true },
-        );
-      } catch (error) {
-        toast.error(t("common.error"), {
-          description: String(error),
-        });
+    const refetchContent = () => {
+      if (isSearchMode) {
+        void refetchSearch();
+      } else {
+        void refetchLeaderboard();
       }
     };
-
-    const handleRemoveRepo = async (owner: string, name: string) => {
-      try {
-        await removeRepoMutation.mutateAsync({ owner, name });
-        toast.success(t("skills.repo.removeSuccess", { owner, name }), {
-          closeButton: true,
-        });
-      } catch (error) {
-        toast.error(t("common.error"), {
-          description: String(error),
-        });
-      }
-    };
-
-    // 过滤技能列表（仓库模式）
-    const filteredSkills = useMemo(() => {
-      // 按仓库筛选
-      const byRepo = skills.filter((skill) => {
-        if (filterRepo === "all") return true;
-        const skillRepo = `${skill.repoOwner}/${skill.repoName}`;
-        return skillRepo === filterRepo;
-      });
-
-      // 按安装状态筛选
-      const byStatus = byRepo.filter((skill) => {
-        if (filterStatus === "installed") return skill.installed;
-        if (filterStatus === "uninstalled") return !skill.installed;
-        return true;
-      });
-
-      // 按搜索关键词筛选
-      if (!searchQuery.trim()) return byStatus;
-
-      const query = searchQuery.toLowerCase();
-      return byStatus.filter((skill) => {
-        const name = skill.name?.toLowerCase() || "";
-        const repo =
-          skill.repoOwner && skill.repoName
-            ? `${skill.repoOwner}/${skill.repoName}`.toLowerCase()
-            : "";
-
-        return name.includes(query) || repo.includes(query);
-      });
-    }, [skills, searchQuery, filterRepo, filterStatus]);
-
-    // 是否有更多 skills.sh 结果
-    const hasMoreSkillsSh =
-      skillsShResult && accumulatedResults.length < skillsShResult.totalCount;
-
-    // 无仓库时默认切换到 skills.sh
-    const effectiveSource =
-      searchSource === "repos" && skills.length === 0 && !loading
-        ? "skillssh"
-        : searchSource;
 
     return (
-      <div className="px-6 flex flex-col flex-1 min-h-0 overflow-hidden bg-background/50">
-        {/* 技能网格（可滚动详情区域） */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden animate-fade-in">
-          <div className="py-4">
-            {/* 搜索来源切换 + 搜索框 */}
-            <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center">
-              {/* 来源切换 */}
-              <div className="inline-flex gap-1 rounded-md border border-border-default bg-background p-1 shrink-0">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={effectiveSource === "repos" ? "default" : "ghost"}
-                  className={
-                    effectiveSource === "repos"
-                      ? "shadow-sm min-w-[64px]"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted min-w-[64px]"
-                  }
-                  onClick={() => setSearchSource("repos")}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background px-6">
+        <div className="flex-1 overflow-x-hidden overflow-y-auto animate-fade-in">
+          {browserRoute.kind === "skill" ? (
+            <SkillDetailPage
+              skill={browserRoute.skill}
+              installed={installedDirectories.has(
+                browserRoute.skill.directory.toLowerCase(),
+              )}
+              onHome={() => setBrowserRoute({ kind: "leaderboard" })}
+              onPublisher={() =>
+                setBrowserRoute({
+                  kind: "publisher",
+                  owner: browserRoute.skill.repoOwner,
+                })
+              }
+              onRepository={() =>
+                setBrowserRoute({
+                  kind: "repository",
+                  owner: browserRoute.skill.repoOwner,
+                  repository: browserRoute.skill.repoName,
+                })
+              }
+              onInstall={handleInstall}
+            />
+          ) : browserRoute.kind === "publisher" ? (
+            <SkillPublisherPage
+              owner={browserRoute.owner}
+              onHome={() => setBrowserRoute({ kind: "leaderboard" })}
+              onSelectRepository={(repository) =>
+                setBrowserRoute({
+                  kind: "repository",
+                  owner: browserRoute.owner,
+                  repository,
+                })
+              }
+            />
+          ) : browserRoute.kind === "repository" ? (
+            <SkillRepositoryPage
+              owner={browserRoute.owner}
+              repository={browserRoute.repository}
+              onHome={() => setBrowserRoute({ kind: "leaderboard" })}
+              onPublisher={() =>
+                setBrowserRoute({
+                  kind: "publisher",
+                  owner: browserRoute.owner,
+                })
+              }
+              onSelectSkill={(skill) =>
+                setBrowserRoute({ kind: "skill", skill })
+              }
+            />
+          ) : (
+            <div className="py-3">
+              <div className="flex flex-col-reverse gap-3 border-b border-border md:flex-row md:items-end md:justify-between">
+                <div
+                  role="tablist"
+                  aria-label={t("skills.skillssh.leaderboard")}
+                  className="flex min-w-0 items-center gap-6"
                 >
-                  {t("skills.searchSource.repos")}
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={effectiveSource === "skillssh" ? "default" : "ghost"}
-                  className={
-                    effectiveSource === "skillssh"
-                      ? "shadow-sm min-w-[80px]"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted min-w-[80px]"
-                  }
-                  onClick={() => setSearchSource("skillssh")}
-                >
-                  skills.sh
-                </Button>
+                  {LEADERBOARD_TABS.map((view) => {
+                    const selected = !isSearchMode && activeView === view;
+                    const label =
+                      view === "all-time"
+                        ? t("skills.skillssh.tabs.allTime", {
+                            total:
+                              allTimeTotal === undefined
+                                ? "…"
+                                : allTimeTotal.toLocaleString(
+                                    i18n.resolvedLanguage ||
+                                      i18n.language ||
+                                      "en",
+                                  ),
+                          })
+                        : t(`skills.skillssh.tabs.${view}`);
+                    return (
+                      <button
+                        key={view}
+                        type="button"
+                        role="tab"
+                        aria-selected={selected}
+                        onClick={() => handleTabChange(view)}
+                        className={cn(
+                          "relative h-12 whitespace-nowrap border-b-2 border-transparent px-0 font-mono text-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-blue-500/40",
+                          selected && "border-foreground text-foreground",
+                        )}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="mb-2 flex min-w-0 items-center gap-2 md:w-80">
+                  <div className="relative min-w-0 flex-1">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      type="search"
+                      placeholder={t("skills.skillssh.searchPlaceholder")}
+                      value={searchInput}
+                      onChange={(event) => setSearchInput(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") handleSearch();
+                      }}
+                      className="h-8 border-transparent bg-muted/45 pl-9 pr-3 shadow-none focus:border-border-default"
+                    />
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleSearch}
+                    disabled={searchInput.trim().length < 2 || searchFetching}
+                    className="h-8 w-8 shrink-0 rounded-md"
+                    aria-label={t("skills.search")}
+                  >
+                    {searchFetching ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Search className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
               </div>
 
-              {effectiveSource === "repos" ? (
-                <>
-                  {/* 仓库模式搜索框 */}
-                  <div className="relative flex-1 min-w-0">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      type="text"
-                      placeholder={t("skills.searchPlaceholder")}
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-9 pr-3"
-                    />
-                  </div>
-                  {/* 仓库筛选 */}
-                  <div className="w-full md:w-56">
-                    <Select value={filterRepo} onValueChange={setFilterRepo}>
-                      <SelectTrigger className="bg-card border shadow-sm text-foreground">
-                        <SelectValue
-                          placeholder={t("skills.filter.repo")}
-                          className="text-left truncate"
-                        />
-                      </SelectTrigger>
-                      <SelectContent className="bg-card text-foreground shadow-lg max-h-64 min-w-[var(--radix-select-trigger-width)]">
-                        <SelectItem
-                          value="all"
-                          className="text-left pr-3 [&[data-state=checked]>span:first-child]:hidden"
-                        >
-                          {t("skills.filter.allRepos")}
-                        </SelectItem>
-                        {repoOptions.map((repo) => (
-                          <SelectItem
-                            key={repo}
-                            value={repo}
-                            className="text-left pr-3 [&[data-state=checked]>span:first-child]:hidden"
-                            title={repo}
-                          >
-                            <span className="truncate block max-w-[200px]">
-                              {repo}
-                            </span>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {/* 安装状态筛选 */}
-                  <div className="w-full md:w-36">
-                    <Select
-                      value={filterStatus}
-                      onValueChange={(val) =>
-                        setFilterStatus(
-                          val as "all" | "installed" | "uninstalled",
-                        )
-                      }
-                    >
-                      <SelectTrigger className="bg-card border shadow-sm text-foreground">
-                        <SelectValue
-                          placeholder={t("skills.filter.placeholder")}
-                          className="text-left"
-                        />
-                      </SelectTrigger>
-                      <SelectContent className="bg-card text-foreground shadow-lg">
-                        <SelectItem
-                          value="all"
-                          className="text-left pr-3 [&[data-state=checked]>span:first-child]:hidden"
-                        >
-                          {t("skills.filter.all")}
-                        </SelectItem>
-                        <SelectItem
-                          value="installed"
-                          className="text-left pr-3 [&[data-state=checked]>span:first-child]:hidden"
-                        >
-                          {t("skills.filter.installed")}
-                        </SelectItem>
-                        <SelectItem
-                          value="uninstalled"
-                          className="text-left pr-3 [&[data-state=checked]>span:first-child]:hidden"
-                        >
-                          {t("skills.filter.uninstalled")}
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {searchQuery && (
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      {t("skills.count", { count: filteredSkills.length })}
-                    </p>
-                  )}
-                </>
-              ) : (
-                <>
-                  {/* skills.sh 搜索框 */}
-                  <div className="relative flex-1 min-w-0">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      type="text"
-                      placeholder={t("skills.skillssh.searchPlaceholder")}
-                      value={skillsShInput}
-                      onChange={(e) => setSkillsShInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") handleSkillsShSearch();
-                      }}
-                      className="pl-9 pr-3"
-                    />
-                  </div>
+              {isSearchMode && (
+                <div className="border-b border-border py-3 text-sm text-muted-foreground">
+                  {t("skills.skillssh.searchResultsFor", {
+                    query: searchQuery,
+                  })}
+                </div>
+              )}
+
+              {contentLoading ? (
+                <div className="flex h-64 items-center justify-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                  <span className="ml-3 text-sm text-muted-foreground">
+                    {isSearchMode
+                      ? t("skills.skillssh.loading")
+                      : t("skills.skillssh.loadingLeaderboard")}
+                  </span>
+                </div>
+              ) : contentError ? (
+                <div className="flex h-64 flex-col items-center justify-center text-center">
+                  <AlertTriangle className="mb-4 h-10 w-10 text-destructive/70" />
+                  <p className="text-base font-medium text-foreground">
+                    {isSearchMode
+                      ? t("skills.skillssh.error")
+                      : t("skills.skillssh.leaderboardError")}
+                  </p>
                   <Button
+                    variant="outline"
                     size="sm"
-                    onClick={handleSkillsShSearch}
-                    disabled={
-                      skillsShInput.trim().length < 2 || fetchingSkillsSh
-                    }
-                    className="shrink-0"
+                    className="mt-4"
+                    onClick={refetchContent}
+                    disabled={contentFetching}
                   >
-                    {fetchingSkillsSh ? (
-                      <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                    ) : (
-                      <Search className="h-3.5 w-3.5 mr-1.5" />
-                    )}
-                    {t("skills.search")}
+                    <RefreshCw
+                      className={cn(
+                        "mr-1.5 h-3.5 w-3.5",
+                        contentFetching && "animate-spin",
+                      )}
+                    />
+                    {t("common.refresh")}
                   </Button>
-                </>
+                </div>
+              ) : displayedSkills.length === 0 ? (
+                <div className="flex h-48 flex-col items-center justify-center text-center">
+                  <p className="text-lg font-medium text-foreground">
+                    {isSearchMode
+                      ? t("skills.skillssh.noResults", { query: searchQuery })
+                      : t("skills.skillssh.noLeaderboardResults")}
+                  </p>
+                </div>
+              ) : (
+                <SkillLeaderboardTable
+                  skills={displayedSkills}
+                  installedDirectories={installedDirectories}
+                  onInstall={handleInstall}
+                  onSelect={(skill) =>
+                    setBrowserRoute({ kind: "skill", skill })
+                  }
+                />
               )}
             </div>
-
-            {/* 内容区域 */}
-            {effectiveSource === "repos" ? (
-              /* ===== 仓库模式 ===== */
-              loading ? (
-                <div className="flex items-center justify-center h-64">
-                  <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
-                </div>
-              ) : skills.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-64 text-center">
-                  <p className="text-lg font-medium text-foreground">
-                    {t("skills.empty")}
-                  </p>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    {t("skills.emptyDescription")}
-                  </p>
-                  <Button
-                    variant="link"
-                    onClick={() => setRepoManagerOpen(true)}
-                    className="mt-3 text-sm font-normal"
-                  >
-                    {t("skills.addRepo")}
-                  </Button>
-                </div>
-              ) : filteredSkills.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-48 text-center">
-                  <p className="text-lg font-medium text-foreground">
-                    {t("skills.noResults")}
-                  </p>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    {t("skills.emptyDescription")}
-                  </p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {filteredSkills.map((skill) => (
-                    <SkillCard
-                      key={skill.key}
-                      skill={skill}
-                      onInstall={handleInstall}
-                      onUninstall={handleUninstall}
-                    />
-                  ))}
-                </div>
-              )
-            ) : (
-              /* ===== skills.sh 模式 ===== */
-              <>
-                {loadingSkillsSh && accumulatedResults.length === 0 ? (
-                  <div className="flex items-center justify-center h-64">
-                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                    <span className="ml-3 text-sm text-muted-foreground">
-                      {t("skills.skillssh.loading")}
-                    </span>
-                  </div>
-                ) : skillsShQuery.length < 2 ? (
-                  <div className="flex flex-col items-center justify-center h-64 text-center">
-                    <Search className="h-12 w-12 text-muted-foreground/30 mb-4" />
-                    <p className="text-sm text-muted-foreground">
-                      {t("skills.skillssh.searchPlaceholder")}
-                    </p>
-                  </div>
-                ) : accumulatedResults.length === 0 && !loadingSkillsSh ? (
-                  <div className="flex flex-col items-center justify-center h-48 text-center">
-                    <p className="text-lg font-medium text-foreground">
-                      {t("skills.skillssh.noResults", {
-                        query: skillsShQuery,
-                      })}
-                    </p>
-                  </div>
-                ) : (
-                  <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {accumulatedResults.map((skill) => {
-                        const installed = isSkillsShInstalled(skill);
-                        return (
-                          <SkillCard
-                            key={skill.key}
-                            skill={{
-                              ...toDiscoverableSkill(skill),
-                              installed,
-                            }}
-                            installs={skill.installs}
-                            onInstall={handleInstall}
-                            onUninstall={handleUninstall}
-                          />
-                        );
-                      })}
-                    </div>
-
-                    {/* 加载更多 + 底部信息 */}
-                    <div className="mt-6 flex flex-col items-center gap-2">
-                      {hasMoreSkillsSh && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={fetchingSkillsSh}
-                          onClick={() =>
-                            setSkillsShOffset(
-                              (prev) => prev + SKILLSSH_PAGE_SIZE,
-                            )
-                          }
-                        >
-                          {fetchingSkillsSh ? (
-                            <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                          ) : null}
-                          {t("skills.skillssh.loadMore")}
-                        </Button>
-                      )}
-                      <p className="text-xs text-muted-foreground">
-                        {t("skills.skillssh.poweredBy")}
-                      </p>
-                    </div>
-                  </>
-                )}
-              </>
-            )}
-          </div>
+          )}
         </div>
-
-        {/* 仓库管理面板 */}
-        {repoManagerOpen && (
-          <RepoManagerPanel
-            repos={repos}
-            skills={skills}
-            onAdd={handleAddRepo}
-            onRemove={handleRemoveRepo}
-            onClose={() => setRepoManagerOpen(false)}
-          />
-        )}
       </div>
     );
   },

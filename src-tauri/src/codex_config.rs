@@ -12,7 +12,8 @@ use std::process::Command;
 use toml_edit::{Array, DocumentMut, Item, Table};
 
 pub const CC_SWITCH_CODEX_MODEL_PROVIDER_ID: &str = "custom";
-pub const CC_SWITCH_CODEX_MODEL_CATALOG_FILENAME: &str = "cc-switch-model-catalog.json";
+pub const CC_SWITCH_CODEX_MODEL_CATALOG_FILENAME: &str = "agentswitch-model-catalog.json";
+const LEGACY_CC_SWITCH_CODEX_MODEL_CATALOG_FILENAME: &str = "cc-switch-model-catalog.json";
 const CODEX_MODEL_CATALOG_TEMPLATE_SLUG: &str = "gpt-5.5";
 
 /// Reserved built-in provider IDs from OpenAI Codex's config/model-provider
@@ -726,13 +727,13 @@ pub fn prepare_codex_config_text_with_model_catalog(
 }
 
 /// Reverse of `prepare_codex_config_text_with_model_catalog`: read the
-/// cc-switch–maintained catalog file referenced by `~/.codex/config.toml` and
+/// Agent Switch-maintained catalog file referenced by `~/.codex/config.toml` and
 /// convert it back into the simplified shape the frontend table uses:
 /// `{ "models": [{ "model", "displayName"?, "contextWindow"? }, ...] }`.
 ///
 /// We only reverse-parse catalogs whose `model_catalog_json` path is the
-/// cc-switch–generated file (identified by filename
-/// `cc-switch-model-catalog.json`). A user-managed external catalog file is
+/// Agent Switch-generated file (identified by the current filename or the
+/// legacy `cc-switch-model-catalog.json`). A user-managed external catalog file is
 /// left alone — surfacing its richer structure as the simplified table would
 /// be a downgrade we can't safely round-trip.
 ///
@@ -751,7 +752,7 @@ pub fn prepare_codex_config_text_with_model_catalog(
 pub fn read_codex_model_catalog_simplified_from_live() -> Result<Option<Value>, AppError> {
     let config_text = read_codex_config_text()?;
     let generated_path = get_codex_model_catalog_path();
-    let Some(catalog_path) = resolve_cc_switch_catalog_path(&config_text, &generated_path) else {
+    let Some(catalog_path) = resolve_agentswitch_catalog_path(&config_text, &generated_path) else {
         return Ok(None);
     };
     if !catalog_path.exists() {
@@ -766,10 +767,10 @@ pub fn read_codex_model_catalog_simplified_from_live() -> Result<Option<Value>, 
     ))
 }
 
-/// Given `config.toml` text, resolve the on-disk path of the cc-switch–owned
+/// Given `config.toml` text, resolve the on-disk path of the Agent Switch-owned
 /// catalog file (returns `None` if `model_catalog_json` is absent or points at
 /// a file we don't own). Relative paths fall back to `generated_path`.
-pub(crate) fn resolve_cc_switch_catalog_path(
+pub(crate) fn resolve_agentswitch_catalog_path(
     config_text: &str,
     generated_path: &Path,
 ) -> Option<PathBuf> {
@@ -784,14 +785,20 @@ pub(crate) fn resolve_cc_switch_catalog_path(
         .filter(|s| !s.is_empty())?;
 
     let referenced_path = Path::new(catalog_path_str);
-    let is_cc_switch_owned = referenced_path.file_name().and_then(|name| name.to_str())
-        == Some(CC_SWITCH_CODEX_MODEL_CATALOG_FILENAME);
-    if !is_cc_switch_owned {
+    let referenced_filename = referenced_path.file_name().and_then(|name| name.to_str());
+    let is_agentswitch_owned = matches!(
+        referenced_filename,
+        Some(CC_SWITCH_CODEX_MODEL_CATALOG_FILENAME)
+            | Some(LEGACY_CC_SWITCH_CODEX_MODEL_CATALOG_FILENAME)
+    );
+    if !is_agentswitch_owned {
         return None;
     }
 
     if referenced_path.is_absolute() {
         Some(referenced_path.to_path_buf())
+    } else if referenced_filename == Some(LEGACY_CC_SWITCH_CODEX_MODEL_CATALOG_FILENAME) {
+        Some(generated_path.with_file_name(LEGACY_CC_SWITCH_CODEX_MODEL_CATALOG_FILENAME))
     } else {
         Some(generated_path.to_path_buf())
     }
@@ -891,11 +898,67 @@ pub fn write_codex_provider_live_with_catalog(
     auth: &Value,
     config_text: Option<&str>,
 ) -> Result<(), AppError> {
-    let prepared_config = config_text
-        .map(|text| prepare_codex_config_text_with_model_catalog(settings, text))
-        .transpose()?;
+    let prepared_config =
+        prepare_codex_config_text_with_model_catalog(settings, config_text.unwrap_or(""))?;
+    let existing_config = read_and_validate_codex_config_text()?;
+    let prepared_config = preserve_live_codex_mcp_sections(&prepared_config, &existing_config)?;
 
-    write_codex_live_for_provider(provider_id, category, auth, prepared_config.as_deref())
+    write_codex_live_for_provider(provider_id, category, auth, Some(prepared_config.as_str()))
+}
+
+/// Keep MCP configuration independent from provider snapshots.
+///
+/// Provider records may contain historical MCP sections because older versions
+/// stored the whole `config.toml`. The live file is now the MCP source of truth,
+/// so a provider switch must discard MCP sections from the target snapshot and
+/// restore exactly the sections that are already present in the live config.
+pub(crate) fn preserve_live_codex_mcp_sections(
+    target_config: &str,
+    existing_config: &str,
+) -> Result<String, AppError> {
+    let mut target_doc = target_config
+        .parse::<DocumentMut>()
+        .map_err(|e| AppError::Message(format!("Invalid target Codex config.toml: {e}")))?;
+    let existing_doc = existing_config
+        .parse::<DocumentMut>()
+        .map_err(|e| AppError::Message(format!("Invalid existing Codex config.toml: {e}")))?;
+
+    target_doc.as_table_mut().remove("mcp_servers");
+    if let Some(mcp_table) = target_doc.get_mut("mcp").and_then(Item::as_table_like_mut) {
+        mcp_table.remove("servers");
+    }
+    let remove_empty_mcp = target_doc
+        .get("mcp")
+        .and_then(Item::as_table_like)
+        .is_some_and(|table| table.is_empty());
+    if remove_empty_mcp {
+        target_doc.as_table_mut().remove("mcp");
+    }
+
+    if let Some(existing_servers) = existing_doc.get("mcp_servers") {
+        target_doc["mcp_servers"] = existing_servers.clone();
+    }
+
+    if let Some(existing_legacy_servers) = existing_doc
+        .get("mcp")
+        .and_then(Item::as_table_like)
+        .and_then(|mcp| mcp.get("servers"))
+    {
+        if !target_doc.contains_key("mcp") {
+            target_doc["mcp"] = toml_edit::table();
+        }
+        let target_mcp = target_doc
+            .get_mut("mcp")
+            .and_then(Item::as_table_like_mut)
+            .ok_or_else(|| {
+                AppError::Message(
+                    "Invalid target Codex config.toml: mcp must be a table".to_string(),
+                )
+            })?;
+        target_mcp.insert("servers", existing_legacy_servers.clone());
+    }
+
+    Ok(target_doc.to_string())
 }
 
 /// Extract a provider-scoped `experimental_bearer_token` from Codex `config.toml`.
@@ -991,7 +1054,7 @@ fn codex_auth_helper_executable() -> Result<PathBuf, AppError> {
 
     std::env::current_exe().map_err(|error| {
         AppError::Message(format!(
-            "Unable to locate the CC Switch executable for Codex authentication: {error}"
+            "Unable to locate the Agent Switch executable for Codex authentication: {error}"
         ))
     })
 }
@@ -1045,7 +1108,7 @@ fn set_codex_command_backed_auth(
     provider_table.remove("requires_openai_auth");
 
     let executable = codex_auth_helper_executable()?;
-    let database_path = crate::config::get_app_config_dir().join("cc-switch.db");
+    let database_path = crate::config::get_app_config_dir().join("agentswitch.db");
     let mut args = Array::new();
     args.push(crate::codex_auth_helper::CODEX_PROVIDER_TOKEN_ARG);
     args.push("--database");
@@ -1574,7 +1637,7 @@ mod tests {
 
     #[test]
     fn unified_session_bucket_preserves_other_keys_and_explicit_routing() {
-        let with_catalog = "model_catalog_json = \"cc-switch-model-catalog.json\"\n";
+        let with_catalog = "model_catalog_json = \"agentswitch-model-catalog.json\"\n";
         let injected = inject_codex_unified_session_bucket(with_catalog).expect("inject");
         assert!(injected.contains("model_catalog_json"));
         assert!(injected.contains("model_provider = \"custom\""));
@@ -1608,7 +1671,7 @@ base_url = "https://relay.example/v1"
         let stripped = strip_codex_unified_session_bucket(&injected).expect("strip");
         assert_eq!(stripped.trim(), "");
 
-        let with_catalog = "model_catalog_json = \"cc-switch-model-catalog.json\"\n";
+        let with_catalog = "model_catalog_json = \"agentswitch-model-catalog.json\"\n";
         let injected = inject_codex_unified_session_bucket(with_catalog).expect("inject");
         let stripped = strip_codex_unified_session_bucket(&injected).expect("strip");
         assert_eq!(stripped, with_catalog);
@@ -1825,7 +1888,7 @@ model = "gpt-5.4"
         );
         assert!(
             auth.get("command").and_then(|v| v.as_str()).is_some(),
-            "Codex should invoke the CC Switch token helper"
+            "Codex should invoke the Agent Switch token helper"
         );
         let args = auth
             .get("args")
@@ -2293,7 +2356,7 @@ base_url = "https://production.api/v1"
 [model_providers.any]
 name = "any"
 "#;
-        let catalog_path = Path::new("/tmp/cc-switch-model-catalog.json");
+        let catalog_path = Path::new("/tmp/agentswitch-model-catalog.json");
 
         let result = set_codex_model_catalog_json_field(input, Some(catalog_path)).unwrap();
         let parsed: toml::Value = toml::from_str(&result).unwrap();
@@ -2315,30 +2378,42 @@ name = "any"
 
     #[test]
     fn resolve_catalog_path_returns_none_when_config_missing_field() {
-        let generated = PathBuf::from("/tmp/.codex/cc-switch-model-catalog.json");
-        assert!(resolve_cc_switch_catalog_path("", &generated).is_none());
+        let generated = PathBuf::from("/tmp/.codex/agentswitch-model-catalog.json");
+        assert!(resolve_agentswitch_catalog_path("", &generated).is_none());
         assert!(
-            resolve_cc_switch_catalog_path("model = \"gpt-5\"", &generated).is_none(),
+            resolve_agentswitch_catalog_path("model = \"gpt-5\"", &generated).is_none(),
             "no model_catalog_json field should yield None"
         );
     }
 
     #[test]
-    fn resolve_catalog_path_accepts_cc_switch_owned_file() {
-        let generated = PathBuf::from("/tmp/.codex/cc-switch-model-catalog.json");
-        let config = r#"model_catalog_json = "/tmp/.codex/cc-switch-model-catalog.json"
+    fn resolve_catalog_path_accepts_agentswitch_owned_file() {
+        let generated = PathBuf::from("/tmp/.codex/agentswitch-model-catalog.json");
+        let config = r#"model_catalog_json = "/tmp/.codex/agentswitch-model-catalog.json"
 "#;
-        let resolved = resolve_cc_switch_catalog_path(config, &generated).expect("path resolves");
+        let resolved = resolve_agentswitch_catalog_path(config, &generated).expect("path resolves");
         assert_eq!(resolved, generated);
     }
 
     #[test]
+    fn resolve_catalog_path_accepts_legacy_cc_switch_owned_file() {
+        let generated = PathBuf::from("/tmp/.codex/agentswitch-model-catalog.json");
+        let config = r#"model_catalog_json = "cc-switch-model-catalog.json"
+"#;
+        let resolved = resolve_agentswitch_catalog_path(config, &generated).expect("path resolves");
+        assert_eq!(
+            resolved,
+            PathBuf::from("/tmp/.codex/cc-switch-model-catalog.json")
+        );
+    }
+
+    #[test]
     fn resolve_catalog_path_rejects_user_owned_external_file() {
-        let generated = PathBuf::from("/tmp/.codex/cc-switch-model-catalog.json");
+        let generated = PathBuf::from("/tmp/.codex/agentswitch-model-catalog.json");
         let config = r#"model_catalog_json = "/Users/me/.codex/my-handwritten-catalog.json"
 "#;
         assert!(
-            resolve_cc_switch_catalog_path(config, &generated).is_none(),
+            resolve_agentswitch_catalog_path(config, &generated).is_none(),
             "external catalog files should be left alone"
         );
     }
@@ -2529,10 +2604,10 @@ name = "any"
         let input = r#"model_provider = "custom"
 model = "glm-5"
 "#;
-        // Simulate a WSL UNC path as cc-switch would see it on Windows;
+        // Simulate a WSL UNC path as Agent Switch would see it on Windows;
         // the function now writes just the relative filename.
         let unc_path =
-            Path::new(r"\\wsl.localhost\Ubuntu\home\user\.codex\cc-switch-model-catalog.json");
+            Path::new(r"\\wsl.localhost\Ubuntu\home\user\.codex\agentswitch-model-catalog.json");
 
         let result = set_codex_model_catalog_json_field(input, Some(unc_path)).unwrap();
         let parsed: toml::Value = toml::from_str(&result).unwrap();
@@ -2552,7 +2627,7 @@ model = "glm-5"
         let input = r#"model_provider = "custom"
 model = "glm-5"
 "#;
-        let regular_path = Path::new("/home/user/.codex/cc-switch-model-catalog.json");
+        let regular_path = Path::new("/home/user/.codex/agentswitch-model-catalog.json");
 
         let result = set_codex_model_catalog_json_field(input, Some(regular_path)).unwrap();
         let parsed: toml::Value = toml::from_str(&result).unwrap();
@@ -2565,16 +2640,16 @@ model = "glm-5"
     }
 
     #[test]
-    fn set_catalog_json_none_removes_cc_switch_owned_by_filename() {
+    fn set_catalog_json_none_removes_agentswitch_owned_by_filename() {
         // After the WSL fix, TOML may contain a Linux-style path.
         // The None arm must still remove it (file_name match catches any format).
-        let input = r#"model_catalog_json = "/home/user/.codex/cc-switch-model-catalog.json"
+        let input = r#"model_catalog_json = "/home/user/.codex/agentswitch-model-catalog.json"
 "#;
         let result = set_codex_model_catalog_json_field(input, None).unwrap();
         let parsed: toml::Value = toml::from_str(&result).unwrap();
         assert!(
             parsed.get("model_catalog_json").is_none(),
-            "None arm should remove cc-switch-owned field regardless of path format"
+            "None arm should remove Agent Switch-owned field regardless of path format"
         );
     }
 
@@ -2594,10 +2669,10 @@ model = "glm-5"
     #[test]
     fn resolve_catalog_finds_relative_filename() {
         let config_text = r#"model_provider = "custom"
-model_catalog_json = "cc-switch-model-catalog.json"
+model_catalog_json = "agentswitch-model-catalog.json"
 "#;
-        let generated_path = PathBuf::from("/home/user/.codex/cc-switch-model-catalog.json");
-        let result = resolve_cc_switch_catalog_path(config_text, &generated_path);
+        let generated_path = PathBuf::from("/home/user/.codex/agentswitch-model-catalog.json");
+        let result = resolve_agentswitch_catalog_path(config_text, &generated_path);
         assert_eq!(
             result,
             Some(generated_path),
@@ -2609,23 +2684,93 @@ model_catalog_json = "cc-switch-model-catalog.json"
     fn resolve_catalog_ignores_user_owned_relative() {
         let config_text = r#"model_catalog_json = "my-custom-catalog.json"
 "#;
-        let generated_path = PathBuf::from("/home/user/.codex/cc-switch-model-catalog.json");
-        let result = resolve_cc_switch_catalog_path(config_text, &generated_path);
+        let generated_path = PathBuf::from("/home/user/.codex/agentswitch-model-catalog.json");
+        let result = resolve_agentswitch_catalog_path(config_text, &generated_path);
         assert_eq!(
             result, None,
-            "user-owned catalog should not be claimed by cc-switch"
+            "user-owned catalog should not be claimed by Agent Switch"
         );
     }
 
     #[test]
     fn set_catalog_json_none_removes_relative_path() {
-        let input = r#"model_catalog_json = "cc-switch-model-catalog.json"
+        let input = r#"model_catalog_json = "agentswitch-model-catalog.json"
 "#;
         let result = set_codex_model_catalog_json_field(input, None).unwrap();
         let parsed: toml::Value = toml::from_str(&result).unwrap();
         assert!(
             parsed.get("model_catalog_json").is_none(),
-            "None arm should remove relative cc-switch-owned field"
+            "None arm should remove relative Agent Switch-owned field"
+        );
+    }
+
+    #[test]
+    fn provider_config_uses_only_live_codex_mcp_sections() {
+        let target = r#"model = "gpt-5"
+
+[mcp]
+keep = true
+
+[mcp.servers.snapshot_legacy]
+command = "snapshot-legacy"
+
+[mcp_servers.snapshot]
+command = "snapshot"
+"#;
+        let existing = r#"[mcp.servers.live_legacy]
+command = "live-legacy"
+
+[mcp_servers.live]
+command = "live"
+"#;
+
+        let result =
+            preserve_live_codex_mcp_sections(target, existing).expect("merge live MCP sections");
+        let parsed: toml::Value = toml::from_str(&result).expect("parse merged config");
+
+        assert_eq!(
+            parsed.get("model").and_then(|value| value.as_str()),
+            Some("gpt-5")
+        );
+        assert_eq!(
+            parsed
+                .get("mcp")
+                .and_then(|value| value.get("keep"))
+                .and_then(|value| value.as_bool()),
+            Some(true),
+            "non-server keys in the target mcp table should remain"
+        );
+        assert!(
+            parsed
+                .get("mcp")
+                .and_then(|value| value.get("servers"))
+                .and_then(|value| value.get("snapshot_legacy"))
+                .is_none(),
+            "legacy MCP entries embedded in the provider snapshot must be discarded"
+        );
+        assert_eq!(
+            parsed
+                .get("mcp")
+                .and_then(|value| value.get("servers"))
+                .and_then(|value| value.get("live_legacy"))
+                .and_then(|value| value.get("command"))
+                .and_then(|value| value.as_str()),
+            Some("live-legacy")
+        );
+        assert!(
+            parsed
+                .get("mcp_servers")
+                .and_then(|value| value.get("snapshot"))
+                .is_none(),
+            "official MCP entries embedded in the provider snapshot must be discarded"
+        );
+        assert_eq!(
+            parsed
+                .get("mcp_servers")
+                .and_then(|value| value.get("live"))
+                .and_then(|value| value.get("command"))
+                .and_then(|value| value.as_str()),
+            Some("live")
         );
     }
 }

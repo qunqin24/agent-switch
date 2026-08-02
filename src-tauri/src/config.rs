@@ -6,6 +6,15 @@ use std::path::{Path, PathBuf};
 
 use crate::error::AppError;
 
+/// 应用数据目录名（~/.agentswitch）
+const APP_DIR_NAME: &str = ".agentswitch";
+/// 旧版（CC Switch 时代）数据目录名，仅用于一次性迁移
+const LEGACY_APP_DIR_NAME: &str = ".cc-switch";
+/// SQLite 数据库文件名
+const DB_FILE_NAME: &str = "agentswitch.db";
+/// 旧版数据库文件名，仅用于一次性迁移
+const LEGACY_DB_FILE_NAME: &str = "cc-switch.db";
+
 /// 获取用户主目录，带回退和日志
 ///
 /// ## Windows 注意事项
@@ -13,7 +22,7 @@ use crate::error::AppError;
 /// - `dirs::home_dir()` 在 Windows 上使用 `SHGetKnownFolderPath(FOLDERID_Profile)`，
 ///   返回的是真实用户目录（类似 `C:\\Users\\Alice`），与 v3.10.2 行为一致。
 /// - 不要直接使用 `HOME` 环境变量：它可能由 Git/Cygwin/MSYS 等第三方工具注入，
-///   且不一定等于用户目录，可能导致 `.cc-switch/cc-switch.db` 路径变化，从而“看起来像数据丢失”。
+///   且不一定等于用户目录，可能导致 `.agentswitch/agentswitch.db` 路径变化，从而“看起来像数据丢失”。
 ///
 /// ## 测试隔离
 ///
@@ -86,27 +95,27 @@ pub fn get_claude_settings_path() -> PathBuf {
     settings
 }
 
-/// 获取应用配置目录路径 (~/.cc-switch)
+/// 获取应用配置目录路径 (~/.agentswitch)
 pub fn get_app_config_dir() -> PathBuf {
     if let Some(custom) = crate::app_store::get_app_config_dir_override() {
         return custom;
     }
 
-    let default_dir = get_home_dir().join(".cc-switch");
+    let default_dir = get_home_dir().join(APP_DIR_NAME);
 
     // 兼容 v3.10.3：当用户环境存在 `HOME` 且与真实用户目录不同，
-    // v3.10.3 可能在 `HOME/.cc-switch/` 下创建/使用了数据库。
+    // v3.10.3 可能在 `HOME/.agentswitch/` 下创建/使用了数据库。
     // 这里仅在“默认位置没有数据库”时回退到旧位置，避免再次出现“供应商消失”问题，
     // 同时也避免新安装因为 `HOME` 被设置而写入非预期路径。
     #[cfg(windows)]
     {
-        let default_db = default_dir.join("cc-switch.db");
+        let default_db = default_dir.join(DB_FILE_NAME);
         if !default_db.exists() {
             if let Ok(home_env) = std::env::var("HOME") {
                 let trimmed = home_env.trim();
                 if !trimmed.is_empty() {
-                    let legacy_dir = PathBuf::from(trimmed).join(".cc-switch");
-                    if legacy_dir.join("cc-switch.db").exists() {
+                    let legacy_dir = PathBuf::from(trimmed).join(APP_DIR_NAME);
+                    if legacy_dir.join(DB_FILE_NAME).exists() {
                         log::info!(
                             "Detected v3.10.3 legacy database at {}, using it instead of {}",
                             legacy_dir.display(),
@@ -125,6 +134,203 @@ pub fn get_app_config_dir() -> PathBuf {
 /// 获取应用配置文件路径
 pub fn get_app_config_path() -> PathBuf {
     get_app_config_dir().join("config.json")
+}
+
+/// 将旧版（CC Switch 时代）数据迁移到 Agent Switch 使用的路径。
+///
+/// 必须在应用启动早期、任何组件读写 `get_app_config_dir()` 之前调用。
+/// 迁移在全部步骤成功前保留旧目录；失败会返回错误，由启动流程阻止创建空数据库。
+pub fn migrate_legacy_app_data_dir() -> std::io::Result<()> {
+    let home = get_home_dir();
+
+    if let Some(custom_dir) = crate::app_store::get_app_config_dir_override() {
+        // 自定义目录不会整体移动，但数据库文件名仍属于应用管理范围。
+        migrate_legacy_database_file(&custom_dir)?;
+        migrate_legacy_device_settings(&home)?;
+        return Ok(());
+    }
+
+    let new_dir = home.join(APP_DIR_NAME);
+
+    #[cfg(windows)]
+    let home_env = std::env::var_os("HOME").map(PathBuf::from);
+    #[cfg(not(windows))]
+    let home_env: Option<PathBuf> = None;
+
+    // Windows v3.10.3 may have used HOME instead of the real Known Folder.
+    // Iterate instead of selecting only one source so a settings-only default
+    // directory cannot hide a database in the divergent HOME directory.
+    for legacy_dir in legacy_data_dir_candidates(&home, home_env.as_deref()) {
+        if legacy_dir == new_dir || !has_primary_legacy_payload(&legacy_dir) {
+            continue;
+        }
+        migrate_legacy_directory(&legacy_dir, &new_dir)?;
+    }
+
+    migrate_legacy_database_file(&new_dir)?;
+    migrate_legacy_device_settings(&home)?;
+    Ok(())
+}
+
+fn legacy_data_dir_candidates(home: &Path, home_env: Option<&Path>) -> Vec<PathBuf> {
+    let mut candidates = vec![home.join(LEGACY_APP_DIR_NAME)];
+    if let Some(home_env) = home_env.filter(|path| *path != home) {
+        candidates.push(home_env.join(LEGACY_APP_DIR_NAME));
+        // Compatibility with early Agent Switch builds that retained the
+        // v3.10.3 HOME fallback after the rename.
+        candidates.push(home_env.join(APP_DIR_NAME));
+    }
+    candidates
+}
+
+fn has_primary_legacy_payload(dir: &Path) -> bool {
+    dir.join(LEGACY_DB_FILE_NAME).exists()
+        || dir.join(DB_FILE_NAME).exists()
+        || dir.join("config.json").exists()
+}
+
+fn migrate_legacy_database_file(dir: &Path) -> std::io::Result<()> {
+    let old_db = dir.join(LEGACY_DB_FILE_NAME);
+    let new_db = dir.join(DB_FILE_NAME);
+    if old_db.exists() && !new_db.exists() {
+        fs::rename(&old_db, &new_db).map_err(|e| {
+            std::io::Error::new(
+                e.kind(),
+                format!(
+                    "无法将旧数据库 {} 重命名为 {}: {e}",
+                    old_db.display(),
+                    new_db.display()
+                ),
+            )
+        })?;
+    }
+    Ok(())
+}
+
+fn migrate_legacy_directory(from: &Path, to: &Path) -> std::io::Result<()> {
+    if to.join(DB_FILE_NAME).exists() {
+        log::warn!(
+            "新目录 {} 已包含数据库，保留旧目录 {} 不做覆盖",
+            to.display(),
+            from.display()
+        );
+        return Ok(());
+    }
+
+    log::info!(
+        "检测到旧版数据目录 {}，开始迁移到 {}",
+        from.display(),
+        to.display()
+    );
+
+    if !to.exists() {
+        match fs::rename(from, to) {
+            Ok(()) => {
+                if let Err(rename_error) = migrate_legacy_database_file(to) {
+                    return match fs::rename(to, from) {
+                        Ok(()) => Err(rename_error),
+                        Err(rollback_error) => Err(std::io::Error::new(
+                            rename_error.kind(),
+                            format!(
+                                "{rename_error}; 同时无法回滚目录到 {}: {rollback_error}",
+                                from.display()
+                            ),
+                        )),
+                    };
+                }
+                log::info!("✓ 数据目录迁移完成: {}", to.display());
+                return Ok(());
+            }
+            Err(e) => {
+                log::warn!("直接重命名迁移数据目录失败（{e}），尝试安全复制…");
+            }
+        }
+
+        let staging = to.with_file_name(format!(".agentswitch.migrating-{}", std::process::id()));
+        if staging.exists() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                format!("迁移暂存目录已存在: {}", staging.display()),
+            ));
+        }
+        if let Err(e) = copy_dir_recursive_no_overwrite(from, &staging)
+            .and_then(|_| migrate_legacy_database_file(&staging))
+            .and_then(|_| fs::rename(&staging, to))
+        {
+            let _ = fs::remove_dir_all(&staging);
+            return Err(e);
+        }
+    } else {
+        // A crash log or another harmless early-start artifact may already
+        // have created the new directory. Merge only missing files and keep
+        // the source intact until the database rename succeeds.
+        copy_dir_recursive_no_overwrite(from, to)?;
+        migrate_legacy_database_file(to)?;
+    }
+
+    if let Err(e) = fs::remove_dir_all(from) {
+        log::warn!("迁移完成，但清理旧目录失败: {e}（不影响使用，可手动删除）");
+    }
+    log::info!("✓ 数据目录迁移完成: {}", to.display());
+    Ok(())
+}
+
+fn migrate_legacy_device_settings(home: &Path) -> std::io::Result<()> {
+    let old_settings = home.join(LEGACY_APP_DIR_NAME).join("settings.json");
+    let new_settings = home.join(APP_DIR_NAME).join("settings.json");
+    if !old_settings.exists() || new_settings.exists() {
+        return Ok(());
+    }
+    if let Some(parent) = new_settings.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::rename(&old_settings, &new_settings).map_err(|e| {
+        std::io::Error::new(
+            e.kind(),
+            format!(
+                "无法迁移设备设置 {} 到 {}: {e}",
+                old_settings.display(),
+                new_settings.display()
+            ),
+        )
+    })
+}
+
+fn copy_dir_recursive_no_overwrite(from: &Path, to: &Path) -> std::io::Result<()> {
+    let created = !to.exists();
+    if created {
+        fs::create_dir_all(to)?;
+    }
+    for entry in fs::read_dir(from)? {
+        let entry = entry?;
+        let source = entry.path();
+        let dest = to.join(entry.file_name());
+        let file_type = entry.file_type()?;
+        if file_type.is_dir() {
+            copy_dir_recursive_no_overwrite(&source, &dest)?;
+        } else if file_type.is_symlink() {
+            if dest.exists() || dest.symlink_metadata().is_ok() {
+                continue;
+            }
+            let target = fs::read_link(&source)?;
+            #[cfg(unix)]
+            std::os::unix::fs::symlink(target, &dest)?;
+            #[cfg(windows)]
+            {
+                if source.is_dir() {
+                    std::os::windows::fs::symlink_dir(target, &dest)?;
+                } else {
+                    std::os::windows::fs::symlink_file(target, &dest)?;
+                }
+            }
+        } else if !dest.exists() {
+            fs::copy(&source, &dest)?;
+        }
+    }
+    if created {
+        fs::set_permissions(to, fs::metadata(from)?.permissions())?;
+    }
+    Ok(())
 }
 
 /// 清理供应商名称，确保文件名安全
@@ -261,6 +467,161 @@ pub fn atomic_write(path: &Path, data: &[u8]) -> Result<(), AppError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Mutex, OnceLock};
+
+    fn test_guard() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|err| err.into_inner())
+    }
+
+    /// 在隔离的临时 HOME 目录下运行测试，运行前后保存/恢复 `CC_SWITCH_TEST_HOME`。
+    fn with_test_home<T>(test_fn: impl FnOnce(&Path) -> T) -> T {
+        let _guard = test_guard();
+        let tmp = tempfile::tempdir().unwrap();
+        let old_test_home = std::env::var_os("CC_SWITCH_TEST_HOME");
+        std::env::set_var("CC_SWITCH_TEST_HOME", tmp.path());
+        let result = test_fn(tmp.path());
+        match old_test_home {
+            Some(value) => std::env::set_var("CC_SWITCH_TEST_HOME", value),
+            None => std::env::remove_var("CC_SWITCH_TEST_HOME"),
+        }
+        result
+    }
+
+    #[test]
+    fn migrate_legacy_app_data_dir_moves_db_and_renames_file() {
+        with_test_home(|home| {
+            let legacy_dir = home.join(LEGACY_APP_DIR_NAME);
+            fs::create_dir_all(legacy_dir.join("backups")).unwrap();
+            fs::write(legacy_dir.join(LEGACY_DB_FILE_NAME), b"db-bytes").unwrap();
+            fs::write(legacy_dir.join("settings.json"), b"{}").unwrap();
+            fs::write(legacy_dir.join("backups").join("snap.sql"), b"snap").unwrap();
+
+            migrate_legacy_app_data_dir().unwrap();
+
+            let new_dir = home.join(APP_DIR_NAME);
+            assert!(!legacy_dir.exists(), "旧目录应被迁移后移除");
+            assert!(
+                new_dir.join(DB_FILE_NAME).exists(),
+                "数据库应重命名为新文件名"
+            );
+            assert!(!new_dir.join(LEGACY_DB_FILE_NAME).exists());
+            assert_eq!(fs::read(new_dir.join(DB_FILE_NAME)).unwrap(), b"db-bytes");
+            assert!(new_dir.join("settings.json").exists());
+            assert!(new_dir.join("backups").join("snap.sql").exists());
+        });
+    }
+
+    #[test]
+    fn migrate_legacy_app_data_dir_skips_when_new_dir_exists() {
+        with_test_home(|home| {
+            let legacy_dir = home.join(LEGACY_APP_DIR_NAME);
+            fs::create_dir_all(&legacy_dir).unwrap();
+            fs::write(legacy_dir.join(LEGACY_DB_FILE_NAME), b"old").unwrap();
+
+            let new_dir = home.join(APP_DIR_NAME);
+            fs::create_dir_all(&new_dir).unwrap();
+            fs::write(new_dir.join(DB_FILE_NAME), b"new").unwrap();
+
+            migrate_legacy_app_data_dir().unwrap();
+
+            // 新目录已存在，旧目录应保持原样，不做任何迁移
+            assert!(legacy_dir.exists());
+            assert_eq!(fs::read(new_dir.join(DB_FILE_NAME)).unwrap(), b"new");
+        });
+    }
+
+    #[test]
+    fn migrate_legacy_app_data_dir_noop_on_fresh_install() {
+        with_test_home(|home| {
+            migrate_legacy_app_data_dir().unwrap();
+            assert!(!home.join(APP_DIR_NAME).exists());
+            assert!(!home.join(LEGACY_APP_DIR_NAME).exists());
+        });
+    }
+
+    #[test]
+    fn migrate_legacy_app_data_dir_ignores_empty_legacy_dir() {
+        with_test_home(|home| {
+            // 旧目录存在但既没有数据库也没有 config.json（例如残留的空目录）
+            fs::create_dir_all(home.join(LEGACY_APP_DIR_NAME)).unwrap();
+
+            migrate_legacy_app_data_dir().unwrap();
+
+            assert!(!home.join(APP_DIR_NAME).exists());
+            assert!(home.join(LEGACY_APP_DIR_NAME).exists());
+        });
+    }
+
+    #[test]
+    fn migrate_legacy_app_data_dir_merges_when_new_dir_only_has_crash_log() {
+        with_test_home(|home| {
+            let legacy_dir = home.join(LEGACY_APP_DIR_NAME);
+            fs::create_dir_all(&legacy_dir).unwrap();
+            fs::write(legacy_dir.join(LEGACY_DB_FILE_NAME), b"db-bytes").unwrap();
+            fs::write(legacy_dir.join("settings.json"), b"settings").unwrap();
+
+            let new_dir = home.join(APP_DIR_NAME);
+            fs::create_dir_all(&new_dir).unwrap();
+            fs::write(new_dir.join("crash.log"), b"early crash").unwrap();
+
+            migrate_legacy_app_data_dir().unwrap();
+
+            assert!(!legacy_dir.exists());
+            assert_eq!(fs::read(new_dir.join(DB_FILE_NAME)).unwrap(), b"db-bytes");
+            assert_eq!(
+                fs::read(new_dir.join("settings.json")).unwrap(),
+                b"settings"
+            );
+            assert_eq!(fs::read(new_dir.join("crash.log")).unwrap(), b"early crash");
+        });
+    }
+
+    #[test]
+    fn migrate_legacy_database_file_renames_database_in_custom_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join(LEGACY_DB_FILE_NAME), b"custom-db").unwrap();
+
+        migrate_legacy_database_file(dir.path()).unwrap();
+
+        assert!(!dir.path().join(LEGACY_DB_FILE_NAME).exists());
+        assert_eq!(
+            fs::read(dir.path().join(DB_FILE_NAME)).unwrap(),
+            b"custom-db"
+        );
+    }
+
+    #[test]
+    fn migrate_legacy_device_settings_handles_custom_data_directory_case() {
+        let dir = tempfile::tempdir().unwrap();
+        let old_dir = dir.path().join(LEGACY_APP_DIR_NAME);
+        fs::create_dir_all(&old_dir).unwrap();
+        fs::write(old_dir.join("settings.json"), b"device-settings").unwrap();
+
+        migrate_legacy_device_settings(dir.path()).unwrap();
+
+        assert!(!old_dir.join("settings.json").exists());
+        assert_eq!(
+            fs::read(dir.path().join(APP_DIR_NAME).join("settings.json")).unwrap(),
+            b"device-settings"
+        );
+    }
+
+    #[test]
+    fn legacy_candidates_include_divergent_windows_home_paths() {
+        let real_home = Path::new("/real-home");
+        let env_home = Path::new("/env-home");
+        assert_eq!(
+            legacy_data_dir_candidates(real_home, Some(env_home)),
+            vec![
+                real_home.join(LEGACY_APP_DIR_NAME),
+                env_home.join(LEGACY_APP_DIR_NAME),
+                env_home.join(APP_DIR_NAME),
+            ]
+        );
+    }
 
     #[test]
     fn derive_mcp_path_from_override_preserves_folder_name() {

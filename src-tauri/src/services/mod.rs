@@ -21,6 +21,7 @@ pub mod session_usage_gemini;
 pub mod session_usage_grok;
 pub mod session_usage_opencode;
 pub mod skill;
+pub mod skill_builtin;
 pub mod speedtest;
 pub mod sql_helpers;
 pub mod stream_check;

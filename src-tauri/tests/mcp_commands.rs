@@ -3,7 +3,7 @@ use std::fs;
 
 use serde_json::json;
 
-use cc_switch_lib::{
+use agent_switch_lib::{
     get_claude_mcp_path, get_claude_settings_path, import_default_config_test_hook, AppError,
     AppType, McpApps, McpServer, McpService, MultiAppConfig,
 };
@@ -60,10 +60,10 @@ fn import_default_config_claude_persists_provider() {
     );
 
     // 验证数据已持久化到数据库（v3.7.0+ 使用 SQLite 而非 config.json）
-    let db_path = home.join(".cc-switch").join("cc-switch.db");
+    let db_path = home.join(".agentswitch").join("agentswitch.db");
     assert!(
         db_path.exists(),
-        "importing default config should persist to cc-switch.db"
+        "importing default config should persist to agentswitch.db"
     );
 }
 
@@ -143,10 +143,10 @@ fn import_mcp_from_claude_creates_config_and_enables_servers() {
     );
 
     // 验证数据已持久化到数据库
-    let db_path = home.join(".cc-switch").join("cc-switch.db");
+    let db_path = home.join(".agentswitch").join("agentswitch.db");
     assert!(
         db_path.exists(),
-        "state.save should persist to cc-switch.db when changes detected"
+        "state.save should persist to agentswitch.db when changes detected"
     );
 }
 
@@ -180,6 +180,174 @@ command = "echo"
     assert_eq!(
         after, original,
         "importing from Codex should not rewrite ~/.codex/config.toml"
+    );
+}
+
+#[test]
+fn per_cli_mcp_management_keeps_same_id_configs_independent() {
+    let _guard = test_mutex().lock().expect("acquire test mutex");
+    reset_test_fs();
+    let home = ensure_test_home();
+
+    let claude_path = get_claude_mcp_path();
+    fs::write(
+        &claude_path,
+        serde_json::to_string_pretty(&json!({
+            "mcpServers": {
+                "shared": {
+                    "type": "stdio",
+                    "command": "claude-command"
+                }
+            }
+        }))
+        .expect("serialize Claude MCP config"),
+    )
+    .expect("seed Claude MCP config");
+
+    let codex_dir = home.join(".codex");
+    fs::create_dir_all(&codex_dir).expect("create Codex config directory");
+    let codex_path = agent_switch_lib::get_codex_config_path();
+    fs::write(
+        &codex_path,
+        "[mcp_servers.shared]\ntype = \"stdio\"\ncommand = \"codex-command\"\n",
+    )
+    .expect("seed Codex MCP config");
+
+    let claude_servers =
+        McpService::get_servers_for_app(AppType::Claude).expect("read Claude MCP servers");
+    let codex_servers =
+        McpService::get_servers_for_app(AppType::Codex).expect("read Codex MCP servers");
+    assert_eq!(claude_servers["shared"]["command"], "claude-command");
+    assert_eq!(codex_servers["shared"]["command"], "codex-command");
+
+    McpService::upsert_server_for_app(
+        AppType::Codex,
+        "shared",
+        json!({
+            "type": "stdio",
+            "command": "codex-updated"
+        }),
+    )
+    .expect("update Codex MCP server");
+
+    let claude_after =
+        McpService::get_servers_for_app(AppType::Claude).expect("re-read Claude MCP servers");
+    let codex_after =
+        McpService::get_servers_for_app(AppType::Codex).expect("re-read Codex MCP servers");
+    assert_eq!(claude_after["shared"]["command"], "claude-command");
+    assert_eq!(codex_after["shared"]["command"], "codex-updated");
+
+    McpService::delete_server_for_app(AppType::Codex, "shared").expect("delete Codex MCP server");
+    let claude_final =
+        McpService::get_servers_for_app(AppType::Claude).expect("read final Claude MCP servers");
+    let codex_final =
+        McpService::get_servers_for_app(AppType::Codex).expect("read final Codex MCP servers");
+    assert!(claude_final.contains_key("shared"));
+    assert!(!codex_final.contains_key("shared"));
+}
+
+#[test]
+fn per_cli_mcp_management_writes_each_native_format() {
+    let _guard = test_mutex().lock().expect("acquire test mutex");
+    reset_test_fs();
+    let _home = ensure_test_home();
+
+    let apps = [
+        (AppType::Claude, "claude-command", "json"),
+        (AppType::Codex, "codex-command", "toml"),
+        (AppType::Gemini, "gemini-command", "json"),
+        (AppType::OpenCode, "opencode-command", "json"),
+        (AppType::Hermes, "hermes-command", "yaml"),
+    ];
+
+    for (app, command, expected_format) in &apps {
+        assert_eq!(
+            McpService::get_app_storage_format(app).expect("get storage format"),
+            *expected_format
+        );
+        McpService::upsert_server_for_app(
+            app.clone(),
+            "shared",
+            json!({
+                "type": "stdio",
+                "command": command
+            }),
+        )
+        .expect("write app-scoped MCP server");
+    }
+
+    for (app, command, _) in &apps {
+        let servers =
+            McpService::get_servers_for_app(app.clone()).expect("read app-scoped MCP servers");
+        assert_eq!(
+            servers["shared"]["command"],
+            *command,
+            "{} should keep its own definition for the shared ID",
+            app.as_str()
+        );
+    }
+
+    let claude_text =
+        fs::read_to_string(McpService::get_app_config_path(&AppType::Claude).unwrap())
+            .expect("read Claude MCP config");
+    assert!(claude_text.contains("\"mcpServers\""));
+
+    let codex_text = fs::read_to_string(McpService::get_app_config_path(&AppType::Codex).unwrap())
+        .expect("read Codex MCP config");
+    assert!(codex_text.contains("[mcp_servers.shared]"));
+
+    let gemini_text =
+        fs::read_to_string(McpService::get_app_config_path(&AppType::Gemini).unwrap())
+            .expect("read Gemini MCP config");
+    assert!(gemini_text.contains("\"mcpServers\""));
+
+    let opencode_text =
+        fs::read_to_string(McpService::get_app_config_path(&AppType::OpenCode).unwrap())
+            .expect("read OpenCode MCP config");
+    assert!(opencode_text.contains("\"type\": \"local\""));
+
+    let hermes_text =
+        fs::read_to_string(McpService::get_app_config_path(&AppType::Hermes).unwrap())
+            .expect("read Hermes MCP config");
+    assert!(hermes_text.contains("mcp_servers:"));
+
+    McpService::delete_server_for_app(AppType::OpenCode, "shared")
+        .expect("delete only OpenCode MCP server");
+    assert!(!McpService::get_servers_for_app(AppType::OpenCode)
+        .expect("read OpenCode after delete")
+        .contains_key("shared"));
+    assert!(
+        McpService::get_servers_for_app(AppType::Hermes)
+            .expect("read Hermes after OpenCode delete")
+            .contains_key("shared"),
+        "deleting from one CLI must not affect another CLI"
+    );
+}
+
+#[test]
+fn per_cli_codex_update_preserves_invalid_config() {
+    let _guard = test_mutex().lock().expect("acquire test mutex");
+    reset_test_fs();
+    let home = ensure_test_home();
+    let codex_dir = home.join(".codex");
+    fs::create_dir_all(&codex_dir).expect("create Codex config directory");
+    let codex_path = agent_switch_lib::get_codex_config_path();
+    let invalid_config = "[mcp_servers.broken\ncommand = \"echo\"\n";
+    fs::write(&codex_path, invalid_config).expect("seed invalid Codex config");
+
+    McpService::upsert_server_for_app(
+        AppType::Codex,
+        "safe",
+        json!({
+            "type": "stdio",
+            "command": "echo"
+        }),
+    )
+    .expect_err("invalid Codex config must block the update");
+
+    assert_eq!(
+        fs::read_to_string(&codex_path).expect("read Codex config after failed update"),
+        invalid_config
     );
 }
 
@@ -343,7 +511,7 @@ fn set_mcp_enabled_for_codex_writes_live_config() {
         "server should have Codex app enabled after toggle"
     );
 
-    let toml_path = cc_switch_lib::get_codex_config_path();
+    let toml_path = agent_switch_lib::get_codex_config_path();
     assert!(
         toml_path.exists(),
         "enabling server should trigger sync to ~/.codex/config.toml"

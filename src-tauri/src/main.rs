@@ -2,7 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    if let Some(exit_code) = cc_switch_lib::run_codex_provider_token_helper_if_requested() {
+    if let Some(exit_code) = agent_switch_lib::run_codex_provider_token_helper_if_requested() {
         std::process::exit(exit_code);
     }
 
@@ -22,5 +22,5 @@ fn main() {
         }
     }
 
-    cc_switch_lib::run();
+    agent_switch_lib::run();
 }

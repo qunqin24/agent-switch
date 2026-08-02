@@ -739,7 +739,7 @@ impl ProviderAdapter for ClaudeAdapter {
                 // for expired credentials. In both cases we would otherwise
                 // send `Authorization: Bearer ` to upstream and get a 401.
                 //
-                // CC Switch does not currently exchange the refresh_token for
+                // Agent Switch does not currently exchange the refresh_token for
                 // a fresh access_token. Until that path exists, degrade to
                 // plain GoogleOAuth strategy (which still sends the raw key
                 // as a fallback) and log loudly so users know to refresh
@@ -843,6 +843,8 @@ impl ProviderAdapter for ClaudeAdapter {
                     (HeaderName::from_static("authorization"), hv(&bearer)?),
                     (
                         HeaderName::from_static("originator"),
+                        // Preserve the established OAuth client identity. This
+                        // header is protocol metadata, not display branding.
                         HeaderValue::from_static("cc-switch"),
                     ),
                 ]
