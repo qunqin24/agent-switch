@@ -47,6 +47,17 @@
     "windows": {
       "wix": {
         "template": "wix/per-user-main.wxs"
+      },
+      "nsis": {
+        "template": "nsis/installer.nsi",
+        "installerHooks": "nsis/installer-hooks.nsh",
+        "installerIcon": "icons/icon.ico",
+        "headerImage": "nsis/header.bmp",
+        "sidebarImage": "nsis/sidebar.bmp",
+        "installMode": "currentUser",
+        "languages": ["English", "SimpChinese", "TradChinese", "Japanese"],
+        "displayLanguageSelector": false,
+        "compression": "lzma"
       }
     },
     "macOS": {

@@ -314,7 +314,25 @@ jobs:
           $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory -Force -Path release-assets | Out-Null
           $VERSION = $env:RELEASE_TAG  # e.g., v3.5.0
-          # 仅打包 MSI 安装器 + .sig（用于 Updater）
+          # NSIS is the recommended installer and Windows updater artifact.
+          $nsis = Get-ChildItem -Path 'src-tauri/target/release/bundle/nsis' -Recurse -Include *-setup.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($null -eq $nsis) {
+            $nsis = Get-ChildItem -Path 'src-tauri/target/release/bundle' -Recurse -Include *-setup.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          }
+          if ($null -eq $nsis) {
+            throw 'No Windows NSIS installer found'
+          }
+          $nsisDest = "AgentSwitch-$VERSION-Windows-Setup.exe"
+          Copy-Item $nsis.FullName (Join-Path release-assets $nsisDest)
+          Write-Host "NSIS installer copied: $nsisDest"
+          $nsisSigPath = "$($nsis.FullName).sig"
+          if (-not (Test-Path $nsisSigPath)) {
+            throw "Signature not found for $($nsis.Name); Windows updater would be unusable"
+          }
+          Copy-Item $nsisSigPath (Join-Path release-assets ("$nsisDest.sig"))
+          Write-Host "NSIS signature copied: $nsisDest.sig"
+
+          # Keep MSI for enterprise deployment and managed environments.
           $msi = Get-ChildItem -Path 'src-tauri/target/release/bundle/msi' -Recurse -Include *.msi -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($null -eq $msi) {
             # 兜底：全局搜索 .msi
@@ -453,7 +471,7 @@ jobs:
             ### 下载
 
             - **macOS**: `AgentSwitch-${{ env.RELEASE_TAG }}-macOS.dmg`（推荐）或 `AgentSwitch-${{ env.RELEASE_TAG }}-macOS.zip`（解压即用）
-            - **Windows**: `AgentSwitch-${{ env.RELEASE_TAG }}-Windows.msi`（安装版）或 `AgentSwitch-${{ env.RELEASE_TAG }}-Windows-Portable.zip`（绿色版）
+            - **Windows**: `AgentSwitch-${{ env.RELEASE_TAG }}-Windows-Setup.exe`（推荐）或 `.msi`（企业部署）/ `-Portable.zip`（绿色版）
             - **Linux (x86_64)**: `AgentSwitch-${{ env.RELEASE_TAG }}-Linux-x86_64.AppImage` / `.deb` / `.rpm`
             - **Linux (ARM64)**: `AgentSwitch-${{ env.RELEASE_TAG }}-Linux-arm64.AppImage` / `.deb` / `.rpm`
 
@@ -514,8 +532,13 @@ jobs:
                 linux_arm64_url="$url"; linux_arm64_sig="$sig_content";;
               *-Linux-x86_64.AppImage|*-Linux-x86_64.appimage)
                 linux_x64_url="$url"; linux_x64_sig="$sig_content";;
-              *.msi|*.exe)
+              *-Windows-Setup.exe)
                 win_url="$url"; win_sig="$sig_content";;
+              *.msi)
+                # MSI is a fallback for older releases. Prefer the branded NSIS setup.
+                if [ -z "$win_url" ]; then
+                  win_url="$url"; win_sig="$sig_content"
+                fi;;
             esac
           done
           # 构造 JSON（仅包含存在的目标）

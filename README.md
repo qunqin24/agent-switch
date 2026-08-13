@@ -92,11 +92,11 @@ Agent Switch 把这些收敛到一个界面里：**配置存在本地 SQLite，�
 
 从 [Releases](https://github.com/qwq202/agent-switch/releases/latest) 下载对应平台的安装包。
 
-| 平台        | 安装包                                              |
-| ----------- | --------------------------------------------------- |
-| **Windows** | `.msi` 安装版 · `-Portable.zip` 便携版（解压即用）  |
-| **macOS**   | `.dmg`（推荐）· `.zip`，需 macOS 12+                |
-| **Linux**   | `.AppImage` · `.deb` · `.rpm`，覆盖 x86_64 与 ARM64 |
+| 平台        | 安装包                                                                      |
+| ----------- | --------------------------------------------------------------------------- |
+| **Windows** | `-Setup.exe` 精简安装版（推荐）· `.msi` 企业部署版 · `-Portable.zip` 便携版 |
+| **macOS**   | `.dmg`（推荐）· `.zip`，需 macOS 12+                                        |
+| **Linux**   | `.AppImage` · `.deb` · `.rpm`，覆盖 x86_64 与 ARM64                         |
 
 > [!NOTE]
 > macOS 版本为未经 Apple 公证的社区构建，首次打开若被拦截，请到「系统设置 → 隐私与安全性」中确认运行。
