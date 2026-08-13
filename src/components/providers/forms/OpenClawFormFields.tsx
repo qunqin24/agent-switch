@@ -72,6 +72,10 @@ interface OpenClawFormFieldsProps {
   // User-Agent
   userAgent: boolean;
   onUserAgentChange: (checked: boolean) => void;
+  apiProtocols?: ReadonlyArray<{ value: string; label: string }>;
+  showUserAgent?: boolean;
+  usesBuiltinCatalog?: boolean;
+  builtinCatalogHint?: string;
 }
 
 export function OpenClawFormFields({
@@ -90,6 +94,10 @@ export function OpenClawFormFields({
   onModelsChange,
   userAgent,
   onUserAgentChange,
+  apiProtocols = openclawApiProtocols,
+  showUserAgent = true,
+  usesBuiltinCatalog = false,
+  builtinCatalogHint,
 }: OpenClawFormFieldsProps) {
   const { t } = useTranslation();
   const [expandedModels, setExpandedModels] = useState<Record<number, boolean>>(
@@ -213,8 +221,14 @@ export function OpenClawFormFields({
         icon={Link2}
         title={t("providerForm.connectionSection")}
       >
+        {usesBuiltinCatalog && builtinCatalogHint && (
+          <p className="rounded-md border border-blue-500/20 bg-blue-500/5 px-3 py-2 text-xs text-muted-foreground">
+            {builtinCatalogHint}
+          </p>
+        )}
+
         {/* API Protocol Selector */}
-        <div className="space-y-2">
+        <div className={usesBuiltinCatalog ? "hidden" : "space-y-2"}>
           <FormLabel htmlFor="openclaw-api">
             {t("openclaw.apiProtocol", {
               defaultValue: "API 协议",
@@ -229,7 +243,7 @@ export function OpenClawFormFields({
               />
             </SelectTrigger>
             <SelectContent>
-              {openclawApiProtocols.map((protocol) => (
+              {apiProtocols.map((protocol) => (
                 <SelectItem key={protocol.value} value={protocol.value}>
                   {protocol.label}
                 </SelectItem>
@@ -245,7 +259,7 @@ export function OpenClawFormFields({
         </div>
 
         {/* Base URL */}
-        <div className="space-y-2">
+        <div className={usesBuiltinCatalog ? "hidden" : "space-y-2"}>
           <FormLabel htmlFor="openclaw-baseurl">
             {t("openclaw.baseUrl", { defaultValue: "API 端点" })}
           </FormLabel>
@@ -275,31 +289,35 @@ export function OpenClawFormFields({
       </ProviderFormSection>
 
       {/* User-Agent */}
-      <ProviderFormSection
-        sectionKey="options"
-        icon={SlidersHorizontal}
-        title={t("providerForm.optionsSection")}
-      >
-        <div className="flex items-center justify-between gap-4">
-          <div className="space-y-0.5">
-            <FormLabel>
-              {t("openclaw.userAgent", { defaultValue: "发送 User-Agent" })}
-            </FormLabel>
-            <p className="text-xs text-muted-foreground">
-              {t("openclaw.userAgentHint", {
-                defaultValue: "部分供应商需要浏览器 User-Agent 才能正常访问。",
-              })}
-            </p>
+      {showUserAgent && (
+        <ProviderFormSection
+          sectionKey="options"
+          icon={SlidersHorizontal}
+          title={t("providerForm.optionsSection")}
+        >
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-0.5">
+              <FormLabel>
+                {t("openclaw.userAgent", { defaultValue: "发送 User-Agent" })}
+              </FormLabel>
+              <p className="text-xs text-muted-foreground">
+                {t("openclaw.userAgentHint", {
+                  defaultValue:
+                    "部分供应商需要浏览器 User-Agent 才能正常访问。",
+                })}
+              </p>
+            </div>
+            <Switch checked={userAgent} onCheckedChange={onUserAgentChange} />
           </div>
-          <Switch checked={userAgent} onCheckedChange={onUserAgentChange} />
-        </div>
-      </ProviderFormSection>
+        </ProviderFormSection>
+      )}
 
       {/* Models Editor */}
       <ProviderFormSection
         sectionKey="models"
         icon={Layers}
         title={t("openclaw.models", { defaultValue: "模型列表" })}
+        className={usesBuiltinCatalog ? "hidden" : undefined}
         contentClassName="space-y-3"
         actions={
           <div className="flex gap-1">

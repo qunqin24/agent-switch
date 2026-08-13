@@ -72,6 +72,115 @@ fn hermes_skill_listing_supports_category_directories() {
 }
 
 #[test]
+fn pi_skill_listing_uses_native_directory_and_supports_nested_skills() {
+    let _guard = test_mutex().lock().expect("acquire test mutex");
+    reset_test_fs();
+    let home = ensure_test_home();
+    write_skill(
+        &home
+            .join(".pi")
+            .join("agent")
+            .join("skills")
+            .join("research")
+            .join("paper-review"),
+        "Paper Review",
+    );
+    let state = create_test_state().expect("create test state");
+
+    let result = SkillService::get_for_app(&state.db, &AppType::Pi).expect("list Pi skills");
+
+    assert_eq!(result.app, "pi");
+    assert_eq!(
+        result.skills_dir,
+        home.join(".pi")
+            .join("agent")
+            .join("skills")
+            .to_string_lossy()
+            .to_string()
+    );
+    assert_eq!(result.skills.len(), 1);
+    assert_eq!(result.skills[0].directory, "research/paper-review");
+    assert_eq!(result.skills[0].name, "Paper Review");
+}
+
+#[test]
+fn pi_reads_global_skills_directly_without_creating_a_link() {
+    let _guard = test_mutex().lock().expect("acquire test mutex");
+    reset_test_fs();
+    let home = ensure_test_home();
+    write_skill(
+        &home.join(".agents").join("skills").join("shared-skill"),
+        "Shared Skill",
+    );
+    let state = create_test_state().expect("create test state");
+
+    let global = SkillService::get_global(&state.db).expect("list global skills");
+    assert!(global.direct_apps.pi);
+    assert!(global.skills[0].apps.pi);
+
+    let enabled = SkillService::set_global_link(&state.db, "shared-skill", &AppType::Pi, true)
+        .expect("confirm Pi direct access");
+    assert!(enabled.apps.pi);
+    assert!(
+        state
+            .db
+            .get_installed_skill(&enabled.id)
+            .expect("read persisted global skill")
+            .expect("persisted global skill")
+            .apps
+            .pi,
+        "Pi availability should persist in the Skills table"
+    );
+    assert!(
+        !home
+            .join(".pi")
+            .join("agent")
+            .join("skills")
+            .join("shared-skill")
+            .exists(),
+        "Pi should discover ~/.agents/skills without an app-specific symlink"
+    );
+}
+
+#[test]
+fn pi_root_markdown_skill_can_be_listed_uninstalled_and_restored() {
+    let _guard = test_mutex().lock().expect("acquire test mutex");
+    reset_test_fs();
+    let home = ensure_test_home();
+    let skills_dir = home.join(".pi").join("agent").join("skills");
+    fs::create_dir_all(&skills_dir).expect("create Pi skills directory");
+    let skill_file = skills_dir.join("quick-review.md");
+    fs::write(
+        &skill_file,
+        "---\nname: Quick Review\ndescription: Review a patch quickly\n---\n",
+    )
+    .expect("write Pi markdown skill");
+    let state = create_test_state().expect("create test state");
+
+    let listed = SkillService::get_for_app(&state.db, &AppType::Pi).expect("list Pi skills");
+    assert_eq!(listed.skills.len(), 1);
+    assert_eq!(listed.skills[0].directory, "quick-review.md");
+    assert_eq!(listed.skills[0].name, "Quick Review");
+
+    let uninstalled = SkillService::uninstall_for_app(&state.db, &AppType::Pi, "quick-review.md")
+        .expect("uninstall Pi markdown skill");
+    assert!(!skill_file.exists());
+    let backup_path = std::path::PathBuf::from(uninstalled.backup_path.expect("backup path"));
+    let backup_id = backup_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .expect("backup id");
+
+    let restored = SkillService::restore_for_app(&state.db, backup_id, &AppType::Pi)
+        .expect("restore Pi markdown skill");
+    assert_eq!(restored.directory, "quick-review.md");
+    assert_eq!(
+        fs::read_to_string(&skill_file).expect("read restored Pi markdown skill"),
+        "---\nname: Quick Review\ndescription: Review a patch quickly\n---\n"
+    );
+}
+
+#[test]
 fn app_skill_uninstall_only_changes_the_selected_non_global_cli() {
     let _guard = test_mutex().lock().expect("acquire test mutex");
     reset_test_fs();

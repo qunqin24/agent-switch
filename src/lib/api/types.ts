@@ -6,7 +6,8 @@ export type AppId =
   | "gemini"
   | "opencode"
   | "openclaw"
-  | "hermes";
+  | "hermes"
+  | "pi";
 
-export type McpAppId = Exclude<AppId, "claude-desktop" | "openclaw">;
+export type McpAppId = Exclude<AppId, "claude-desktop" | "openclaw" | "pi">;
 export type SkillAppId = Exclude<AppId, "claude-desktop" | "openclaw">;

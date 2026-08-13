@@ -35,6 +35,7 @@ pub fn reset_test_fs() {
         ".config",
         ".hermes",
         ".openclaw",
+        ".pi",
     ] {
         let path = home.join(sub);
         if path.exists() {

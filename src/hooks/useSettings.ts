@@ -32,6 +32,9 @@ export interface UseSettingsResult {
   browseDirectory: (app: DirectoryAppId) => Promise<void>;
   browseAppConfigDir: () => Promise<void>;
   resetDirectory: (app: DirectoryAppId) => Promise<void>;
+  updatePiSessionDir: (value?: string) => void;
+  browsePiSessionDir: () => Promise<void>;
+  resetPiSessionDir: () => Promise<void>;
   resetAppConfigDir: () => Promise<void>;
   saveSettings: (
     overrides?: Partial<SettingsFormState>,
@@ -86,6 +89,9 @@ export function useSettings(): UseSettingsResult {
     browseDirectory,
     browseAppConfigDir,
     resetDirectory,
+    updatePiSessionDir,
+    browsePiSessionDir,
+    resetPiSessionDir,
     resetAppConfigDir,
     resetAllDirectories,
   } = useDirectorySettings({
@@ -113,6 +119,8 @@ export function useSettings(): UseSettingsResult {
       opencode: sanitizeDir(data?.opencodeConfigDir),
       openclaw: sanitizeDir(data?.openclawConfigDir),
       hermes: sanitizeDir(data?.hermesConfigDir),
+      pi: sanitizeDir(data?.piConfigDir),
+      piSession: sanitizeDir(data?.piSessionDir),
     });
     setRequiresRestart(false);
   }, [
@@ -193,6 +201,9 @@ export function useSettings(): UseSettingsResult {
         const sanitizedOpenclawDir = sanitizeDir(
           mergedSettings.openclawConfigDir,
         );
+        const sanitizedHermesDir = sanitizeDir(mergedSettings.hermesConfigDir);
+        const sanitizedPiDir = sanitizeDir(mergedSettings.piConfigDir);
+        const sanitizedPiSessionDir = sanitizeDir(mergedSettings.piSessionDir);
         const {
           webdavSync: _ignoredWebdavSync,
           s3Sync: _ignoredS3Sync,
@@ -206,6 +217,9 @@ export function useSettings(): UseSettingsResult {
           geminiConfigDir: sanitizedGeminiDir,
           opencodeConfigDir: sanitizedOpencodeDir,
           openclawConfigDir: sanitizedOpenclawDir,
+          hermesConfigDir: sanitizedHermesDir,
+          piConfigDir: sanitizedPiDir,
+          piSessionDir: sanitizedPiSessionDir,
           language: mergedSettings.language,
         };
 
@@ -324,12 +338,17 @@ export function useSettings(): UseSettingsResult {
         const sanitizedOpenclawDir = sanitizeDir(
           mergedSettings.openclawConfigDir,
         );
+        const sanitizedHermesDir = sanitizeDir(mergedSettings.hermesConfigDir);
+        const sanitizedPiDir = sanitizeDir(mergedSettings.piConfigDir);
+        const sanitizedPiSessionDir = sanitizeDir(mergedSettings.piSessionDir);
         const previousAppDir = initialAppConfigDir;
         const previousClaudeDir = sanitizeDir(data?.claudeConfigDir);
         const previousCodexDir = sanitizeDir(data?.codexConfigDir);
         const previousGeminiDir = sanitizeDir(data?.geminiConfigDir);
         const previousOpencodeDir = sanitizeDir(data?.opencodeConfigDir);
         const previousOpenclawDir = sanitizeDir(data?.openclawConfigDir);
+        const previousHermesDir = sanitizeDir(data?.hermesConfigDir);
+        const previousPiDir = sanitizeDir(data?.piConfigDir);
         const {
           webdavSync: _ignoredWebdavSync,
           s3Sync: _ignoredS3Sync,
@@ -343,6 +362,9 @@ export function useSettings(): UseSettingsResult {
           geminiConfigDir: sanitizedGeminiDir,
           opencodeConfigDir: sanitizedOpencodeDir,
           openclawConfigDir: sanitizedOpenclawDir,
+          hermesConfigDir: sanitizedHermesDir,
+          piConfigDir: sanitizedPiDir,
+          piSessionDir: sanitizedPiSessionDir,
           language: mergedSettings.language,
         };
 
@@ -429,13 +451,17 @@ export function useSettings(): UseSettingsResult {
         const geminiDirChanged = sanitizedGeminiDir !== previousGeminiDir;
         const opencodeDirChanged = sanitizedOpencodeDir !== previousOpencodeDir;
         const openclawDirChanged = sanitizedOpenclawDir !== previousOpenclawDir;
+        const hermesDirChanged = sanitizedHermesDir !== previousHermesDir;
+        const piDirChanged = sanitizedPiDir !== previousPiDir;
         if (
           !pluginSynced &&
           (claudeDirChanged ||
             codexDirChanged ||
             geminiDirChanged ||
             opencodeDirChanged ||
-            openclawDirChanged)
+            openclawDirChanged ||
+            hermesDirChanged ||
+            piDirChanged)
         ) {
           const syncResult = await syncCurrentProvidersLiveSafe();
           if (!syncResult.ok) {
@@ -498,10 +524,13 @@ export function useSettings(): UseSettingsResult {
     requiresRestart,
     updateSettings,
     updateDirectory,
+    updatePiSessionDir,
     updateAppConfigDir,
     browseDirectory,
+    browsePiSessionDir,
     browseAppConfigDir,
     resetDirectory,
+    resetPiSessionDir,
     resetAppConfigDir,
     saveSettings,
     autoSaveSettings,

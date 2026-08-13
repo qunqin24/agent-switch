@@ -428,6 +428,17 @@ pub fn atomic_write(path: &Path, data: &[u8]) -> Result<(), AppError> {
     tmp.push(format!("{file_name}.tmp.{ts}"));
 
     {
+        #[cfg(unix)]
+        let mut f = {
+            use std::os::unix::fs::OpenOptionsExt;
+            fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .mode(0o600)
+                .open(&tmp)
+                .map_err(|e| AppError::io(&tmp, e))?
+        };
+        #[cfg(not(unix))]
         let mut f = fs::File::create(&tmp).map_err(|e| AppError::io(&tmp, e))?;
         f.write_all(data).map_err(|e| AppError::io(&tmp, e))?;
         f.flush().map_err(|e| AppError::io(&tmp, e))?;

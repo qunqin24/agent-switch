@@ -826,12 +826,18 @@
     "openclawConfigDirDescription": "覆盖 OpenClaw 配置目录 (openclaw.json)。",
     "hermesConfigDir": "Hermes 配置目录",
     "hermesConfigDirDescription": "覆盖 Hermes 配置目录 (config.yaml)。",
+    "piConfigDir": "Pi 配置目录",
+    "piConfigDirDescription": "覆盖 Pi Agent 配置目录 (models.json)。",
+    "piSessionDir": "Pi 会话目录",
+    "piSessionDirDescription": "为 Pi 会话管理和使用统计设置绝对目录。当 Pi 的 sessionDir 相对于项目启动目录时，请在这里指定实际目录。",
     "browsePlaceholderClaude": "例如：/home/<你的用户名>/.claude",
     "browsePlaceholderCodex": "例如：/home/<你的用户名>/.codex",
     "browsePlaceholderGemini": "例如：/home/<你的用户名>/.gemini",
     "browsePlaceholderOpencode": "例如：/home/<你的用户名>/.config/opencode",
     "browsePlaceholderOpenclaw": "例如：/home/<你的用户名>/.openclaw",
     "browsePlaceholderHermes": "例如：/home/<你的用户名>/.hermes",
+    "browsePlaceholderPi": "例如：/home/<你的用户名>/.pi/agent",
+    "browsePlaceholderPiSession": "例如：/home/<你的用户名>/.pi/agent/sessions",
     "browseDirectory": "浏览目录",
     "resetDefault": "恢复默认目录（需保存后生效）",
     "checkForUpdates": "检查更新",
@@ -943,7 +949,8 @@
     "gemini": "Gemini",
     "opencode": "OpenCode",
     "openclaw": "OpenClaw",
-    "hermes": "Hermes"
+    "hermes": "Hermes",
+    "pi": "Pi"
   },
   "sessionManager": {
     "title": "会话管理",
@@ -1518,7 +1525,8 @@
       "codex": "Codex",
       "gemini": "Gemini",
       "opencode": "OpenCode",
-      "grok": "Grok Build"
+      "grok": "Grok Build",
+      "pi": "Pi"
     },
     "rawInputLabel": "原始",
     "dataSources": "数据来源",
@@ -1529,7 +1537,8 @@
       "codex_session": "Codex 会话日志",
       "gemini_session": "Gemini 会话日志",
       "opencode_session": "OpenCode 会话日志",
-      "grok_session": "Grok Build 会话日志"
+      "grok_session": "Grok Build 会话日志",
+      "pi_session": "Pi 会话日志"
     },
     "sessionSync": {
       "trigger": "同步会话日志",
@@ -2090,6 +2099,20 @@
     },
     "primaryModel": "默认模型",
     "fallbackModel": "回退模型"
+  },
+  "pi": {
+    "form": {
+      "providerKey": "供应商标识",
+      "providerKeyPlaceholder": "my-provider",
+      "providerKeyHint": "对应 models.json 中 providers 下的唯一键，仅使用小写字母、数字和连字符。",
+      "providerKeyLockedHint": "该供应商已写入 Pi 的 models.json，标识不可修改。",
+      "providerKeyRequired": "请填写供应商标识",
+      "providerKeyDuplicate": "该供应商标识已被使用",
+      "providerKeyInvalid": "仅可使用小写字母、数字和连字符",
+      "builtinCatalogHint": "这是 Pi 内置供应商。Pi 会继续使用官方端点、协议和模型目录。可在这里填写 API Key；留空时由 Pi 从 /login、auth.json 或系统环境变量读取。",
+      "baseUrlRequired": "请填写 API 端点",
+      "modelsRequired": "请至少配置一个模型"
+    }
   },
   "hermes": {
     "form": {

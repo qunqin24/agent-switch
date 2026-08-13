@@ -20,9 +20,14 @@ interface DirectorySettingsProps {
   opencodeDir?: string;
   openclawDir?: string;
   hermesDir?: string;
+  piDir?: string;
+  piSessionDir?: string;
   onDirectoryChange: (app: DirectoryAppId, value?: string) => void;
   onBrowseDirectory: (app: DirectoryAppId) => Promise<void>;
   onResetDirectory: (app: DirectoryAppId) => Promise<void>;
+  onPiSessionDirChange: (value?: string) => void;
+  onBrowsePiSessionDir: () => Promise<void>;
+  onResetPiSessionDir: () => Promise<void>;
 }
 
 export function DirectorySettings({
@@ -37,9 +42,14 @@ export function DirectorySettings({
   opencodeDir,
   openclawDir,
   hermesDir,
+  piDir,
+  piSessionDir,
   onDirectoryChange,
   onBrowseDirectory,
   onResetDirectory,
+  onPiSessionDirChange,
+  onBrowsePiSessionDir,
+  onResetPiSessionDir,
 }: DirectorySettingsProps) {
   const { t } = useTranslation();
 
@@ -157,6 +167,28 @@ export function DirectorySettings({
           onChange={(val) => onDirectoryChange("hermes", val)}
           onBrowse={() => onBrowseDirectory("hermes")}
           onReset={() => onResetDirectory("hermes")}
+        />
+
+        <DirectoryInput
+          label={t("settings.piConfigDir")}
+          description={undefined}
+          value={piDir}
+          resolvedValue={resolvedDirs.pi}
+          placeholder={t("settings.browsePlaceholderPi")}
+          onChange={(val) => onDirectoryChange("pi", val)}
+          onBrowse={() => onBrowseDirectory("pi")}
+          onReset={() => onResetDirectory("pi")}
+        />
+
+        <DirectoryInput
+          label={t("settings.piSessionDir")}
+          description={t("settings.piSessionDirDescription")}
+          value={piSessionDir}
+          resolvedValue={resolvedDirs.piSession}
+          placeholder={t("settings.browsePlaceholderPiSession")}
+          onChange={onPiSessionDirChange}
+          onBrowse={onBrowsePiSessionDir}
+          onReset={onResetPiSessionDir}
         />
       </section>
     </div>

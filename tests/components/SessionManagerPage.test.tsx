@@ -56,7 +56,7 @@ vi.mock("@/components/ConfirmDialog", () => ({
     ) : null,
 }));
 
-const renderPage = () => {
+const renderPage = (appId = "codex") => {
   const client = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -68,7 +68,7 @@ const renderPage = () => {
     client,
     ...render(
       <QueryClientProvider client={client}>
-        <SessionManagerPage appId="codex" />
+        <SessionManagerPage appId={appId} />
       </QueryClientProvider>,
     ),
   };
@@ -155,6 +155,49 @@ describe("SessionManagerPage", () => {
     expect(screen.queryByText("Alpha Session")).not.toBeInTheDocument();
     expect(toastErrorMock).not.toHaveBeenCalled();
     expect(toastSuccessMock).toHaveBeenCalled();
+  });
+
+  it("opens Pi sessions with the Pi provider filter", async () => {
+    const getMessagesSpy = vi.spyOn(sessionsApi, "getMessages");
+    setSessionFixtures(
+      [
+        {
+          providerId: "codex",
+          sessionId: "codex-session",
+          title: "Codex Session",
+          sourcePath: "/mock/codex/session.jsonl",
+        },
+        {
+          providerId: "pi",
+          sessionId: "pi-session",
+          title: "Pi Session",
+          projectDir: "/mock/pi",
+          sourcePath: "/mock/pi/session.jsonl",
+          resumeCommand: "pi --session pi-session",
+        },
+      ],
+      {
+        "pi:/mock/pi/session.jsonl": [
+          { role: "user", content: "Pi prompt", ts: 20 },
+        ],
+      },
+    );
+
+    renderPage("pi");
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { name: "Pi Session" }),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.queryByText("Codex Session")).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(getMessagesSpy).toHaveBeenCalledWith(
+        "pi",
+        "/mock/pi/session.jsonl",
+      ),
+    );
+    getMessagesSpy.mockRestore();
   });
 
   it("removes a deleted session from filtered search results", async () => {

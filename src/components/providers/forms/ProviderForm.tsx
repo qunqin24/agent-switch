@@ -45,6 +45,13 @@ import {
   hermesProviderPresets,
   type HermesProviderPreset,
 } from "@/config/hermesProviderPresets";
+import {
+  PI_DEFAULT_CONFIG,
+  isPiBuiltinProviderKey,
+  piApiProtocols,
+  piProviderPresets,
+  type PiProviderPreset,
+} from "@/config/piProviderPresets";
 import { OpenCodeFormFields } from "./OpenCodeFormFields";
 import { OpenClawFormFields } from "./OpenClawFormFields";
 import { HermesFormFields } from "./HermesFormFields";
@@ -99,6 +106,7 @@ import {
   useOmoDraftState,
   useOpenclawFormState,
   useHermesFormState,
+  usePiFormState,
   useCopilotAuth,
   useCodexOauth,
 } from "./hooks";
@@ -126,7 +134,8 @@ type PresetEntry = {
     | GeminiProviderPreset
     | OpenCodeProviderPreset
     | OpenClawProviderPreset
-    | HermesProviderPreset;
+    | HermesProviderPreset
+    | PiProviderPreset;
 };
 
 const codexApiFormatFromWireApi = (
@@ -416,7 +425,9 @@ function ProviderFormFull({
                 ? OPENCLAW_DEFAULT_CONFIG
                 : appId === "hermes"
                   ? HERMES_DEFAULT_CONFIG
-                  : CLAUDE_DEFAULT_CONFIG,
+                  : appId === "pi"
+                    ? PI_DEFAULT_CONFIG
+                    : CLAUDE_DEFAULT_CONFIG,
       icon: initialData?.icon ?? "",
       iconColor: initialData?.iconColor ?? "",
     }),
@@ -677,6 +688,11 @@ function ProviderFormFull({
         id: `hermes-${index}`,
         preset,
       }));
+    } else if (appId === "pi") {
+      return piProviderPresets.map<PresetEntry>((preset, index) => ({
+        id: `pi-${index}`,
+        preset,
+      }));
     }
     return providerPresets
       .filter((p) => !p.hidden)
@@ -888,6 +904,27 @@ function ProviderFormFull({
     isLoading: isHermesLiveProviderIdsLoading,
   } = useHermesLiveProviderIds(appId === "hermes");
 
+  const piForm = usePiFormState({
+    initialData,
+    appId,
+    providerId,
+    onSettingsConfigChange: (config) => form.setValue("settingsConfig", config),
+    getSettingsConfig: () => form.getValues("settingsConfig"),
+  });
+  const {
+    data: piLiveProviderIds = [],
+    isLoading: isPiLiveProviderIdsLoading,
+  } = useQuery({
+    queryKey: ["piLiveProviderIds"],
+    queryFn: () => providersApi.getPiLiveProviderIds(),
+    enabled: appId === "pi",
+  });
+  const piUsesBuiltinCatalog =
+    appId === "pi" &&
+    isPiBuiltinProviderKey(piForm.piProviderKey) &&
+    !piForm.piBaseUrl.trim() &&
+    piForm.piModels.length === 0;
+
   const additiveExistingProviderKeys = useMemo(() => {
     if (appId === "opencode" && !isAnyOmoCategory) {
       return Array.from(
@@ -920,6 +957,16 @@ function ProviderFormFull({
       );
     }
 
+    if (appId === "pi") {
+      return Array.from(
+        new Set(
+          [...piForm.existingPiKeys, ...piLiveProviderIds].filter(
+            (key) => key !== providerId,
+          ),
+        ),
+      );
+    }
+
     return [];
   }, [
     appId,
@@ -930,6 +977,8 @@ function ProviderFormFull({
     openclawForm.existingOpenclawKeys,
     openclawLiveProviderIds,
     opencodeLiveProviderIds,
+    piForm.existingPiKeys,
+    piLiveProviderIds,
     providerId,
   ]);
 
@@ -944,6 +993,7 @@ function ProviderFormFull({
     if (appId === "hermes") {
       return isHermesLiveProviderIdsLoading;
     }
+    if (appId === "pi") return isPiLiveProviderIdsLoading;
     return false;
   }, [
     appId,
@@ -952,6 +1002,7 @@ function ProviderFormFull({
     isHermesLiveProviderIdsLoading,
     isOpenclawLiveProviderIdsLoading,
     isOpencodeLiveProviderIdsLoading,
+    isPiLiveProviderIdsLoading,
   ]);
 
   const isProviderKeyLocked = useMemo(() => {
@@ -965,6 +1016,7 @@ function ProviderFormFull({
     if (appId === "hermes") {
       return hermesLiveProviderIds.includes(providerId);
     }
+    if (appId === "pi") return piLiveProviderIds.includes(providerId);
     return false;
   }, [
     appId,
@@ -973,6 +1025,7 @@ function ProviderFormFull({
     isEditMode,
     openclawLiveProviderIds,
     opencodeLiveProviderIds,
+    piLiveProviderIds,
     providerId,
   ]);
 
@@ -1021,6 +1074,40 @@ function ProviderFormFull({
     // opencode / openclaw / hermes: providerKey 相关
     // A 类（空）归到 issues；B 类（正则不合法 / 重复 / 状态加载中）仍硬拒绝
     const keyPattern = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+    if (appId === "pi") {
+      const key = piForm.piProviderKey.trim();
+      if (!key) {
+        toast.error(t("pi.form.providerKeyRequired"));
+        return;
+      }
+      if (!keyPattern.test(key)) {
+        toast.error(t("pi.form.providerKeyInvalid"));
+        return;
+      }
+      if (isProviderKeyLockStateLoading) {
+        toast.error(t("providerForm.providerKeyStatusLoading"));
+        return;
+      }
+      if (!isProviderKeyLocked && additiveExistingProviderKeys.includes(key)) {
+        toast.error(t("pi.form.providerKeyDuplicate"));
+        return;
+      }
+      if (!piUsesBuiltinCatalog) {
+        const piConfig = JSON.parse(values.settingsConfig) as {
+          baseUrl?: unknown;
+          models?: unknown;
+        };
+        if (typeof piConfig.baseUrl !== "string" || !piConfig.baseUrl.trim()) {
+          toast.error(t("pi.form.baseUrlRequired"));
+          return;
+        }
+        if (!Array.isArray(piConfig.models) || piConfig.models.length === 0) {
+          toast.error(t("pi.form.modelsRequired"));
+          return;
+        }
+      }
+    }
 
     if (appId === "opencode" && !isAnyOmoCategory) {
       // providerKey 是 opencode / openclaw / hermes 的主键 ID，空或格式不合法
@@ -1305,6 +1392,8 @@ function ProviderFormFull({
       payload.providerKey = openclawForm.openclawProviderKey;
     } else if (appId === "hermes") {
       payload.providerKey = hermesForm.hermesProviderKey;
+    } else if (appId === "pi") {
+      payload.providerKey = piForm.piProviderKey;
     }
 
     if (isAnyOmoCategory && !payload.presetCategory) {
@@ -1541,6 +1630,19 @@ function ProviderFormFull({
     formWebsiteUrl: form.watch("websiteUrl") || "",
   });
 
+  const {
+    shouldShowApiKeyLink: shouldShowPiApiKeyLink,
+    websiteUrl: piWebsiteUrl,
+    isPartner: isPiPartner,
+    partnerPromotionKey: piPartnerPromotionKey,
+  } = useApiKeyLink({
+    appId: "pi",
+    category,
+    selectedPresetId,
+    presetEntries,
+    formWebsiteUrl: form.watch("websiteUrl") || "",
+  });
+
   // 使用端点测速候选 hook
   const speedTestEndpoints = useSpeedTestEndpoints({
     appId,
@@ -1579,6 +1681,9 @@ function ProviderFormFull({
       }
       if (appId === "hermes") {
         hermesForm.resetHermesState();
+      }
+      if (appId === "pi") {
+        piForm.resetPiState();
       }
       return;
     }
@@ -1701,6 +1806,19 @@ function ProviderFormFull({
         name: preset.nameKey ? t(preset.nameKey) : preset.name,
         websiteUrl: preset.websiteUrl ?? "",
         settingsConfig: JSON.stringify(config, null, 2),
+        icon: preset.icon ?? "",
+        iconColor: preset.iconColor ?? "",
+      });
+      return;
+    }
+
+    if (appId === "pi") {
+      const preset = entry.preset as PiProviderPreset;
+      piForm.resetPiState(preset.settingsConfig, preset.providerKey);
+      form.reset({
+        name: preset.nameKey ? t(preset.nameKey) : preset.name,
+        websiteUrl: preset.websiteUrl ?? "",
+        settingsConfig: JSON.stringify(preset.settingsConfig, null, 2),
         icon: preset.icon ?? "",
         iconColor: preset.iconColor ?? "",
       });
@@ -1959,6 +2077,37 @@ function ProviderFormFull({
                       </p>
                     )}
                 </div>
+              ) : appId === "pi" ? (
+                <div className="space-y-2">
+                  <Label htmlFor="pi-key">
+                    {t("pi.form.providerKey")}
+                    <span className="text-destructive ml-1">*</span>
+                  </Label>
+                  <ProviderKeyInput
+                    id="pi-key"
+                    value={piForm.piProviderKey}
+                    onValueChange={piForm.setPiProviderKey}
+                    placeholder={t("pi.form.providerKeyPlaceholder")}
+                    disabled={
+                      isProviderKeyLocked || isProviderKeyLockStateLoading
+                    }
+                    className={
+                      (!isProviderKeyLocked &&
+                        additiveExistingProviderKeys.includes(
+                          piForm.piProviderKey,
+                        )) ||
+                      (piForm.piProviderKey.trim() !== "" &&
+                        !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(piForm.piProviderKey))
+                        ? "border-destructive"
+                        : ""
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {isProviderKeyLocked
+                      ? t("pi.form.providerKeyLockedHint")
+                      : t("pi.form.providerKeyHint")}
+                  </p>
+                </div>
               ) : undefined
             }
           />
@@ -2203,6 +2352,30 @@ function ProviderFormFull({
             />
           )}
 
+          {appId === "pi" && (
+            <OpenClawFormFields
+              baseUrl={piForm.piBaseUrl}
+              onBaseUrlChange={piForm.handlePiBaseUrlChange}
+              apiKey={piForm.piApiKey}
+              onApiKeyChange={piForm.handlePiApiKeyChange}
+              category={category}
+              shouldShowApiKeyLink={shouldShowPiApiKeyLink}
+              websiteUrl={piWebsiteUrl}
+              isPartner={isPiPartner}
+              partnerPromotionKey={piPartnerPromotionKey}
+              api={piForm.piApi}
+              onApiChange={piForm.handlePiApiChange}
+              models={piForm.piModels}
+              onModelsChange={piForm.handlePiModelsChange}
+              userAgent={false}
+              onUserAgentChange={() => {}}
+              apiProtocols={piApiProtocols}
+              showUserAgent={false}
+              usesBuiltinCatalog={piUsesBuiltinCatalog}
+              builtinCatalogHint={t("pi.form.builtinCatalogHint")}
+            />
+          )}
+
           {/* 配置编辑器：Codex、Claude、Gemini 分别使用不同的编辑器 */}
           <ProviderFormSection
             sectionKey="configuration"
@@ -2296,7 +2469,7 @@ function ProviderFormFull({
                 </div>
                 {settingsConfigErrorField}
               </>
-            ) : appId === "openclaw" || appId === "hermes" ? (
+            ) : appId === "openclaw" || appId === "hermes" || appId === "pi" ? (
               <>
                 <div className="space-y-2">
                   <Label htmlFor="settingsConfig">

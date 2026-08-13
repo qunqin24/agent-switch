@@ -25,6 +25,7 @@ mod mcp;
 mod openclaw_config;
 mod opencode_config;
 mod panic_hook;
+mod pi_config;
 mod prompt;
 mod prompt_files;
 mod provider;
@@ -675,6 +676,13 @@ pub fn run() {
                 Ok(_) => log::debug!("○ No new Hermes providers to import"),
                 Err(e) => log::warn!("✗ Failed to import Hermes providers: {e}"),
             }
+            match crate::services::provider::import_pi_providers_from_live(&app_state) {
+                Ok(count) if count > 0 => {
+                    log::info!("✓ Imported {count} Pi provider(s) from live config");
+                }
+                Ok(_) => log::debug!("○ No new Pi providers to import"),
+                Err(e) => log::warn!("✗ Failed to import Pi providers: {e}"),
+            }
 
             // 2. OMO 配置导入（当数据库中无 OMO provider 时，从本地文件导入）
             {
@@ -1093,6 +1101,17 @@ pub fn run() {
                         }
                     }
 
+                    fn run_session_usage_sync(
+                        phase: &str,
+                        db: &crate::database::Database,
+                    ) {
+                        let result =
+                            crate::services::session_usage::sync_all_session_usage(db);
+                        for error in result.errors {
+                            log::warn!("Session usage {phase} sync: {error}");
+                        }
+                    }
+
                     let db = &db_for_session_sync;
 
                     // 首次同步
@@ -1100,26 +1119,7 @@ pub fn run() {
                         "Usage cost startup backfill",
                         db.backfill_missing_usage_costs(),
                     );
-                    run_step(
-                        "Session usage initial sync",
-                        crate::services::session_usage::sync_claude_session_logs(db),
-                    );
-                    run_step(
-                        "Codex usage initial sync",
-                        crate::services::session_usage_codex::sync_codex_usage(db),
-                    );
-                    run_step(
-                        "Gemini usage initial sync",
-                        crate::services::session_usage_gemini::sync_gemini_usage(db),
-                    );
-                    run_step(
-                        "OpenCode usage initial sync",
-                        crate::services::session_usage_opencode::sync_opencode_usage(db),
-                    );
-                    run_step(
-                        "Grok usage initial sync",
-                        crate::services::session_usage_grok::sync_grok_usage(db),
-                    );
+                    run_session_usage_sync("initial", db);
 
                     // 定期同步
                     let mut interval = tokio::time::interval(std::time::Duration::from_secs(
@@ -1128,26 +1128,7 @@ pub fn run() {
                     interval.tick().await; // skip immediate first tick
                     loop {
                         interval.tick().await;
-                        run_step(
-                            "Session usage periodic sync",
-                            crate::services::session_usage::sync_claude_session_logs(db),
-                        );
-                        run_step(
-                            "Codex usage periodic sync",
-                            crate::services::session_usage_codex::sync_codex_usage(db),
-                        );
-                        run_step(
-                            "Gemini usage periodic sync",
-                            crate::services::session_usage_gemini::sync_gemini_usage(db),
-                        );
-                        run_step(
-                            "OpenCode usage periodic sync",
-                            crate::services::session_usage_opencode::sync_opencode_usage(db),
-                        );
-                        run_step(
-                            "Grok usage periodic sync",
-                            crate::services::session_usage_grok::sync_grok_usage(db),
-                        );
+                        run_session_usage_sync("periodic", db);
                     }
                 });
             });
@@ -1473,6 +1454,9 @@ pub fn run() {
             // OpenCode specific
             commands::import_opencode_providers_from_live,
             commands::get_opencode_live_provider_ids,
+            // Pi specific
+            commands::import_pi_providers_from_live,
+            commands::get_pi_live_provider_ids,
             // OpenClaw specific
             commands::import_openclaw_providers_from_live,
             commands::get_openclaw_live_provider_ids,

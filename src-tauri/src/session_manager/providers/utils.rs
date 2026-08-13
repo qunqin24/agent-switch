@@ -85,8 +85,8 @@ pub fn extract_text(content: &Value) -> String {
 fn extract_text_from_item(item: &Value) -> Option<String> {
     let item_type = item.get("type").and_then(Value::as_str).unwrap_or("");
 
-    // tool_use: show tool name
-    if item_type == "tool_use" {
+    // Anthropic-style tool_use and Pi-style toolCall: show tool name.
+    if item_type == "tool_use" || item_type == "toolCall" {
         let name = item
             .get("name")
             .and_then(Value::as_str)

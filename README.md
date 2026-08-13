@@ -4,7 +4,10 @@
 
 # Agent Switch
 
-一个面向多种 AI 编程客户端的本地配置、路由、用量与工具管理桌面应用。
+**把散落在各处的 AI 编程客户端配置，收进一个桌面应用**
+
+供应商切换 · 本地路由 · 用量成本 · MCP / Prompt / Skills · 会话管理
+一次配好，Claude Code、Codex、Gemini CLI、Pi 等 9 个客户端同时生效
 
 [![Release](https://img.shields.io/github/v/release/qwq202/agent-switch?label=release&color=2563eb)](https://github.com/qwq202/agent-switch/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/qwq202/agent-switch/total?label=downloads)](https://github.com/qwq202/agent-switch/releases)
@@ -12,228 +15,173 @@
 [![Tauri](https://img.shields.io/badge/Tauri-2-f97316)](https://tauri.app/)
 [![License](https://img.shields.io/github/license/qwq202/agent-switch)](LICENSE)
 
-[下载最新版](https://github.com/qwq202/agent-switch/releases/latest) · [查看更新日志](CHANGELOG.md) · [问题反馈](https://github.com/qwq202/agent-switch/issues) · [上游项目](https://github.com/farion1231/cc-switch)
+**[⬇️ 下载最新版](https://github.com/qwq202/agent-switch/releases/latest)** · [更新日志](CHANGELOG.md) · [问题反馈](https://github.com/qwq202/agent-switch/issues) · [参与开发](CONTRIBUTING.md)
 
 </div>
 
-> [!IMPORTANT]
-> 本仓库是基于 [farion1231/cc-switch](https://github.com/farion1231/cc-switch) 的社区二次开发版本，不是上游作者发布的官方版本。应用展示名现已统一为 **Agent Switch**，同时继续兼容既有配置格式；本分支的安装包、自动更新和问题反馈均由 [qwq202/agent-switch](https://github.com/qwq202/agent-switch) 独立维护。
+---
 
-## 这个二开版本解决什么问题
+## 为什么需要它
 
-上游 CC Switch 已经提供了成熟的供应商切换、本地代理、MCP、Skills、会话与同步能力。本分支没有重新发明这些基础设施，而是围绕日常高频使用继续打磨：让界面更紧凑，让成本统计更可信，让 OpenCode 配置更自动，也让 Claude Desktop、Codex 和 Grok Build 的安装与升级少一些意外。
+同时用 Claude Code、Codex、Gemini CLI 和 Pi 的人，大概都经历过这些：
 
-当前分支相对上游的主要改善来自 `v3.16.5` 至 `v3.16.8` 的提交记录。
+- 换一家中转服务，要手动改 `~/.claude/settings.json`、`~/.codex/config.toml`、`~/.pi/agent/models.json`，格式还各不相同；
+- 想知道这个月花了多少钱，得自己翻日志、对着价格表算，而且经过路由重定向后根本分不清实际用的是哪个模型；
+- 同一个 MCP Server 要在四个客户端里各配一遍；
+- 手滑写坏一个配置文件，客户端直接起不来，也没有可回滚的备份。
 
-### 更适合长期使用的界面
+Agent Switch 把这些收敛到一个界面里：**配置存在本地 SQLite，配置写盘使用原子替换，Pi 供应商配置与 Skills 在修改前保留轮转备份；切换供应商是一次点击，用量按真实上游模型计费。** 它不托管你的 Key，不需要注册账号，也不往任何服务器上传数据。
 
-- 重构设置页为更清晰的全窗口布局，统一设置行、分组、折叠区和分段控件。
-- 收紧供应商、代理、用量、Prompt、MCP、Skills 等高密度页面的间距和视觉层级。
-- 重做会话管理器，加入固定搜索/筛选侧栏、批量选择和更干净的消息阅读区。
-- 让会话列表、消息正文和目录分别滚动，避免滚动内容时整页跟着移动。
-- 优化深色模式对比度、悬停状态、弹出层层级和长文本下的控件稳定性。
+## 界面预览
 
-### 更可靠的用量与成本统计
+<p align="center">
+  <img src="assets/screenshots/pi-providers-zh.jpg" width="100%" alt="供应商管理界面">
+</p>
 
-- 接入本地 [Models.dev](https://models.dev/) 元数据缓存，统一为模型配置和价格计算提供数据。
-- 支持按 6 小时、每天或每周刷新模型数据，并保留用户手动设置的价格。
-- 修复重定向/路由场景的计费归属，统计实际使用的上游模型，而不是客户端请求时的别名。
-- 隐藏没有实际 Token 的重定向别名，减少模型统计中的重复和空记录。
-- 支持历史零成本记录回填，并区分新导入记录和已修复记录。
-- 完善 Grok Build 会话同步，按每一轮真实模型计费，并处理缓存 Token、日志轮转和重复扫描。
+| Skills 管理                                                           | 会话管理                                                             |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| <img src="assets/screenshots/pi-skills-zh.jpg" alt="Skills 管理界面"> | <img src="assets/screenshots/pi-sessions-zh.jpg" alt="会话管理界面"> |
 
-### OpenCode 配置自动化
+> 截图为当前版本实际运行界面。Skills 与会话页保留真实空状态，未写入示例密钥或伪造数据。
 
-- 添加模型时自动生成易读名称，例如 `gpt-5.6` → `GPT 5.6`、`deepseek-v4-flash` → `DeepSeek V4 Flash`。
-- 根据 Models.dev 数据自动写入上下文、最大输出、模型能力、价格和原生推理配置。
-- 切换 OpenAI、Anthropic、Google 等 AI SDK 接口格式时，自动重新生成匹配该接口的模型配置。
-- 修复中文拼音输入法组合输入被重复处理的问题。
-- 修复 NewAPI 等包含渐变或裁剪路径的 SVG 图标在同一页面重复渲染时变空白的问题。
+## 支持的客户端
 
-### Claude Desktop 与本地路由
+| 客户端             | 供应商切换 | 本地路由 | 用量统计 | MCP | Skills | 会话 |
+| ------------------ | :--------: | :------: | :------: | :-: | :----: | :--: |
+| **Claude Code**    |     ✅     |    ✅    |    ✅    | ✅  |   ✅   |  ✅  |
+| **Claude Desktop** |     ✅     |    ✅    |    ✅    |  —  |   —    |  —   |
+| **Codex**          |     ✅     |    ✅    |    ✅    | ✅  |   ✅   |  ✅  |
+| **Gemini CLI**     |     ✅     |    ✅    |    ✅    | ✅  |   ✅   |  ✅  |
+| **OpenCode**       |     ✅     |    —     |    ✅    | ✅  |   ✅   |  ✅  |
+| **OpenClaw**       |     ✅     |    —     |    —     |  —  |   —    |  ✅  |
+| **Hermes**         |     ✅     |    —     |    —     | ✅  |   ✅   |  ✅  |
+| **Pi**             |     ✅     |    —     |    ✅    |  —  |   ✅   |  ✅  |
+| **Grok Build**     |     —      |    —     |    ✅    |  —  |   —    |  ✅  |
 
-- 提供 Claude Desktop 自动更新开关，并确保设置在配置重写后仍然保留。
-- 停止 Claude Desktop 本地路由前检查其他应用是否仍在使用代理接管，避免误停共享代理。
-- 对停止操作增加明确确认，让多应用共用本地路由时更可控。
-
-### 工具安装、升级与发布
-
-- 加入 Grok Build 的安装、版本检测、升级和 Usage 统计。
-- 改进 Claude Code 与 Codex 的升级流程，覆盖原生安装器、Homebrew Cask、Node 版本管理器和损坏安装恢复。
-- 升级完成后校验实际版本变化，避免上游命令报告成功但程序没有真正更新。
-- 使用本仓库自己的 Tauri 更新端点和 GitHub Releases，不会从上游仓库误拉安装包。
-- 通过 GitHub Actions 构建 Windows、macOS、Linux x86_64 与 Linux ARM64 安装包。
+各客户端支持的能力以其自身配置格式为准，能力矩阵会随版本更新，具体以应用内实际显示为准。
 
 ## 核心能力
 
-### 多客户端统一管理
-
-| 客户端/工具    | 主要能力                                                |
-| -------------- | ------------------------------------------------------- |
-| Claude Code    | 供应商切换、本地路由、模型映射、用量统计、会话管理      |
-| Claude Desktop | 供应商与模型路由、自动更新控制、共享代理保护            |
-| Codex          | Responses/Chat 路由、模型目录、推理配置、会话与用量统计 |
-| Gemini CLI     | 供应商切换、本地路由、MCP/Skills 同步、用量统计         |
-| OpenCode       | 供应商配置、Models.dev 自动配置、会话与用量统计         |
-| OpenClaw       | 供应商、工作区文件、MCP 与 Skills 管理                  |
-| Hermes         | 供应商、MCP、Skills 和配置管理                          |
-| Grok Build     | 安装、升级、版本检测和本地会话用量统计                  |
-
 ### 供应商与本地代理
 
-- 可视化管理官方服务、第三方中转和自定义 API。
-- 一键切换供应商，并支持从系统托盘快速操作。
-- 本地代理支持格式转换、热切换、自动故障转移、熔断和健康检查。
-- Claude、Codex、Gemini 可分别启用代理接管，不必把所有客户端绑在同一路由上。
-- 支持导入、导出、排序、共享配置片段和 `agentswitch://` Deep Link。
+- 内置官方服务、主流第三方中转的预设，也支持完全自定义 API。
+- 一键切换，支持系统托盘快捷操作、拖拽排序、导入导出和 `agentswitch://` Deep Link 分享配置片段。
+- 本地代理负责协议格式转换、热切换、自动故障转移、熔断与健康检查——上游挂了自动切走，不用你手动救火。
+- Claude、Codex、Gemini 可各自独立启用代理接管，不必把所有客户端绑在同一条路由上；共享代理时停止操作会先检查其他客户端是否还在用。
+
+### 用量与成本
+
+- 基于本地 [Models.dev](https://models.dev/) 元数据缓存计算价格，可按 6 小时 / 每天 / 每周刷新，**你手动设置的价格不会被自动更新覆盖**。
+- 计费归属到实际使用的上游模型，而不是客户端请求时写的别名——经过重定向和路由后依然算得准。
+- 自动同步 Pi JSONL 中每次模型调用、内嵌工具与摘要生成的供应商、模型、输入 / 输出 / 缓存 Token 和 Pi 原生分项成本。
+- 查看请求数、输入 / 输出 / 缓存 Token、成本趋势与逐条请求明细。
 
 ### MCP、Prompt 与 Skills
 
-- 在一个界面管理 Claude、Codex、Gemini、OpenCode、Hermes 等客户端的 MCP Server。
-- 管理 `CLAUDE.md`、`AGENTS.md`、`GEMINI.md` 等 Prompt 文件，并提供回填保护。
-- 从 GitHub 仓库或 ZIP 安装 Skills，支持自定义仓库、软链接和文件复制。
-- 在卸载或覆盖 Skill 前创建本地备份。
+- 在一个界面管理 Claude、Codex、Gemini、OpenCode、Hermes 的 MCP Server，改一次同步到位。
+- 管理 `CLAUDE.md`、`AGENTS.md`、`GEMINI.md` 等 Prompt 文件，带回填保护。
+- 从 GitHub 仓库或 ZIP 安装 Skills，支持软链接与文件复制两种落地方式；卸载或覆盖前自动创建本地备份。
 
-### 会话、同步与数据
+### 会话与数据安全
 
-- 浏览、搜索和恢复多个客户端的本地会话记录。
-- 在 Usage 页面查看请求数、输入/输出/缓存 Token、成本趋势和请求明细。
-- 支持自定义模型价格，自动数据更新不会覆盖用户手动价格。
-- 支持本地目录、WebDAV 和 S3 兼容对象存储同步。
-- SQLite、原子写入和自动备份共同降低配置损坏风险。
+- 浏览、搜索、恢复多个客户端的本地会话记录，包括 Pi 的 JSONL 会话树（按当前活动分支展示）。
+- 主数据存 SQLite，配置写盘走原子替换；Pi 供应商配置、Skills 以及需要回滚的迁移操作会保留本地备份。
+- 可选同步到本地目录、WebDAV 或 S3 兼容对象存储——**同步默认关闭，开不开由你决定**。
 
-## 下载与安装
+## 安装
 
-请从本仓库的 [Releases](https://github.com/qwq202/agent-switch/releases/latest) 下载。不要使用上游仓库的安装包覆盖本分支，否则自动更新来源和功能版本可能发生变化。
+从 [Releases](https://github.com/qwq202/agent-switch/releases/latest) 下载对应平台的安装包。
 
-### Windows
+| 平台        | 安装包                                              |
+| ----------- | --------------------------------------------------- |
+| **Windows** | `.msi` 安装版 · `-Portable.zip` 便携版（解压即用）  |
+| **macOS**   | `.dmg`（推荐）· `.zip`，需 macOS 12+                |
+| **Linux**   | `.AppImage` · `.deb` · `.rpm`，覆盖 x86_64 与 ARM64 |
 
-- `AgentSwitch-v{version}-Windows.msi`：安装版。
-- `AgentSwitch-v{version}-Windows-Portable.zip`：便携版，解压后直接运行。
-
-### macOS
-
-- `AgentSwitch-v{version}-macOS.dmg`：推荐安装方式。
-- `AgentSwitch-v{version}-macOS.zip`：应用压缩包。
-
-支持 macOS 12 及以上版本。当前分支发布的是未进行 Apple Developer 公证的社区构建；首次打开时如被系统拦截，请在“系统设置 → 隐私与安全性”中确认运行。
-
-### Linux
-
-- `AgentSwitch-v{version}-Linux-{arch}.AppImage`
-- `AgentSwitch-v{version}-Linux-{arch}.deb`
-- `AgentSwitch-v{version}-Linux-{arch}.rpm`
-
-发布流程覆盖 x86_64 和 ARM64。不同版本的具体资产以对应 Release 页面为准。
+> [!NOTE]
+> macOS 版本为未经 Apple 公证的社区构建，首次打开若被拦截，请到「系统设置 → 隐私与安全性」中确认运行。
+>
+> 请勿用其他仓库的安装包覆盖本应用，否则自动更新来源会发生变化。
 
 ## 快速开始
 
 1. 安装并启动 Agent Switch。
-2. 在左侧选择需要管理的客户端。
-3. 添加官方预设、第三方供应商，或创建自定义配置。
-4. 填写 API Key 和 Base URL，检查模型映射后保存。
-5. 点击“启用”切换供应商；使用本地路由时，再开启对应客户端的代理接管。
-6. 重新启动目标 CLI 或桌面客户端，让新的配置完整生效。
+2. 在左侧选择要管理的客户端。
+3. 添加官方预设或第三方供应商，填写 API Key 与 Base URL（Pi 内置供应商通常只需填 Key）。
+4. 检查模型映射后保存，点击「启用」完成切换。
+5. 需要故障转移或格式转换时，再开启对应客户端的本地路由接管。
+6. **重启目标 CLI 或桌面客户端**，让新配置完整生效。
 
 > [!TIP]
-> 首次使用可以导入现有客户端配置。切换前仍建议备份重要配置，尤其是已经手工维护了大量自定义字段的 OpenCode、Codex 或 Claude 配置。
+> 首次使用可以直接导入现有客户端配置。如果你已经手工维护了大量自定义字段（尤其是 OpenCode、Codex、Claude 的配置），切换前建议先自行备份一份。
 
-## 数据位置与隐私
+## 数据与隐私
 
-Agent Switch 采用本地优先设计。供应商配置、统计数据和备份默认保存在当前用户目录，不会因为使用本应用而自动上传到项目维护者的服务器。
+本地优先：所有配置、统计和备份都在你自己的用户目录下，不会因为使用本应用而上传到任何第三方服务器。
 
-| 数据        | 默认位置                      |
-| ----------- | ----------------------------- |
-| 主数据库    | `~/.agentswitch/agentswitch.db`   |
+| 数据        | 位置                            |
+| ----------- | ------------------------------- |
+| 主数据库    | `~/.agentswitch/agentswitch.db` |
 | 设备设置    | `~/.agentswitch/settings.json`  |
 | 自动备份    | `~/.agentswitch/backups/`       |
+| Pi 配置备份 | `~/.pi/agent/backups/`          |
 | Skills 存储 | `~/.agentswitch/skills/`        |
 | Skill 备份  | `~/.agentswitch/skill-backups/` |
 
-使用 WebDAV 或 S3 同步时，数据会上传到你自己配置的远端存储。API Key 属于敏感信息，请妥善保护本地数据库、备份和同步凭据。
-
-## 与上游的关系
-
-- 上游项目：[farion1231/cc-switch](https://github.com/farion1231/cc-switch)
-- 本二开项目：[qwq202/agent-switch](https://github.com/qwq202/agent-switch)
-- 本分支保留上游 MIT License，并感谢 Jason Young 与所有上游贡献者打下的基础。
-- 上游后续的重要修复会根据兼容性评估后同步；本分支不会承诺与上游每个提交实时一致。
-- 本分支新增功能或安装包问题，请提交到本仓库的 [Issues](https://github.com/qwq202/agent-switch/issues)，不要让上游维护者承担二开版本的问题。
+启用 WebDAV / S3 同步时，数据会上传到**你自己配置的**远端存储。数据库和备份中包含 API Key 明文，请妥善保管本地文件与同步凭据。
 
 ## 开发
 
-### 环境要求
-
-- Node.js 20+
-- pnpm 10+
-- Rust 1.95（以 `rust-toolchain.toml` 为准）
-- Tauri 2 所需的平台依赖
-
-### 常用命令
+需要 Node.js 20+、pnpm 10+、Rust 1.95（以 `rust-toolchain.toml` 为准）及 Tauri 2 平台依赖。
 
 ```bash
-# 安装依赖
-pnpm install
-
-# 启动 Tauri 开发模式
-pnpm dev
-
-# TypeScript 类型检查
-pnpm typecheck
-
-# 格式检查
-pnpm format:check
-
-# 前端单元测试
-pnpm test:unit
-
-# 构建安装包
-pnpm build
-
-# Rust 测试
-cd src-tauri && cargo test
+pnpm install                        # 安装依赖
+pnpm dev                            # 启动开发模式（会拉起完整桌面应用）
+pnpm typecheck                      # TypeScript 类型检查
+pnpm format:check                   # 格式检查
+pnpm test:unit                      # 前端单元测试
+pnpm build                          # 构建安装包
+cd src-tauri && cargo test          # Rust 测试
 ```
 
-### 技术栈
-
-- 前端：React、TypeScript、Vite、Tailwind CSS、TanStack Query、shadcn/ui
-- 桌面与后端：Tauri 2、Rust、Tokio、Serde
-- 数据：SQLite、本地 JSON 配置、原子文件写入
-- 测试：Vitest、Testing Library、MSW、Cargo Test
-
-### 代码结构
+**技术栈**：React + TypeScript + Vite + Tailwind + TanStack Query + shadcn/ui / Tauri 2 + Rust + Tokio + SQLite / Vitest + Cargo Test
 
 ```text
-src/                         React + TypeScript 前端
-├── components/              业务组件与 UI
-├── hooks/                   前端业务 Hooks
-├── lib/api/                 Tauri IPC 封装
-└── i18n/                    界面翻译
+src/                    React 前端
+├── components/         业务组件与 UI
+├── hooks/              前端业务 Hooks
+├── lib/api/            Tauri IPC 封装（唯一调用 invoke 的地方）
+└── i18n/               界面翻译
 
-src-tauri/src/               Rust 后端
-├── commands/                Tauri Command 接口层
-├── services/                业务服务
-├── database/                SQLite 与 DAO
-├── proxy/                   本地代理和协议转换
-└── session_manager/         会话读取与管理
-
-tests/                       前端测试
-assets/                      截图和品牌资源
+src-tauri/src/          Rust 后端
+├── commands/           Tauri Command 接口层
+├── services/           业务服务
+├── database/           SQLite 与 DAO
+├── proxy/              本地代理与协议转换
+└── session_manager/    会话读取与管理
 ```
+
+更多架构说明见 [CLAUDE.md](CLAUDE.md) 与 [AGENTS.md](AGENTS.md)。
 
 ## 贡献
 
-欢迎提交 Issue 和 Pull Request。提交前请至少运行：
+欢迎 Issue 和 PR。提交前请至少跑通：
 
 ```bash
-pnpm typecheck
-pnpm format:check
-pnpm test:unit
-cd src-tauri && cargo test
+pnpm typecheck && pnpm format:check && pnpm test:unit && (cd src-tauri && cargo test)
 ```
 
-涉及供应商路由、用量计费、配置迁移或自动更新的改动，请在 PR 中说明兼容性影响、测试方法和回滚方式。
+涉及**供应商路由、用量计费、配置迁移或自动更新**的改动，请在 PR 中说明兼容性影响、测试方法和回滚方式。详见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
+## 项目渊源
+
+Agent Switch 起步于 [farion1231/cc-switch](https://github.com/farion1231/cc-switch)，在其供应商切换与本地代理的基础上，扩展成了覆盖 9 个客户端的配置、路由、用量与工具管理工具，并新增了 Pi 原生集成、Models.dev 驱动的成本核算、会话管理器重构和独立的多平台发布流程。
+
+- 本项目由 [qwq202/agent-switch](https://github.com/qwq202/agent-switch) 独立维护，安装包、自动更新和问题反馈均走本仓库，**不是上游作者发布的官方版本**。
+- 遇到问题请提交到[本仓库 Issues](https://github.com/qwq202/agent-switch/issues)，不要让上游维护者承担本项目的问题。
+- 上游的重要修复会在评估兼容性后同步，但不承诺与上游每个提交保持一致。
+- 沿用上游 MIT License，感谢 Jason Young 与所有上游贡献者打下的基础。
 
 ## License
 
-本项目遵循 [MIT License](LICENSE)。原始版权归上游作者所有，二次开发部分由对应贡献者保留其贡献版权。
+[MIT License](LICENSE)。原始版权归上游作者所有，二次开发部分由对应贡献者保留其贡献版权。

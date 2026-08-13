@@ -24,6 +24,48 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
+type SessionUsageSyncFn = fn(&Database) -> Result<SessionSyncResult, AppError>;
+
+struct SessionUsageSource {
+    name: &'static str,
+    app: Option<crate::app_config::AppType>,
+    sync: SessionUsageSyncFn,
+}
+
+static SESSION_USAGE_SOURCES: &[SessionUsageSource] = &[
+    SessionUsageSource {
+        name: "Claude",
+        app: Some(crate::app_config::AppType::Claude),
+        sync: sync_claude_session_logs,
+    },
+    SessionUsageSource {
+        name: "Codex",
+        app: Some(crate::app_config::AppType::Codex),
+        sync: crate::services::session_usage_codex::sync_codex_usage,
+    },
+    SessionUsageSource {
+        name: "Gemini",
+        app: Some(crate::app_config::AppType::Gemini),
+        sync: crate::services::session_usage_gemini::sync_gemini_usage,
+    },
+    SessionUsageSource {
+        name: "OpenCode",
+        app: Some(crate::app_config::AppType::OpenCode),
+        sync: crate::services::session_usage_opencode::sync_opencode_usage,
+    },
+    // Grok Build is a usage source but not a configurable AppType.
+    SessionUsageSource {
+        name: "Grok",
+        app: None,
+        sync: crate::services::session_usage_grok::sync_grok_usage,
+    },
+    SessionUsageSource {
+        name: "Pi",
+        app: Some(crate::app_config::AppType::Pi),
+        sync: crate::services::session_usage_pi::sync_pi_usage,
+    },
+];
+
 /// 同步结果
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -34,6 +76,48 @@ pub struct SessionSyncResult {
     pub skipped: u32,
     pub files_scanned: u32,
     pub errors: Vec<String>,
+}
+
+impl SessionSyncResult {
+    fn empty() -> Self {
+        Self {
+            imported: 0,
+            updated: 0,
+            skipped: 0,
+            files_scanned: 0,
+            errors: Vec::new(),
+        }
+    }
+
+    fn merge(&mut self, other: SessionSyncResult) {
+        self.imported += other.imported;
+        self.updated += other.updated;
+        self.skipped += other.skipped;
+        self.files_scanned += other.files_scanned;
+        self.errors.extend(other.errors);
+    }
+}
+
+/// Synchronize every registered session-usage source. A failure in one source
+/// is captured in the aggregate result and never prevents the remaining
+/// clients from syncing.
+pub fn sync_all_session_usage(db: &Database) -> SessionSyncResult {
+    let mut aggregate = SessionSyncResult::empty();
+
+    for source in SESSION_USAGE_SOURCES {
+        debug_assert!(source
+            .app
+            .as_ref()
+            .is_none_or(|app| app.capabilities().session_usage));
+        match (source.sync)(db) {
+            Ok(result) => aggregate.merge(result),
+            Err(error) => aggregate
+                .errors
+                .push(format!("{} sync failed: {error}", source.name)),
+        }
+    }
+
+    aggregate
 }
 
 /// 数据来源分布
@@ -63,22 +147,10 @@ struct ParsedAssistantUsage {
 pub fn sync_claude_session_logs(db: &Database) -> Result<SessionSyncResult, AppError> {
     let projects_dir = get_claude_config_dir().join("projects");
     if !projects_dir.exists() {
-        return Ok(SessionSyncResult {
-            imported: 0,
-            updated: 0,
-            skipped: 0,
-            files_scanned: 0,
-            errors: vec![],
-        });
+        return Ok(SessionSyncResult::empty());
     }
 
-    let mut result = SessionSyncResult {
-        imported: 0,
-        updated: 0,
-        skipped: 0,
-        files_scanned: 0,
-        errors: vec![],
-    };
+    let mut result = SessionSyncResult::empty();
 
     // 收集所有 .jsonl 文件
     let jsonl_files = collect_jsonl_files(&projects_dir);
@@ -568,6 +640,28 @@ pub fn get_data_source_breakdown(db: &Database) -> Result<Vec<DataSourceSummary>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app_config::AppType;
+    use std::collections::BTreeSet;
+
+    #[test]
+    fn usage_registry_covers_every_capable_app_once() {
+        let expected = AppType::all()
+            .filter(|app| app.capabilities().session_usage)
+            .map(|app| app.as_str().to_string())
+            .collect::<BTreeSet<_>>();
+        let registered = SESSION_USAGE_SOURCES
+            .iter()
+            .filter_map(|source| source.app.as_ref())
+            .map(|app| app.as_str().to_string())
+            .collect::<BTreeSet<_>>();
+
+        assert_eq!(registered, expected);
+        assert_eq!(
+            registered.len() + 1,
+            SESSION_USAGE_SOURCES.len(),
+            "Grok must remain the only non-AppType usage source"
+        );
+    }
 
     #[test]
     fn test_parse_usage_from_jsonl_line() {

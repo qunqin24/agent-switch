@@ -29,6 +29,7 @@ impl McpApps {
             AppType::OpenCode => self.opencode,
             AppType::OpenClaw => false, // OpenClaw doesn't support MCP
             AppType::Hermes => self.hermes,
+            AppType::Pi => false,
             AppType::ClaudeDesktop => false,
         }
     }
@@ -42,6 +43,7 @@ impl McpApps {
             AppType::OpenCode => self.opencode = enabled,
             AppType::OpenClaw => {} // OpenClaw doesn't support MCP, ignore
             AppType::Hermes => self.hermes = enabled,
+            AppType::Pi => {}
             AppType::ClaudeDesktop => {} // Claude Desktop 3P provider config doesn't support MCP here
         }
     }
@@ -86,6 +88,8 @@ pub struct SkillApps {
     pub opencode: bool,
     #[serde(default)]
     pub hermes: bool,
+    #[serde(default)]
+    pub pi: bool,
 }
 
 impl SkillApps {
@@ -97,6 +101,7 @@ impl SkillApps {
             AppType::Gemini => self.gemini,
             AppType::OpenCode => self.opencode,
             AppType::Hermes => self.hermes,
+            AppType::Pi => self.pi,
             AppType::OpenClaw => false, // OpenClaw doesn't support Skills
             AppType::ClaudeDesktop => false,
         }
@@ -110,6 +115,7 @@ impl SkillApps {
             AppType::Gemini => self.gemini = enabled,
             AppType::OpenCode => self.opencode = enabled,
             AppType::Hermes => self.hermes = enabled,
+            AppType::Pi => self.pi = enabled,
             AppType::OpenClaw => {} // OpenClaw doesn't support Skills, ignore
             AppType::ClaudeDesktop => {} // Claude Desktop 3P profiles don't use Agent Switch skill sync
         }
@@ -133,12 +139,15 @@ impl SkillApps {
         if self.hermes {
             apps.push(AppType::Hermes);
         }
+        if self.pi {
+            apps.push(AppType::Pi);
+        }
         apps
     }
 
     /// 检查是否所有应用都未启用
     pub fn is_empty(&self) -> bool {
-        !self.claude && !self.codex && !self.gemini && !self.opencode && !self.hermes
+        !self.claude && !self.codex && !self.gemini && !self.opencode && !self.hermes && !self.pi
     }
 
     /// 仅启用指定应用（其他应用设为禁用）
@@ -280,6 +289,8 @@ pub struct McpRoot {
     /// Hermes MCP 配置（实际使用 config.yaml）
     #[serde(default, skip_serializing_if = "McpConfig::is_empty")]
     pub hermes: McpConfig,
+    #[serde(default, skip_serializing_if = "McpConfig::is_empty")]
+    pub pi: McpConfig,
 }
 
 impl Default for McpRoot {
@@ -295,6 +306,7 @@ impl Default for McpRoot {
             opencode: McpConfig::default(),
             openclaw: McpConfig::default(),
             hermes: McpConfig::default(),
+            pi: McpConfig::default(),
         }
     }
 }
@@ -328,6 +340,8 @@ pub struct PromptRoot {
     pub openclaw: PromptConfig,
     #[serde(default)]
     pub hermes: PromptConfig,
+    #[serde(default)]
+    pub pi: PromptConfig,
 }
 
 use crate::config::{copy_file, get_app_config_dir, get_app_config_path, write_json_file};
@@ -351,6 +365,21 @@ pub enum AppType {
     OpenCode,
     OpenClaw,
     Hermes,
+    Pi,
+}
+
+/// Static feature matrix for one managed client.
+///
+/// Keep cross-cutting capability decisions here so a new [`AppType`] cannot
+/// silently inherit behavior from `_ =>` fallbacks scattered across services.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AppCapabilities {
+    pub additive_providers: bool,
+    pub proxy: bool,
+    pub mcp: bool,
+    pub skills: bool,
+    pub sessions: bool,
+    pub session_usage: bool,
 }
 
 impl AppType {
@@ -363,6 +392,7 @@ impl AppType {
             AppType::OpenCode => "opencode",
             AppType::OpenClaw => "openclaw",
             AppType::Hermes => "hermes",
+            AppType::Pi => "pi",
         }
     }
 
@@ -371,24 +401,97 @@ impl AppType {
     /// - Switch mode (false): Only the current provider is written to live config (Claude, Codex, Gemini)
     /// - Additive mode (true): All providers are written to live config (OpenCode, OpenClaw, Hermes)
     pub fn is_additive_mode(&self) -> bool {
-        matches!(
-            self,
-            AppType::OpenCode | AppType::OpenClaw | AppType::Hermes
-        )
+        self.capabilities().additive_providers
+    }
+
+    pub const fn capabilities(&self) -> AppCapabilities {
+        match self {
+            AppType::Claude => AppCapabilities {
+                additive_providers: false,
+                proxy: true,
+                mcp: true,
+                skills: true,
+                sessions: true,
+                session_usage: true,
+            },
+            AppType::ClaudeDesktop => AppCapabilities {
+                additive_providers: false,
+                proxy: false,
+                mcp: false,
+                skills: false,
+                sessions: false,
+                session_usage: false,
+            },
+            AppType::Codex => AppCapabilities {
+                additive_providers: false,
+                proxy: true,
+                mcp: true,
+                skills: true,
+                sessions: true,
+                session_usage: true,
+            },
+            AppType::Gemini => AppCapabilities {
+                additive_providers: false,
+                proxy: true,
+                mcp: true,
+                skills: true,
+                sessions: true,
+                session_usage: true,
+            },
+            AppType::OpenCode => AppCapabilities {
+                additive_providers: true,
+                proxy: false,
+                mcp: true,
+                skills: true,
+                sessions: true,
+                session_usage: true,
+            },
+            AppType::OpenClaw => AppCapabilities {
+                additive_providers: true,
+                proxy: false,
+                mcp: false,
+                skills: false,
+                sessions: true,
+                session_usage: false,
+            },
+            AppType::Hermes => AppCapabilities {
+                additive_providers: true,
+                proxy: false,
+                mcp: true,
+                skills: true,
+                sessions: true,
+                session_usage: false,
+            },
+            AppType::Pi => AppCapabilities {
+                additive_providers: true,
+                proxy: false,
+                mcp: false,
+                skills: true,
+                sessions: true,
+                session_usage: true,
+            },
+        }
+    }
+
+    /// Compiler-checked successor used by [`AppType::all`]. Adding a new enum
+    /// member now makes this exhaustive match fail until iteration order is
+    /// chosen explicitly.
+    const fn next(&self) -> Option<AppType> {
+        match self {
+            AppType::Claude => Some(AppType::ClaudeDesktop),
+            AppType::ClaudeDesktop => Some(AppType::Codex),
+            AppType::Codex => Some(AppType::Gemini),
+            AppType::Gemini => Some(AppType::OpenCode),
+            AppType::OpenCode => Some(AppType::OpenClaw),
+            AppType::OpenClaw => Some(AppType::Hermes),
+            AppType::Hermes => Some(AppType::Pi),
+            AppType::Pi => None,
+        }
     }
 
     /// Return an iterator over all app types
     pub fn all() -> impl Iterator<Item = AppType> {
-        [
-            AppType::Claude,
-            AppType::ClaudeDesktop,
-            AppType::Codex,
-            AppType::Gemini,
-            AppType::OpenCode,
-            AppType::OpenClaw,
-            AppType::Hermes,
-        ]
-        .into_iter()
+        std::iter::successors(Some(AppType::Claude), |app| app.next())
     }
 }
 
@@ -405,10 +508,11 @@ impl FromStr for AppType {
             "opencode" => Ok(AppType::OpenCode),
             "openclaw" => Ok(AppType::OpenClaw),
             "hermes" => Ok(AppType::Hermes),
+            "pi" => Ok(AppType::Pi),
             other => Err(AppError::localized(
                 "unsupported_app",
-                format!("不支持的应用标识: '{other}'。可选值: claude, claude-desktop, codex, gemini, opencode, openclaw, hermes。"),
-                format!("Unsupported app id: '{other}'. Allowed: claude, claude-desktop, codex, gemini, opencode, openclaw, hermes."),
+                format!("不支持的应用标识: '{other}'。可选值: claude, claude-desktop, codex, gemini, opencode, openclaw, hermes, pi。"),
+                format!("Unsupported app id: '{other}'. Allowed: claude, claude-desktop, codex, gemini, opencode, openclaw, hermes, pi."),
             )),
         }
     }
@@ -447,6 +551,7 @@ impl CommonConfigSnippets {
             AppType::OpenCode => self.opencode.as_ref(),
             AppType::OpenClaw => self.openclaw.as_ref(),
             AppType::Hermes => self.hermes.as_ref(),
+            AppType::Pi => None,
         }
     }
 
@@ -460,6 +565,7 @@ impl CommonConfigSnippets {
             AppType::OpenCode => self.opencode = snippet,
             AppType::OpenClaw => self.openclaw = snippet,
             AppType::Hermes => self.hermes = snippet,
+            AppType::Pi => {}
         }
     }
 }
@@ -503,6 +609,7 @@ impl Default for MultiAppConfig {
         apps.insert("opencode".to_string(), ProviderManager::default());
         apps.insert("openclaw".to_string(), ProviderManager::default());
         apps.insert("hermes".to_string(), ProviderManager::default());
+        apps.insert("pi".to_string(), ProviderManager::default());
 
         Self {
             version: 2,
@@ -665,6 +772,7 @@ impl MultiAppConfig {
             AppType::OpenCode => &self.mcp.opencode,
             AppType::OpenClaw => &self.mcp.openclaw,
             AppType::Hermes => &self.mcp.hermes,
+            AppType::Pi => &self.mcp.pi,
         }
     }
 
@@ -678,6 +786,7 @@ impl MultiAppConfig {
             AppType::OpenCode => &mut self.mcp.opencode,
             AppType::OpenClaw => &mut self.mcp.openclaw,
             AppType::Hermes => &mut self.mcp.hermes,
+            AppType::Pi => &mut self.mcp.pi,
         }
     }
 
@@ -804,6 +913,7 @@ impl MultiAppConfig {
             AppType::OpenCode => &mut config.prompts.opencode.prompts,
             AppType::OpenClaw => &mut config.prompts.openclaw.prompts,
             AppType::Hermes => &mut config.prompts.hermes.prompts,
+            AppType::Pi => &mut config.prompts.pi.prompts,
         };
 
         prompts.insert(id, prompt);
@@ -846,6 +956,7 @@ impl MultiAppConfig {
                 AppType::OpenCode => &self.mcp.opencode.servers,
                 AppType::OpenClaw => continue, // OpenClaw MCP is still in development, skip
                 AppType::Hermes => continue,   // Hermes didn't exist in v3.6.x, skip
+                AppType::Pi => continue,       // Pi didn't exist in v3.6.x, skip
             };
 
             for (id, entry) in old_servers {

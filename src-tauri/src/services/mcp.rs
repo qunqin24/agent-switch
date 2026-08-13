@@ -13,23 +13,15 @@ pub struct McpService;
 
 impl McpService {
     fn ensure_app_supports_mcp(app: &AppType) -> Result<(), AppError> {
-        match app {
-            AppType::Claude
-            | AppType::Codex
-            | AppType::Gemini
-            | AppType::OpenCode
-            | AppType::Hermes => Ok(()),
-            AppType::ClaudeDesktop => Err(AppError::localized(
-                "mcp_app_unsupported",
-                "Claude Desktop 不属于 CLI MCP 管理范围",
-                "Claude Desktop is outside CLI MCP management",
-            )),
-            AppType::OpenClaw => Err(AppError::localized(
-                "mcp_app_unsupported",
-                "OpenClaw 当前不支持 MCP 管理",
-                "OpenClaw MCP management is not supported yet",
-            )),
+        if app.capabilities().mcp {
+            return Ok(());
         }
+
+        Err(AppError::localized(
+            "mcp_app_unsupported",
+            format!("{} 当前不支持 MCP 管理", app.as_str()),
+            format!("{} does not support MCP management", app.as_str()),
+        ))
     }
 
     /// Return the live MCP configuration path owned by one CLI.
@@ -41,7 +33,7 @@ impl McpService {
             AppType::Gemini => crate::gemini_config::get_gemini_settings_path(),
             AppType::OpenCode => crate::opencode_config::get_opencode_config_path(),
             AppType::Hermes => crate::hermes_config::get_hermes_config_path(),
-            AppType::ClaudeDesktop | AppType::OpenClaw => unreachable!(),
+            AppType::ClaudeDesktop | AppType::OpenClaw | AppType::Pi => unreachable!(),
         })
     }
 
@@ -52,7 +44,7 @@ impl McpService {
             AppType::Claude | AppType::Gemini | AppType::OpenCode => "json",
             AppType::Codex => "toml",
             AppType::Hermes => "yaml",
-            AppType::ClaudeDesktop | AppType::OpenClaw => unreachable!(),
+            AppType::ClaudeDesktop | AppType::OpenClaw | AppType::Pi => unreachable!(),
         })
     }
 
@@ -64,7 +56,7 @@ impl McpService {
             AppType::Gemini => crate::gemini_config::get_gemini_dir(),
             AppType::OpenCode => crate::opencode_config::get_opencode_dir(),
             AppType::Hermes => crate::hermes_config::get_hermes_dir(),
-            AppType::ClaudeDesktop | AppType::OpenClaw => unreachable!(),
+            AppType::ClaudeDesktop | AppType::OpenClaw | AppType::Pi => unreachable!(),
         };
         std::fs::create_dir_all(&directory).map_err(|error| AppError::io(&directory, error))
     }
@@ -93,7 +85,7 @@ impl McpService {
             AppType::Hermes => {
                 crate::mcp::import_from_hermes(&mut config)?;
             }
-            AppType::ClaudeDesktop | AppType::OpenClaw => unreachable!(),
+            AppType::ClaudeDesktop | AppType::OpenClaw | AppType::Pi => unreachable!(),
         }
 
         let mut entries = config
@@ -138,7 +130,7 @@ impl McpService {
             AppType::Hermes => {
                 mcp::sync_single_server_to_hermes(&Default::default(), id, &server_spec)
             }
-            AppType::ClaudeDesktop | AppType::OpenClaw => unreachable!(),
+            AppType::ClaudeDesktop | AppType::OpenClaw | AppType::Pi => unreachable!(),
         }
     }
 
@@ -156,7 +148,7 @@ impl McpService {
             AppType::Gemini => mcp::remove_server_from_gemini(id),
             AppType::OpenCode => mcp::remove_server_from_opencode(id),
             AppType::Hermes => mcp::remove_server_from_hermes(id),
-            AppType::ClaudeDesktop | AppType::OpenClaw => unreachable!(),
+            AppType::ClaudeDesktop | AppType::OpenClaw | AppType::Pi => unreachable!(),
         }
     }
 
@@ -289,6 +281,9 @@ impl McpService {
             AppType::Hermes => {
                 mcp::sync_single_server_to_hermes(&Default::default(), &server.id, &server.server)?;
             }
+            AppType::Pi => {
+                log::debug!("Pi MCP management is not supported, skipping sync");
+            }
         }
         Ok(())
     }
@@ -325,6 +320,9 @@ impl McpService {
             }
             AppType::Hermes => {
                 mcp::remove_server_from_hermes(id)?;
+            }
+            AppType::Pi => {
+                log::debug!("Pi MCP management is not supported, skipping remove");
             }
         }
         Ok(())

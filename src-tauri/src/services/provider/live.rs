@@ -43,7 +43,28 @@ pub(crate) fn provider_exists_in_live_config(
             .map(|providers| providers.contains_key(provider_id)),
         AppType::Hermes => crate::hermes_config::get_providers()
             .map(|providers| providers.contains_key(provider_id)),
-        _ => Ok(false),
+        AppType::Pi => {
+            crate::pi_config::get_providers().map(|providers| providers.contains_key(provider_id))
+        }
+        AppType::Claude | AppType::ClaudeDesktop | AppType::Codex | AppType::Gemini => Ok(false),
+    }
+}
+
+pub(crate) fn remove_additive_provider_from_live(
+    app_type: &AppType,
+    provider_id: &str,
+) -> Result<(), AppError> {
+    match app_type {
+        AppType::OpenCode => remove_opencode_provider_from_live(provider_id),
+        AppType::OpenClaw => remove_openclaw_provider_from_live(provider_id),
+        AppType::Hermes => remove_hermes_provider_from_live(provider_id),
+        AppType::Pi => remove_pi_provider_from_live(provider_id),
+        AppType::Claude | AppType::ClaudeDesktop | AppType::Codex | AppType::Gemini => {
+            Err(AppError::Message(format!(
+                "{} does not use additive live providers",
+                app_type.as_str()
+            )))
+        }
     }
 }
 
@@ -346,7 +367,11 @@ fn settings_contain_common_config(app_type: &AppType, settings: &Value, snippet:
             }
             _ => false,
         },
-        AppType::OpenCode | AppType::OpenClaw | AppType::Hermes | AppType::ClaudeDesktop => false,
+        AppType::OpenCode
+        | AppType::OpenClaw
+        | AppType::Hermes
+        | AppType::Pi
+        | AppType::ClaudeDesktop => false,
     }
 }
 
@@ -416,9 +441,11 @@ pub(crate) fn remove_common_config_from_settings(
             }
             Ok(result)
         }
-        AppType::OpenCode | AppType::OpenClaw | AppType::Hermes | AppType::ClaudeDesktop => {
-            Ok(settings.clone())
-        }
+        AppType::OpenCode
+        | AppType::OpenClaw
+        | AppType::Hermes
+        | AppType::Pi
+        | AppType::ClaudeDesktop => Ok(settings.clone()),
     }
 }
 
@@ -473,9 +500,11 @@ fn apply_common_config_to_settings(
             }
             Ok(result)
         }
-        AppType::OpenCode | AppType::OpenClaw | AppType::Hermes | AppType::ClaudeDesktop => {
-            Ok(settings.clone())
-        }
+        AppType::OpenCode
+        | AppType::OpenClaw
+        | AppType::Hermes
+        | AppType::Pi
+        | AppType::ClaudeDesktop => Ok(settings.clone()),
     }
 }
 
@@ -875,6 +904,10 @@ pub(crate) fn write_live_snapshot(app_type: &AppType, provider: &Provider) -> Re
             crate::hermes_config::set_provider(&provider.id, provider.settings_config.clone())?;
             log::debug!("Hermes provider '{}' written to live config", provider.id);
         }
+        AppType::Pi => {
+            crate::pi_config::set_provider(&provider.id, provider.settings_config.clone())?;
+            log::info!("Pi provider '{}' written to live config", provider.id);
+        }
     }
     Ok(())
 }
@@ -1111,6 +1144,17 @@ pub fn read_live_settings(app_type: AppType) -> Result<Value, AppError> {
             let config = crate::hermes_config::yaml_to_json(&yaml_config)?;
             Ok(config)
         }
+        AppType::Pi => {
+            let path = crate::pi_config::get_pi_models_path();
+            if !path.exists() {
+                return Err(AppError::localized(
+                    "pi.config.missing",
+                    "Pi models.json 配置文件不存在",
+                    "Pi models.json configuration file not found",
+                ));
+            }
+            crate::pi_config::read_pi_config()
+        }
     }
 }
 
@@ -1205,7 +1249,7 @@ pub fn import_default_config(state: &AppState, app_type: AppType) -> Result<bool
             })
         }
         // OpenCode, OpenClaw and Hermes use additive mode and are handled by early return above
-        AppType::OpenCode | AppType::OpenClaw | AppType::Hermes => {
+        AppType::OpenCode | AppType::OpenClaw | AppType::Hermes | AppType::Pi => {
             unreachable!("additive mode apps are handled by early return")
         }
     };
@@ -1595,6 +1639,52 @@ pub fn remove_openclaw_provider_from_live(provider_id: &str) -> Result<(), AppEr
     log::info!("OpenClaw provider '{provider_id}' removed from live config");
 
     Ok(())
+}
+
+/// Import all providers from Pi's `~/.pi/agent/models.json` catalog.
+pub fn import_pi_providers_from_live(state: &AppState) -> Result<usize, AppError> {
+    let providers = crate::pi_config::get_providers()?;
+    if providers.is_empty() {
+        return Ok(0);
+    }
+
+    let existing_ids = state.db.get_provider_ids("pi")?;
+    let mut imported = 0usize;
+    for (id, config) in providers {
+        if id.trim().is_empty() || existing_ids.contains(&id) {
+            continue;
+        }
+        if let Err(err) = crate::pi_config::validate_provider(&id, &config) {
+            log::warn!("Skipping invalid Pi provider '{id}': {err}");
+            continue;
+        }
+
+        let display_name = config
+            .get("models")
+            .and_then(Value::as_array)
+            .and_then(|models| models.first())
+            .and_then(|model| model.get("name"))
+            .and_then(Value::as_str)
+            .filter(|name| !name.trim().is_empty())
+            .unwrap_or(&id)
+            .to_string();
+        let mut provider = Provider::with_id(id.clone(), display_name, config, None);
+        provider.meta = Some(crate::provider::ProviderMeta {
+            live_config_managed: Some(true),
+            ..Default::default()
+        });
+        state.db.save_provider("pi", &provider)?;
+        imported += 1;
+    }
+
+    Ok(imported)
+}
+
+pub(crate) fn remove_pi_provider_from_live(provider_id: &str) -> Result<(), AppError> {
+    if !crate::pi_config::get_pi_dir().exists() {
+        return Ok(());
+    }
+    crate::pi_config::remove_provider(provider_id)
 }
 
 #[cfg(test)]

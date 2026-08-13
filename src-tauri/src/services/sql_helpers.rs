@@ -114,13 +114,20 @@ mod tests {
             [],
         )
         .unwrap();
+        // Pi normalizes usage the same way: input and cacheRead are separate.
+        conn.execute(
+            "INSERT INTO proxy_request_logs (request_id, app_type, input_tokens, cache_read_tokens)
+             VALUES ('pi-1', 'pi', 300, 4000)",
+            [],
+        )
+        .unwrap();
 
         let expr = fresh_input_sql("l");
         let sql = format!("SELECT COALESCE(SUM({expr}), 0) FROM proxy_request_logs l");
         let total: i64 = conn.query_row(&sql, [], |r| r.get(0)).unwrap();
         // Codex: 1000-600=400; Gemini: 800-300=500; Grok: 1200-700=500;
-        // Claude: 200 unchanged.
-        assert_eq!(total, 400 + 500 + 500 + 200);
+        // Claude: 200 unchanged; Pi: 300 unchanged.
+        assert_eq!(total, 400 + 500 + 500 + 200 + 300);
     }
 
     #[test]

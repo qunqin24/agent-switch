@@ -826,12 +826,18 @@
     "openclawConfigDirDescription": "覆寫 OpenClaw 設定目錄 (openclaw.json)。",
     "hermesConfigDir": "Hermes 設定目錄",
     "hermesConfigDirDescription": "覆寫 Hermes 設定目錄 (config.yaml)。",
+    "piConfigDir": "Pi 設定目錄",
+    "piConfigDirDescription": "覆寫 Pi Agent 設定目錄 (models.json)。",
+    "piSessionDir": "Pi 工作階段目錄",
+    "piSessionDirDescription": "為 Pi 工作階段管理與使用統計設定絕對目錄。當 Pi 的 sessionDir 相對於專案啟動目錄時，請在此指定實際目錄。",
     "browsePlaceholderClaude": "例如：/home/<您的帳號>/.claude",
     "browsePlaceholderCodex": "例如：/home/<您的帳號>/.codex",
     "browsePlaceholderGemini": "例如：/home/<您的帳號>/.gemini",
     "browsePlaceholderOpencode": "例如：/home/<您的帳號>/.config/opencode",
     "browsePlaceholderOpenclaw": "例如：/home/<您的帳號>/.openclaw",
     "browsePlaceholderHermes": "例如：/home/<您的帳號>/.hermes",
+    "browsePlaceholderPi": "例如：/home/<您的帳號>/.pi/agent",
+    "browsePlaceholderPiSession": "例如：/home/<您的帳號>/.pi/agent/sessions",
     "browseDirectory": "瀏覽目錄",
     "resetDefault": "還原預設目錄（需儲存後生效）",
     "checkForUpdates": "檢查更新",
@@ -914,7 +920,8 @@
     "gemini": "Gemini",
     "opencode": "OpenCode",
     "openclaw": "OpenClaw",
-    "hermes": "Hermes"
+    "hermes": "Hermes",
+    "pi": "Pi"
   },
   "sessionManager": {
     "title": "工作階段管理",
@@ -1490,7 +1497,8 @@
       "codex": "Codex",
       "gemini": "Gemini",
       "opencode": "OpenCode",
-      "grok": "Grok Build"
+      "grok": "Grok Build",
+      "pi": "Pi"
     },
     "rawInputLabel": "原始",
     "dataSources": "資料來源",
@@ -1501,7 +1509,8 @@
       "codex_session": "Codex 工作階段日誌",
       "gemini_session": "Gemini 工作階段日誌",
       "opencode_session": "OpenCode 工作階段日誌",
-      "grok_session": "Grok Build 工作階段日誌"
+      "grok_session": "Grok Build 工作階段日誌",
+      "pi_session": "Pi 工作階段日誌"
     },
     "sessionSync": {
       "trigger": "同步工作階段日誌",
@@ -2062,6 +2071,20 @@
     },
     "primaryModel": "預設模型",
     "fallbackModel": "備用模型"
+  },
+  "pi": {
+    "form": {
+      "providerKey": "供應商識別碼",
+      "providerKeyPlaceholder": "my-provider",
+      "providerKeyHint": "對應 models.json 中 providers 下的唯一鍵，僅使用小寫字母、數字與連字號。",
+      "providerKeyLockedHint": "此供應商已寫入 Pi 的 models.json，識別碼不可修改。",
+      "providerKeyRequired": "請填寫供應商識別碼",
+      "providerKeyDuplicate": "此供應商識別碼已被使用",
+      "providerKeyInvalid": "僅可使用小寫字母、數字與連字號",
+      "builtinCatalogHint": "這是 Pi 內建供應商。Pi 會繼續使用官方端點、協定與模型目錄。可在這裡填寫 API Key；留空時由 Pi 從 /login、auth.json 或系統環境變數讀取。",
+      "baseUrlRequired": "請填寫 API 端點",
+      "modelsRequired": "請至少設定一個模型"
+    }
   },
   "hermes": {
     "form": {

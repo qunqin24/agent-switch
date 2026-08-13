@@ -17,6 +17,7 @@ use super::utils::{
 const PROVIDER_ID: &str = "codex";
 const VSCODE_CONTEXT_PREFIX: &str = "# Context from my IDE setup:";
 const CODEX_REQUEST_MARKER: &str = "my request for codex";
+const RECOMMENDED_PLUGINS_PREFIX: &str = "<recommended_plugins>";
 
 static UUID_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
@@ -269,6 +270,7 @@ fn title_candidate_from_user_message(text: &str) -> Option<String> {
     if trimmed.is_empty()
         || trimmed.starts_with("# AGENTS.md")
         || trimmed.starts_with("<environment_context>")
+        || trimmed.starts_with(RECOMMENDED_PLUGINS_PREFIX)
     {
         return None;
     }
@@ -496,6 +498,24 @@ mod tests {
         let meta = parse_session(&path).unwrap();
         // Should skip environment_context injection and use the real user message
         assert_eq!(meta.title.as_deref(), Some("Fix the login bug"));
+    }
+
+    #[test]
+    fn parse_session_skips_recommended_plugins_injection() {
+        let temp = tempdir().expect("tempdir");
+        let path = temp.path().join("session.jsonl");
+        std::fs::write(
+            &path,
+            concat!(
+                "{\"timestamp\":\"2026-08-13T10:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"test-id\",\"cwd\":\"/tmp/project\"}}\n",
+                "{\"timestamp\":\"2026-08-13T10:00:01Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"user\",\"content\":\"<recommended_plugins>\\nHere is a list of plugins that are available but not installed.\\n</recommended_plugins>\\n# AGENTS.md instructions for /tmp/project\"}}\n",
+                "{\"timestamp\":\"2026-08-13T10:00:02Z\",\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"user\",\"content\":\"Add Pi session management\"}}\n"
+            ),
+        )
+        .expect("write");
+
+        let meta = parse_session(&path).expect("parse session");
+        assert_eq!(meta.title.as_deref(), Some("Add Pi session management"));
     }
 
     #[test]

@@ -1,6 +1,15 @@
 import React, { useId, useMemo } from "react";
+import basetenIconSvg from "@lobehub/icons-static-svg/icons/baseten.svg?raw";
+import antGroupIconSvg from "@lobehub/icons-static-svg/icons/antgroup-color.svg?raw";
+import cerebrasIconSvg from "@lobehub/icons-static-svg/icons/cerebras.svg?raw";
+import fireworksIconSvg from "@lobehub/icons-static-svg/icons/fireworks.svg?raw";
 import grokIconSvg from "@lobehub/icons-static-svg/icons/grok.svg?raw";
+import groqIconSvg from "@lobehub/icons-static-svg/icons/groq.svg?raw";
 import openCodeIconSvg from "@lobehub/icons-static-svg/icons/opencode.svg?raw";
+import piIconSvg from "@lobehub/icons-static-svg/icons/pi.svg?raw";
+import togetherIconSvg from "@lobehub/icons-static-svg/icons/together-color.svg?raw";
+import xiaomiMimoIconSvg from "@lobehub/icons-static-svg/icons/xiaomimimo.svg?raw";
+import zaiIconSvg from "@lobehub/icons-static-svg/icons/zai.svg?raw";
 import {
   getIcon,
   hasIcon,
@@ -14,9 +23,24 @@ import { namespaceSvgIds } from "@/lib/namespaceSvgIds";
 // Keep these brand marks sourced directly from Lobe Icons instead of the
 // generated local catalog, so package upgrades carry through automatically.
 const LOBE_BRAND_ICON_SVGS: Record<string, string> = {
+  antgroup: antGroupIconSvg,
+  baseten: basetenIconSvg,
+  cerebras: cerebrasIconSvg,
+  fireworks: fireworksIconSvg,
   grok: grokIconSvg,
+  groq: groqIconSvg,
   opencode: openCodeIconSvg,
+  pi: piIconSvg,
+  together: togetherIconSvg,
+  xiaomimimo: xiaomiMimoIconSvg,
+  zai: zaiIconSvg,
 };
+
+export function hasProviderIconAsset(icon?: string): boolean {
+  if (!icon) return false;
+  const key = icon.toLowerCase();
+  return key in LOBE_BRAND_ICON_SVGS || hasIcon(key) || isUrlIcon(key);
+}
 
 interface ProviderIconProps {
   icon?: string; // 图标名称

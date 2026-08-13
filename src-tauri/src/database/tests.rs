@@ -427,6 +427,34 @@ fn migration_v10_to_v11_rebuilds_rollups_with_request_model_dimension() {
 }
 
 #[test]
+fn migration_v11_to_v12_adds_pi_skills_state() {
+    let conn = Connection::open_in_memory().expect("open memory db");
+    conn.execute_batch(
+        r#"
+        CREATE TABLE skills (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            directory TEXT NOT NULL,
+            enabled_hermes BOOLEAN NOT NULL DEFAULT 0
+        );
+        "#,
+    )
+    .expect("seed v11 skills table");
+
+    Database::set_user_version(&conn, 11).expect("set user_version=11");
+    Database::apply_schema_migrations_on_conn(&conn).expect("apply migrations");
+
+    let enabled_pi = get_column_info(&conn, "skills", "enabled_pi");
+    assert_eq!(enabled_pi.r#type, "BOOLEAN");
+    assert_eq!(enabled_pi.notnull, 1);
+    assert_eq!(normalize_default(&enabled_pi.default).as_deref(), Some("0"));
+    assert_eq!(
+        Database::get_user_version(&conn).expect("version after migration"),
+        SCHEMA_VERSION
+    );
+}
+
+#[test]
 fn schema_create_tables_repairs_legacy_proxy_config_singleton_to_per_app() {
     let conn = Connection::open_in_memory().expect("open memory db");
 

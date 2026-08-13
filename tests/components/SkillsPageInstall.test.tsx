@@ -151,6 +151,7 @@ vi.mock("@/hooks/useSkills", () => ({
         opencode: false,
         openclaw: false,
         hermes: false,
+        pi: true,
       },
       skills: [],
     },

@@ -126,6 +126,9 @@ export function useSettingsForm(): UseSettingsFormResult {
       geminiConfigDir: sanitizeDir(data.geminiConfigDir),
       opencodeConfigDir: sanitizeDir(data.opencodeConfigDir),
       openclawConfigDir: sanitizeDir(data.openclawConfigDir),
+      hermesConfigDir: sanitizeDir(data.hermesConfigDir),
+      piConfigDir: sanitizeDir(data.piConfigDir),
+      piSessionDir: sanitizeDir(data.piSessionDir),
       language: normalizedLanguage,
     };
 

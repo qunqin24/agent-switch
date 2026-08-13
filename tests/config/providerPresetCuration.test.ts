@@ -6,6 +6,7 @@ import { geminiProviderPresets } from "@/config/geminiProviderPresets";
 import { hermesProviderPresets } from "@/config/hermesProviderPresets";
 import { openclawProviderPresets } from "@/config/openclawProviderPresets";
 import { opencodeProviderPresets } from "@/config/opencodeProviderPresets";
+import { piProviderPresets } from "@/config/piProviderPresets";
 
 const blockedRelayPresets = [
   "Shengsuanyun",
@@ -46,6 +47,7 @@ const presetGroups = {
   hermes: hermesProviderPresets,
   openclaw: openclawProviderPresets,
   opencode: opencodeProviderPresets,
+  pi: piProviderPresets,
 };
 
 const expectedRecognizedPresets: Record<keyof typeof presetGroups, string[]> = {
@@ -89,6 +91,18 @@ const expectedRecognizedPresets: Record<keyof typeof presetGroups, string[]> = {
     "OpenRouter",
     "TheRouter",
     "AWS Bedrock",
+  ],
+  pi: [
+    "Anthropic",
+    "OpenAI",
+    "Google Gemini",
+    "DeepSeek",
+    "Mistral AI",
+    "Groq",
+    "OpenRouter",
+    "Kimi For Coding",
+    "MiniMax",
+    "Ollama",
   ],
 };
 

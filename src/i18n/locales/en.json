@@ -826,12 +826,18 @@
     "openclawConfigDirDescription": "Override OpenClaw configuration directory (openclaw.json).",
     "hermesConfigDir": "Hermes Configuration Directory",
     "hermesConfigDirDescription": "Override Hermes configuration directory (config.yaml).",
+    "piConfigDir": "Pi Configuration Directory",
+    "piConfigDirDescription": "Override Pi Agent configuration directory (models.json).",
+    "piSessionDir": "Pi Session Directory",
+    "piSessionDirDescription": "Use an absolute directory for Pi session management and usage statistics. Set this when Pi sessionDir is relative to a project launch directory.",
     "browsePlaceholderClaude": "e.g., /home/<your-username>/.claude",
     "browsePlaceholderCodex": "e.g., /home/<your-username>/.codex",
     "browsePlaceholderGemini": "e.g., /home/<your-username>/.gemini",
     "browsePlaceholderOpencode": "e.g., /home/<your-username>/.config/opencode",
     "browsePlaceholderOpenclaw": "e.g., /home/<your-username>/.openclaw",
     "browsePlaceholderHermes": "e.g., /home/<your-username>/.hermes",
+    "browsePlaceholderPi": "e.g., /home/<your-username>/.pi/agent",
+    "browsePlaceholderPiSession": "e.g., /home/<your-username>/.pi/agent/sessions",
     "browseDirectory": "Browse Directory",
     "resetDefault": "Reset to default directory (takes effect after saving)",
     "checkForUpdates": "Check for Updates",
@@ -943,7 +949,8 @@
     "gemini": "Gemini",
     "opencode": "OpenCode",
     "openclaw": "OpenClaw",
-    "hermes": "Hermes"
+    "hermes": "Hermes",
+    "pi": "Pi"
   },
   "sessionManager": {
     "title": "Session Manager",
@@ -1518,7 +1525,8 @@
       "codex": "Codex",
       "gemini": "Gemini",
       "opencode": "OpenCode",
-      "grok": "Grok Build"
+      "grok": "Grok Build",
+      "pi": "Pi"
     },
     "rawInputLabel": "Raw",
     "dataSources": "Data Sources",
@@ -1529,7 +1537,8 @@
       "codex_session": "Codex Session",
       "gemini_session": "Gemini Session",
       "opencode_session": "OpenCode Session",
-      "grok_session": "Grok Build Session"
+      "grok_session": "Grok Build Session",
+      "pi_session": "Pi Session"
     },
     "sessionSync": {
       "trigger": "Sync session logs",
@@ -2090,6 +2099,20 @@
     },
     "primaryModel": "Primary Model",
     "fallbackModel": "Fallback Model"
+  },
+  "pi": {
+    "form": {
+      "providerKey": "Provider Key",
+      "providerKeyPlaceholder": "my-provider",
+      "providerKeyHint": "Unique key under providers in models.json. Use lowercase letters, numbers, and hyphens only.",
+      "providerKeyLockedHint": "This provider is already in Pi's models.json, so its key cannot be changed.",
+      "providerKeyRequired": "Provider key is required",
+      "providerKeyDuplicate": "This key is already in use",
+      "providerKeyInvalid": "Use lowercase letters, numbers, and hyphens only",
+      "builtinCatalogHint": "This is a Pi built-in provider. Pi keeps its official endpoint, protocol, and model catalog. Enter an API key here, or leave it empty for Pi to resolve from /login, auth.json, or the system environment.",
+      "baseUrlRequired": "API endpoint is required",
+      "modelsRequired": "Configure at least one model"
+    }
   },
   "hermes": {
     "form": {

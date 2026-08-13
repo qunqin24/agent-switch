@@ -89,6 +89,9 @@ export function SettingsPage({
     browseDirectory,
     browseAppConfigDir,
     resetDirectory,
+    updatePiSessionDir,
+    browsePiSessionDir,
+    resetPiSessionDir,
     resetAppConfigDir,
     saveSettings,
     autoSaveSettings,
@@ -406,9 +409,14 @@ export function SettingsPage({
                                 opencodeDir={settings.opencodeConfigDir}
                                 openclawDir={settings.openclawConfigDir}
                                 hermesDir={settings.hermesConfigDir}
+                                piDir={settings.piConfigDir}
+                                piSessionDir={settings.piSessionDir}
                                 onDirectoryChange={updateDirectory}
                                 onBrowseDirectory={browseDirectory}
                                 onResetDirectory={resetDirectory}
+                                onPiSessionDirChange={updatePiSessionDir}
+                                onBrowsePiSessionDir={browsePiSessionDir}
+                                onResetPiSessionDir={resetPiSessionDir}
                               />
                             </SettingsDisclosure>
 

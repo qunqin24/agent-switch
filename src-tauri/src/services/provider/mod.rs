@@ -22,7 +22,7 @@ use crate::store::AppState;
 // Re-export sub-module functions for external access
 pub use live::{
     import_default_config, import_hermes_providers_from_live, import_openclaw_providers_from_live,
-    import_opencode_providers_from_live, read_live_settings,
+    import_opencode_providers_from_live, import_pi_providers_from_live, read_live_settings,
     should_import_default_config_on_startup, sync_current_to_live,
 };
 
@@ -35,10 +35,7 @@ pub(crate) use live::{
 };
 
 // Internal re-exports
-use live::{
-    remove_hermes_provider_from_live, remove_openclaw_provider_from_live,
-    remove_opencode_provider_from_live, write_gemini_live,
-};
+use live::{remove_additive_provider_from_live, write_gemini_live};
 use usage::validate_usage_script;
 
 /// 统一会话开关变更后，立即按新开关状态重写当前官方 Codex 供应商的
@@ -1512,12 +1509,7 @@ impl ProviderService {
                 .as_ref()
                 .and_then(Self::provider_live_config_managed);
             if Self::check_live_config_exists(&app_type, id, live_managed)? {
-                match app_type {
-                    AppType::OpenCode => remove_opencode_provider_from_live(id)?,
-                    AppType::OpenClaw => remove_openclaw_provider_from_live(id)?,
-                    AppType::Hermes => remove_hermes_provider_from_live(id)?,
-                    _ => {}
-                }
+                remove_additive_provider_from_live(&app_type, id)?;
             }
             state.db.delete_provider(app_type.as_str(), id)?;
             return Ok(());
@@ -1572,16 +1564,13 @@ impl ProviderService {
                         crate::services::OmoService::delete_config_file(variant)?;
                     }
                 } else {
-                    remove_opencode_provider_from_live(id)?;
+                    remove_additive_provider_from_live(&AppType::OpenCode, id)?;
                 }
             }
-            AppType::OpenClaw => {
-                remove_openclaw_provider_from_live(id)?;
+            AppType::OpenClaw | AppType::Hermes | AppType::Pi => {
+                remove_additive_provider_from_live(&app_type, id)?;
             }
-            AppType::Hermes => {
-                remove_hermes_provider_from_live(id)?;
-            }
-            _ => {
+            AppType::Claude | AppType::ClaudeDesktop | AppType::Codex | AppType::Gemini => {
                 return Err(AppError::Message(format!(
                     "App {} does not support remove from live config",
                     app_type.as_str()
@@ -1802,12 +1791,7 @@ impl ProviderService {
             let mut updated = provider.clone();
             Self::set_provider_live_config_managed(&mut updated, true);
             if let Err(e) = state.db.save_provider(app_type.as_str(), &updated) {
-                let rollback_result = match app_type {
-                    AppType::OpenCode => remove_opencode_provider_from_live(&provider.id),
-                    AppType::OpenClaw => remove_openclaw_provider_from_live(&provider.id),
-                    AppType::Hermes => remove_hermes_provider_from_live(&provider.id),
-                    _ => Ok(()),
-                };
+                let rollback_result = remove_additive_provider_from_live(&app_type, &provider.id);
 
                 match rollback_result {
                     Ok(()) => {
@@ -1982,7 +1966,7 @@ impl ProviderService {
             AppType::Gemini => Self::extract_gemini_common_config(&provider.settings_config),
             AppType::OpenCode => Self::extract_opencode_common_config(&provider.settings_config),
             AppType::OpenClaw => Self::extract_openclaw_common_config(&provider.settings_config),
-            AppType::Hermes => Ok(String::new()), // Hermes doesn't use common config snippets
+            AppType::Hermes | AppType::Pi => Ok(String::new()), // Additive apps don't use common config snippets
         }
     }
 
@@ -1998,7 +1982,7 @@ impl ProviderService {
             AppType::Gemini => Self::extract_gemini_common_config(settings_config),
             AppType::OpenCode => Self::extract_opencode_common_config(settings_config),
             AppType::OpenClaw => Self::extract_openclaw_common_config(settings_config),
-            AppType::Hermes => Ok(String::new()), // Hermes doesn't use common config snippets
+            AppType::Hermes | AppType::Pi => Ok(String::new()), // Additive apps don't use common config snippets
         }
     }
 
@@ -2387,6 +2371,9 @@ impl ProviderService {
                     ));
                 }
             }
+            AppType::Pi => {
+                crate::pi_config::validate_provider(&provider.id, &provider.settings_config)?;
+            }
         }
 
         // Validate and clean UsageScript configuration (common for all app types)
@@ -2569,7 +2556,7 @@ impl ProviderService {
 
                 Ok((api_key, base_url))
             }
-            AppType::OpenClaw | AppType::Hermes => {
+            AppType::OpenClaw | AppType::Hermes | AppType::Pi => {
                 // OpenClaw/Hermes use apiKey and baseUrl directly on the object
                 let api_key = provider
                     .settings_config

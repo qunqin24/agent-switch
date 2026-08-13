@@ -187,11 +187,17 @@ export interface UsageRangeSelection {
  * only ever show a partial number and mislead users into reading it as the
  * Desktop's full usage. The backend collapses `claude-desktop → claude` in
  * every dashboard query (see `folded_app_type_sql`).
- * `opencode` / `openclaw` / `hermes` have no proxy handler at all — they
- * appear only as managed apps elsewhere. Grok Build is included because its
- * local unified session log contains per-turn usage fields.
+ * OpenCode, Grok Build, and Pi are included because their local session stores
+ * contain exact per-request usage fields even though they do not use the local
+ * proxy path.
  */
-export type AppType = "claude" | "codex" | "gemini" | "opencode" | "grok";
+export type AppType =
+  | "claude"
+  | "codex"
+  | "gemini"
+  | "opencode"
+  | "grok"
+  | "pi";
 
 export type AppTypeFilter = "all" | AppType;
 
@@ -201,6 +207,7 @@ export const KNOWN_APP_TYPES: ReadonlyArray<AppType> = [
   "gemini",
   "opencode",
   "grok",
+  "pi",
 ];
 
 /**

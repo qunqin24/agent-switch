@@ -5,6 +5,30 @@ All notable changes to Agent Switch will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.17.1] - 2026-08-14
+
+### Added
+
+- Added Pi as a fully managed AI coding client, including built-in and custom provider configuration aligned with Pi's provider catalog.
+- Added Pi Skills management, session browsing and deletion, and usage/cost statistics imported from Pi JSONL sessions.
+- Added official Pi provider presets for Anthropic, OpenAI, Google, xAI, Groq, Cerebras, Mistral, Z.AI, Xiaomi, Kimi, MiniMax, Together AI, Fireworks AI, Baseten, Ant Ling, Radius, and other supported providers, with branded icons where available.
+- Added an explicit Pi session-directory override for projects that use cwd-relative `sessionDir` settings.
+
+### Changed
+
+- Centralized per-client behavior in a compiler-checked capability matrix and registries for session management and usage import.
+- Split the oversized Skills, proxy, miscellaneous command, and usage-statistics services into focused modules; all production modules are now below 1,000 lines.
+- Updated provider branding to use the Pi logo from LobeHub and official-color icons for OpenAI, Anthropic, Together AI, Z.AI, Xiaomi, and other supported providers.
+- Expanded the README with an updated capability matrix and screenshots for Pi providers, Skills, and sessions.
+
+### Fixed
+
+- Fixed Codex session titles incorrectly using injected `<recommended_plugins>` content instead of the user's request.
+- Fixed Pi API keys and rotated backups being created with overly permissive Unix file permissions; managed files are now restricted to mode `0600`.
+- Fixed Pi relative `sessionDir` values being resolved against the wrong directory; cwd-dependent values now require an explicit absolute override.
+- Fixed panic-prone S3 header construction and hardened proxy handling of malformed external responses.
+- Fixed Pi usage deduplication, branch-aware session parsing, exact model attribution, and explicit zero-cost handling.
+
 ## [3.17.0] - 2026-08-13
 
 ### Added

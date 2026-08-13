@@ -70,6 +70,10 @@ const TITLE_THEMES: Record<AppType | "all", TitleTheme> = {
     accent: "text-teal-700 dark:text-teal-300",
     iconBg: "bg-teal-500/10",
   },
+  pi: {
+    accent: "text-neutral-900 dark:text-neutral-100",
+    iconBg: "bg-neutral-500/10",
+  },
 };
 
 /**
@@ -127,7 +131,7 @@ function pickSummary(
 type CacheWriteState = "ok" | "partial" | "na";
 
 /**
- * Anthropic-style protocols report cache creation; OpenAI-style protocols
+ * Anthropic/Pi-style protocols report cache creation; OpenAI-style protocols
  * (Codex/Gemini/Grok) do not — so a mix shows the number with a caveat, all-OpenAI
  * shows N/A. `appTypes` is the set actually contributing to the displayed
  * summary (a single app, or every app that participated in "all").

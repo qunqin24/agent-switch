@@ -42,7 +42,12 @@ export const useAddProviderMutation = (appId: AppId) => {
 
       let id: string;
 
-      if (appId === "opencode" || appId === "openclaw" || appId === "hermes") {
+      if (
+        appId === "opencode" ||
+        appId === "openclaw" ||
+        appId === "hermes" ||
+        appId === "pi"
+      ) {
         if (
           providerInput.category === "omo" ||
           providerInput.category === "omo-slim"
@@ -95,6 +100,16 @@ export const useAddProviderMutation = (appId: AppId) => {
 
       if (appId === "hermes") {
         await invalidateHermesProviderCaches(queryClient);
+      }
+      if (appId === "pi") {
+        await queryClient.invalidateQueries({
+          queryKey: ["piLiveProviderIds"],
+        });
+      }
+      if (appId === "pi") {
+        await queryClient.invalidateQueries({
+          queryKey: ["piLiveProviderIds"],
+        });
       }
 
       try {
@@ -151,6 +166,11 @@ export const useUpdateProviderMutation = (appId: AppId) => {
       }
       if (appId === "hermes") {
         await invalidateHermesProviderCaches(queryClient);
+      }
+      if (appId === "pi") {
+        await queryClient.invalidateQueries({
+          queryKey: ["piLiveProviderIds"],
+        });
       }
 
       let omoRestartRequired = false;

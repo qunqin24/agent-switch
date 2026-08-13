@@ -96,6 +96,7 @@ vi.mock("@/hooks/useSkills", () => ({
         opencode: true,
         openclaw: false,
         hermes: false,
+        pi: true,
       },
       skills: [
         {
@@ -111,6 +112,7 @@ vi.mock("@/hooks/useSkills", () => ({
             opencode: true,
             openclaw: false,
             hermes: false,
+            pi: true,
           },
           installedAt: 1,
           updatedAt: 0,
@@ -128,6 +130,7 @@ vi.mock("@/hooks/useSkills", () => ({
             opencode: true,
             openclaw: false,
             hermes: false,
+            pi: true,
           },
           installedAt: 1,
           updatedAt: 0,
@@ -262,6 +265,15 @@ describe("SkillsPanel", () => {
 
     expect(
       screen.getByText("/tmp/gemini/skills · /tmp/global/skills"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("article-writing")).toBeInTheDocument();
+  });
+
+  it("includes Pi native and shared global skill directories", () => {
+    render(<SkillsPanel appId="pi" onScopeChange={onScopeChangeMock} />);
+
+    expect(
+      screen.getByText("/tmp/pi/skills · /tmp/global/skills"),
     ).toBeInTheDocument();
     expect(screen.getByText("article-writing")).toBeInTheDocument();
   });

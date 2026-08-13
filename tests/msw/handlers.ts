@@ -63,6 +63,7 @@ export const handlers = [
         opencode: false,
         openclaw: false,
         hermes: false,
+        pi: true,
       },
       skills: [],
     }),
@@ -115,6 +116,18 @@ export const handlers = [
 
   http.post(`${TAURI_ENDPOINT}/get_openclaw_live_provider_ids`, () =>
     success(getLiveProviderIds("openclaw")),
+  ),
+
+  http.post(`${TAURI_ENDPOINT}/get_hermes_live_provider_ids`, () =>
+    success(getLiveProviderIds("hermes")),
+  ),
+
+  http.post(`${TAURI_ENDPOINT}/get_pi_live_provider_ids`, () =>
+    success(getLiveProviderIds("pi")),
+  ),
+
+  http.post(`${TAURI_ENDPOINT}/import_pi_providers_from_live`, () =>
+    success(0),
   ),
 
   http.post(`${TAURI_ENDPOINT}/get_openclaw_default_model`, () =>

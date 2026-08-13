@@ -826,12 +826,18 @@
     "openclawConfigDirDescription": "OpenClaw の設定ディレクトリ（openclaw.json）を上書きします。",
     "hermesConfigDir": "Hermes 設定ディレクトリ",
     "hermesConfigDirDescription": "Hermes の設定ディレクトリ（config.yaml）を上書きします。",
+    "piConfigDir": "Pi 設定ディレクトリ",
+    "piConfigDirDescription": "Pi Agent の設定ディレクトリ（models.json）を上書きします。",
+    "piSessionDir": "Pi セッションディレクトリ",
+    "piSessionDirDescription": "Pi のセッション管理と使用統計に絶対ディレクトリを使用します。sessionDir がプロジェクトの起動ディレクトリからの相対指定の場合に設定してください。",
     "browsePlaceholderClaude": "例: /home/<your-username>/.claude",
     "browsePlaceholderCodex": "例: /home/<your-username>/.codex",
     "browsePlaceholderGemini": "例: /home/<your-username>/.gemini",
     "browsePlaceholderOpencode": "例: /home/<your-username>/.config/opencode",
     "browsePlaceholderOpenclaw": "例: /home/<your-username>/.openclaw",
     "browsePlaceholderHermes": "例: /home/<your-username>/.hermes",
+    "browsePlaceholderPi": "例: /home/<your-username>/.pi/agent",
+    "browsePlaceholderPiSession": "例: /home/<your-username>/.pi/agent/sessions",
     "browseDirectory": "ディレクトリを選択",
     "resetDefault": "デフォルトに戻す（保存後に反映）",
     "checkForUpdates": "アップデートを確認",
@@ -943,7 +949,8 @@
     "gemini": "Gemini",
     "opencode": "OpenCode",
     "openclaw": "OpenClaw",
-    "hermes": "Hermes"
+    "hermes": "Hermes",
+    "pi": "Pi"
   },
   "sessionManager": {
     "title": "セッション管理",
@@ -1518,7 +1525,8 @@
       "codex": "Codex",
       "gemini": "Gemini",
       "opencode": "OpenCode",
-      "grok": "Grok Build"
+      "grok": "Grok Build",
+      "pi": "Pi"
     },
     "rawInputLabel": "原始",
     "dataSources": "データソース",
@@ -1529,7 +1537,8 @@
       "codex_session": "Codex セッション",
       "gemini_session": "Gemini セッション",
       "opencode_session": "OpenCode セッション",
-      "grok_session": "Grok Build セッション"
+      "grok_session": "Grok Build セッション",
+      "pi_session": "Pi セッション"
     },
     "sessionSync": {
       "trigger": "セッションログを同期",
@@ -2090,6 +2099,20 @@
     },
     "primaryModel": "プライマリモデル",
     "fallbackModel": "フォールバックモデル"
+  },
+  "pi": {
+    "form": {
+      "providerKey": "プロバイダーキー",
+      "providerKeyPlaceholder": "my-provider",
+      "providerKeyHint": "models.json の providers 配下で使う一意のキーです。小文字、数字、ハイフンのみ使用できます。",
+      "providerKeyLockedHint": "このプロバイダーは Pi の models.json に追加済みのため、キーを変更できません。",
+      "providerKeyRequired": "プロバイダーキーを入力してください",
+      "providerKeyDuplicate": "このキーは既に使用されています",
+      "providerKeyInvalid": "小文字、数字、ハイフンのみ使用できます",
+      "builtinCatalogHint": "これは Pi の組み込みプロバイダーです。公式エンドポイント、プロトコル、モデルカタログは Pi が使用します。ここで API キーを入力するか、空欄のまま Pi の /login、auth.json、システム環境変数から読み込めます。",
+      "baseUrlRequired": "API エンドポイントを入力してください",
+      "modelsRequired": "モデルを1つ以上設定してください"
+    }
   },
   "hermes": {
     "form": {

@@ -133,7 +133,7 @@ fn sign_request(
     body_hash: &str,
     creds: &S3Credentials,
     now: chrono::DateTime<chrono::Utc>,
-) {
+) -> Result<(), AppError> {
     let timestamp = now.format("%Y%m%dT%H%M%SZ").to_string();
     let datestamp = now.format("%Y%m%d").to_string();
 
@@ -142,9 +142,24 @@ fn sign_request(
         Some(port) => format!("{}:{}", url.host_str().unwrap_or_default(), port),
         None => url.host_str().unwrap_or_default().to_string(),
     };
-    headers.insert("host", host_value.parse().unwrap());
-    headers.insert("x-amz-date", timestamp.parse().unwrap());
-    headers.insert("x-amz-content-sha256", body_hash.parse().unwrap());
+    headers.insert(
+        "host",
+        host_value
+            .parse()
+            .map_err(|e| invalid_header_value("host", e))?,
+    );
+    headers.insert(
+        "x-amz-date",
+        timestamp
+            .parse()
+            .map_err(|e| invalid_header_value("x-amz-date", e))?,
+    );
+    headers.insert(
+        "x-amz-content-sha256",
+        body_hash
+            .parse()
+            .map_err(|e| invalid_header_value("x-amz-content-sha256", e))?,
+    );
 
     // ── Step 2: Build canonical request ──
 
@@ -223,7 +238,22 @@ fn sign_request(
         "AWS4-HMAC-SHA256 Credential={}/{}, SignedHeaders={}, Signature={}",
         creds.access_key_id, scope, signed_headers, signature
     );
-    headers.insert("authorization", authorization.parse().unwrap());
+    headers.insert(
+        "authorization",
+        authorization
+            .parse()
+            .map_err(|e| invalid_header_value("authorization", e))?,
+    );
+
+    Ok(())
+}
+
+fn invalid_header_value(header_name: &str, error: reqwest::header::InvalidHeaderValue) -> AppError {
+    AppError::localized(
+        "s3.header.invalid",
+        format!("S3 请求头 {header_name} 包含无效字符: {error}"),
+        format!("S3 header {header_name} contains invalid characters: {error}"),
+    )
 }
 
 // ─── Error helpers ───────────────────────────────────────────
@@ -342,7 +372,7 @@ pub(crate) async fn test_connection(creds: &S3Credentials) -> Result<(), AppErro
         &body_hash,
         creds,
         chrono::Utc::now(),
-    );
+    )?;
 
     let resp = client
         .head(url.as_str())
@@ -377,7 +407,12 @@ pub(crate) async fn put_object(
     let client = http_client::get();
     let body_hash = sha256_hex(&bytes);
     let mut headers = reqwest::header::HeaderMap::new();
-    headers.insert("content-type", content_type.parse().unwrap());
+    headers.insert(
+        "content-type",
+        content_type
+            .parse()
+            .map_err(|e| invalid_header_value("content-type", e))?,
+    );
     sign_request(
         "PUT",
         &url,
@@ -385,7 +420,7 @@ pub(crate) async fn put_object(
         &body_hash,
         creds,
         chrono::Utc::now(),
-    );
+    )?;
 
     let resp = client
         .put(url.as_str())
@@ -429,7 +464,7 @@ pub(crate) async fn get_object(
         &body_hash,
         creds,
         chrono::Utc::now(),
-    );
+    )?;
 
     let resp = client
         .get(url.as_str())
@@ -495,7 +530,7 @@ pub(crate) async fn head_object(
         &body_hash,
         creds,
         chrono::Utc::now(),
-    );
+    )?;
 
     let resp = client
         .head(url.as_str())
@@ -735,7 +770,8 @@ mod tests {
         let body_hash = sha256_hex(b"");
 
         let mut headers = reqwest::header::HeaderMap::new();
-        sign_request("GET", &url, &mut headers, &body_hash, &creds, now);
+        sign_request("GET", &url, &mut headers, &body_hash, &creds, now)
+            .expect("AWS test vector should produce valid headers");
 
         let auth = headers.get("authorization").unwrap().to_str().unwrap();
 
@@ -776,7 +812,8 @@ mod tests {
 
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert("content-type", "application/json".parse().unwrap());
-        sign_request("PUT", &url, &mut headers, &body_hash, &creds, now);
+        sign_request("PUT", &url, &mut headers, &body_hash, &creds, now)
+            .expect("fixed test values should produce valid headers");
 
         let auth = headers.get("authorization").unwrap().to_str().unwrap();
         // content-type must appear in the signed headers
@@ -784,6 +821,25 @@ mod tests {
             auth.contains("content-type"),
             "content-type should be in signed headers: {auth}"
         );
+    }
+
+    #[test]
+    fn sig_v4_rejects_invalid_user_credentials_without_panicking() {
+        let creds = S3Credentials {
+            access_key_id: "bad\r\ncredential".to_string(),
+            secret_access_key: "TESTSECRET".to_string(),
+            region: "us-east-1".to_string(),
+            bucket: "b".to_string(),
+            endpoint: String::new(),
+        };
+        let now = chrono::Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+        let url = Url::parse("https://b.s3.us-east-1.amazonaws.com/key.json").unwrap();
+        let mut headers = reqwest::header::HeaderMap::new();
+
+        let error = sign_request("GET", &url, &mut headers, &sha256_hex(b""), &creds, now)
+            .expect_err("control characters must be rejected as an invalid header");
+
+        assert!(error.to_string().contains("authorization"));
     }
 
     #[test]

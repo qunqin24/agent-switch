@@ -111,6 +111,12 @@ export function ProviderList({
   // Hermes: 查询 live 配置中的供应商 ID 列表，用于判断 isInConfig
   const { data: hermesLiveIds } = useHermesLiveProviderIds(appId === "hermes");
 
+  const { data: piLiveIds } = useQuery({
+    queryKey: ["piLiveProviderIds"],
+    queryFn: () => providersApi.getPiLiveProviderIds(),
+    enabled: appId === "pi",
+  });
+
   // Hermes: 读取当前 model.provider，用于判断哪个供应商是"当前激活"（高亮）
   const { data: hermesModelConfig } = useHermesModelConfig(appId === "hermes");
   const hermesCurrentProviderId = hermesModelConfig?.provider;
@@ -127,9 +133,10 @@ export function ProviderList({
       if (appId === "hermes") {
         return hermesLiveIds?.includes(providerId) ?? false;
       }
+      if (appId === "pi") return piLiveIds?.includes(providerId) ?? false;
       return true; // 其他应用始终返回 true
     },
-    [appId, opencodeLiveIds, openclawLiveIds, hermesLiveIds],
+    [appId, opencodeLiveIds, openclawLiveIds, hermesLiveIds, piLiveIds],
   );
 
   // OpenClaw: query default model to determine which provider is default
@@ -220,6 +227,10 @@ export function ProviderList({
       }
       if (appId === "hermes") {
         const count = await providersApi.importHermesFromLive();
+        return count > 0;
+      }
+      if (appId === "pi") {
+        const count = await providersApi.importPiFromLive();
         return count > 0;
       }
       if (appId === "claude-desktop") {

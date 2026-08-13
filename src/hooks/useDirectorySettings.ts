@@ -12,7 +12,8 @@ type AppDirectoryKey =
   | "gemini"
   | "opencode"
   | "openclaw"
-  | "hermes";
+  | "hermes"
+  | "pi";
 type DirectoryKey = "appConfig" | AppDirectoryKey;
 
 export interface ResolvedDirectories {
@@ -23,6 +24,8 @@ export interface ResolvedDirectories {
   opencode: string;
   openclaw: string;
   hermes: string;
+  pi: string;
+  piSession: string;
 }
 
 // Single source of truth for per-app directory metadata.
@@ -36,6 +39,7 @@ const APP_DIRECTORY_META: Record<
   opencode: { key: "opencode", defaultFolder: ".config/opencode" },
   openclaw: { key: "openclaw", defaultFolder: ".openclaw" },
   hermes: { key: "hermes", defaultFolder: ".hermes" },
+  pi: { key: "pi", defaultFolder: ".pi/agent" },
 };
 
 const DIRECTORY_KEY_TO_SETTINGS_FIELD: Record<
@@ -48,6 +52,7 @@ const DIRECTORY_KEY_TO_SETTINGS_FIELD: Record<
   opencode: "opencodeConfigDir",
   openclaw: "openclawConfigDir",
   hermes: "hermesConfigDir",
+  pi: "piConfigDir",
 };
 
 const sanitizeDir = (value?: string | null): string | undefined => {
@@ -99,12 +104,15 @@ export interface UseDirectorySettingsResult {
   browseDirectory: (app: DirectoryAppId) => Promise<void>;
   browseAppConfigDir: () => Promise<void>;
   resetDirectory: (app: DirectoryAppId) => Promise<void>;
+  updatePiSessionDir: (value?: string) => void;
+  browsePiSessionDir: () => Promise<void>;
+  resetPiSessionDir: () => Promise<void>;
   resetAppConfigDir: () => Promise<void>;
   resetAllDirectories: (overrides?: ResolvedAppDirectoryOverrides) => void;
 }
 
 export type ResolvedAppDirectoryOverrides = Partial<
-  Record<AppDirectoryKey, string | undefined>
+  Record<AppDirectoryKey | "piSession", string | undefined>
 >;
 
 /**
@@ -133,6 +141,8 @@ export function useDirectorySettings({
     opencode: "",
     openclaw: "",
     hermes: "",
+    pi: "",
+    piSession: "",
   });
   const [isLoading, setIsLoading] = useState(true);
 
@@ -144,6 +154,8 @@ export function useDirectorySettings({
     opencode: "",
     openclaw: "",
     hermes: "",
+    pi: "",
+    piSession: "",
   });
   const initialAppConfigDirRef = useRef<string | undefined>(undefined);
 
@@ -162,6 +174,7 @@ export function useDirectorySettings({
           opencodeDir,
           openclawDir,
           hermesDir,
+          piDir,
           defaultAppConfig,
           defaultClaudeDir,
           defaultCodexDir,
@@ -169,6 +182,8 @@ export function useDirectorySettings({
           defaultOpencodeDir,
           defaultOpenclawDir,
           defaultHermesDir,
+          defaultPiDir,
+          defaultPiSessionDir,
         ] = await Promise.all([
           settingsApi.getAppConfigDirOverride(),
           settingsApi.getConfigDir("claude"),
@@ -177,6 +192,7 @@ export function useDirectorySettings({
           settingsApi.getConfigDir("opencode"),
           settingsApi.getConfigDir("openclaw"),
           settingsApi.getConfigDir("hermes"),
+          settingsApi.getConfigDir("pi"),
           computeDefaultAppConfigDir(),
           computeDefaultConfigDir("claude"),
           computeDefaultConfigDir("codex"),
@@ -184,6 +200,8 @@ export function useDirectorySettings({
           computeDefaultConfigDir("opencode"),
           computeDefaultConfigDir("openclaw"),
           computeDefaultConfigDir("hermes"),
+          computeDefaultConfigDir("pi"),
+          homeDir().then((home) => join(home, ".pi/agent/sessions")),
         ]);
 
         if (!active) return;
@@ -198,6 +216,8 @@ export function useDirectorySettings({
           opencode: defaultOpencodeDir ?? "",
           openclaw: defaultOpenclawDir ?? "",
           hermes: defaultHermesDir ?? "",
+          pi: defaultPiDir ?? "",
+          piSession: defaultPiSessionDir ?? "",
         };
 
         setAppConfigDir(normalizedOverride);
@@ -211,6 +231,10 @@ export function useDirectorySettings({
           opencode: opencodeDir || defaultsRef.current.opencode,
           openclaw: openclawDir || defaultsRef.current.openclaw,
           hermes: hermesDir || defaultsRef.current.hermes,
+          pi: piDir || defaultsRef.current.pi,
+          piSession:
+            sanitizeDir(settings?.piSessionDir) ??
+            defaultsRef.current.piSession,
         });
       } catch (error) {
         console.error(
@@ -228,7 +252,7 @@ export function useDirectorySettings({
     return () => {
       active = false;
     };
-  }, []);
+  }, [settings?.piSessionDir]);
 
   const updateDirectoryState = useCallback(
     (key: DirectoryKey, value?: string) => {
@@ -264,6 +288,18 @@ export function useDirectorySettings({
       updateDirectoryState(APP_DIRECTORY_META[app].key, value);
     },
     [updateDirectoryState],
+  );
+
+  const updatePiSessionDir = useCallback(
+    (value?: string) => {
+      const sanitized = sanitizeDir(value);
+      onUpdateSettings({ piSessionDir: sanitized });
+      setResolvedDirs((previous) => ({
+        ...previous,
+        piSession: sanitized ?? defaultsRef.current.piSession,
+      }));
+    },
+    [onUpdateSettings],
   );
 
   const browseDirectory = useCallback(
@@ -310,6 +346,25 @@ export function useDirectorySettings({
     }
   }, [appConfigDir, resolvedDirs.appConfig, t, updateDirectoryState]);
 
+  const browsePiSessionDir = useCallback(async () => {
+    const currentValue = settings?.piSessionDir ?? resolvedDirs.piSession;
+    try {
+      const picked = await settingsApi.selectConfigDirectory(currentValue);
+      const sanitized = sanitizeDir(picked ?? undefined);
+      if (sanitized) updatePiSessionDir(sanitized);
+    } catch (error) {
+      console.error(
+        "[useDirectorySettings] Failed to pick Pi session directory",
+        error,
+      );
+      toast.error(
+        t("settings.selectFileFailed", {
+          defaultValue: "选择目录失败",
+        }),
+      );
+    }
+  }, [resolvedDirs.piSession, settings?.piSessionDir, t, updatePiSessionDir]);
+
   const resetDirectory = useCallback(
     async (app: DirectoryAppId) => {
       const key = APP_DIRECTORY_META[app].key;
@@ -340,6 +395,21 @@ export function useDirectorySettings({
     updateDirectoryState("appConfig", undefined);
   }, [updateDirectoryState]);
 
+  const resetPiSessionDir = useCallback(async () => {
+    if (!defaultsRef.current.piSession) {
+      try {
+        const home = await homeDir();
+        defaultsRef.current.piSession = await join(home, ".pi/agent/sessions");
+      } catch (error) {
+        console.error(
+          "[useDirectorySettings] Failed to resolve Pi session directory",
+          error,
+        );
+      }
+    }
+    updatePiSessionDir(undefined);
+  }, [updatePiSessionDir]);
+
   const resetAllDirectories = useCallback(
     (overrides?: ResolvedAppDirectoryOverrides) => {
       setAppConfigDir(initialAppConfigDirRef.current);
@@ -352,6 +422,8 @@ export function useDirectorySettings({
         opencode: overrides?.opencode ?? defaultsRef.current.opencode,
         openclaw: overrides?.openclaw ?? defaultsRef.current.openclaw,
         hermes: overrides?.hermes ?? defaultsRef.current.hermes,
+        pi: overrides?.pi ?? defaultsRef.current.pi,
+        piSession: overrides?.piSession ?? defaultsRef.current.piSession,
       });
     },
     [],
@@ -363,10 +435,13 @@ export function useDirectorySettings({
     isLoading,
     initialAppConfigDir: initialAppConfigDirRef.current,
     updateDirectory,
+    updatePiSessionDir,
     updateAppConfigDir,
     browseDirectory,
+    browsePiSessionDir,
     browseAppConfigDir,
     resetDirectory,
+    resetPiSessionDir,
     resetAppConfigDir,
     resetAllDirectories,
   };

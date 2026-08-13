@@ -4,7 +4,103 @@ pub mod terminal;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-use providers::{claude, codex, gemini, hermes, openclaw, opencode};
+use providers::{claude, codex, gemini, hermes, openclaw, opencode, pi};
+
+type ScanSessionsFn = fn() -> Vec<SessionMeta>;
+type LoadMessagesFn = fn(&Path) -> Result<Vec<SessionMessage>, String>;
+type DeleteSessionFn = fn(&Path, &Path, &str) -> Result<bool, String>;
+type SessionRootsFn = fn() -> Vec<PathBuf>;
+
+struct SessionProviderAdapter {
+    id: &'static str,
+    scan: ScanSessionsFn,
+    load: LoadMessagesFn,
+    delete: DeleteSessionFn,
+    roots: SessionRootsFn,
+}
+
+fn claude_roots() -> Vec<PathBuf> {
+    vec![crate::config::get_claude_config_dir().join("projects")]
+}
+
+fn opencode_roots() -> Vec<PathBuf> {
+    vec![opencode::get_opencode_data_dir()]
+}
+
+fn openclaw_roots() -> Vec<PathBuf> {
+    vec![crate::openclaw_config::get_openclaw_dir().join("agents")]
+}
+
+fn gemini_roots() -> Vec<PathBuf> {
+    vec![crate::gemini_config::get_gemini_dir().join("tmp")]
+}
+
+fn hermes_roots() -> Vec<PathBuf> {
+    vec![crate::hermes_config::get_hermes_dir().join("sessions")]
+}
+
+fn pi_roots() -> Vec<PathBuf> {
+    vec![pi::session_root()]
+}
+
+static SESSION_PROVIDERS: &[SessionProviderAdapter] = &[
+    SessionProviderAdapter {
+        id: "codex",
+        scan: codex::scan_sessions,
+        load: codex::load_messages,
+        delete: codex::delete_session,
+        roots: codex::session_roots,
+    },
+    SessionProviderAdapter {
+        id: "claude",
+        scan: claude::scan_sessions,
+        load: claude::load_messages,
+        delete: claude::delete_session,
+        roots: claude_roots,
+    },
+    SessionProviderAdapter {
+        id: "opencode",
+        scan: opencode::scan_sessions,
+        load: opencode::load_messages,
+        delete: opencode::delete_session,
+        roots: opencode_roots,
+    },
+    SessionProviderAdapter {
+        id: "openclaw",
+        scan: openclaw::scan_sessions,
+        load: openclaw::load_messages,
+        delete: openclaw::delete_session,
+        roots: openclaw_roots,
+    },
+    SessionProviderAdapter {
+        id: "gemini",
+        scan: gemini::scan_sessions,
+        load: gemini::load_messages,
+        delete: gemini::delete_session,
+        roots: gemini_roots,
+    },
+    SessionProviderAdapter {
+        id: "hermes",
+        scan: hermes::scan_sessions,
+        load: hermes::load_messages,
+        delete: hermes::delete_session,
+        roots: hermes_roots,
+    },
+    SessionProviderAdapter {
+        id: "pi",
+        scan: pi::scan_sessions,
+        load: pi::load_messages,
+        delete: pi::delete_session,
+        roots: pi_roots,
+    },
+];
+
+fn session_provider(provider_id: &str) -> Result<&'static SessionProviderAdapter, String> {
+    SESSION_PROVIDERS
+        .iter()
+        .find(|provider| provider.id == provider_id)
+        .ok_or_else(|| format!("Unsupported provider: {provider_id}"))
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -56,30 +152,15 @@ pub struct DeleteSessionOutcome {
 }
 
 pub fn scan_sessions() -> Vec<SessionMeta> {
-    let (r1, r2, r3, r4, r5, r6) = std::thread::scope(|s| {
-        let h1 = s.spawn(codex::scan_sessions);
-        let h2 = s.spawn(claude::scan_sessions);
-        let h3 = s.spawn(opencode::scan_sessions);
-        let h4 = s.spawn(openclaw::scan_sessions);
-        let h5 = s.spawn(gemini::scan_sessions);
-        let h6 = s.spawn(hermes::scan_sessions);
-        (
-            h1.join().unwrap_or_default(),
-            h2.join().unwrap_or_default(),
-            h3.join().unwrap_or_default(),
-            h4.join().unwrap_or_default(),
-            h5.join().unwrap_or_default(),
-            h6.join().unwrap_or_default(),
-        )
+    let mut sessions = std::thread::scope(|scope| {
+        SESSION_PROVIDERS
+            .iter()
+            .map(|provider| scope.spawn(provider.scan))
+            .collect::<Vec<_>>()
+            .into_iter()
+            .flat_map(|handle| handle.join().unwrap_or_default())
+            .collect::<Vec<_>>()
     });
-
-    let mut sessions = Vec::new();
-    sessions.extend(r1);
-    sessions.extend(r2);
-    sessions.extend(r3);
-    sessions.extend(r4);
-    sessions.extend(r5);
-    sessions.extend(r6);
 
     sessions.sort_by(|a, b| {
         let a_ts = a.last_active_at.or(a.created_at).unwrap_or(0);
@@ -99,16 +180,8 @@ pub fn load_messages(provider_id: &str, source_path: &str) -> Result<Vec<Session
         return hermes::load_messages_sqlite(source_path);
     }
 
-    let path = Path::new(source_path);
-    match provider_id {
-        "codex" => codex::load_messages(path),
-        "claude" => claude::load_messages(path),
-        "opencode" => opencode::load_messages(path),
-        "openclaw" => openclaw::load_messages(path),
-        "gemini" => gemini::load_messages(path),
-        "hermes" => hermes::load_messages(path),
-        _ => Err(format!("Unsupported provider: {provider_id}")),
-    }
+    let provider = session_provider(provider_id)?;
+    (provider.load)(Path::new(source_path))
 }
 
 pub fn delete_session(
@@ -155,19 +228,8 @@ fn delete_session_with_roots(
         saw_existing_root = true;
         let validated_root = canonicalize_existing_path(root, "session root")?;
         if validated_source.starts_with(&validated_root) {
-            return match provider_id {
-                "codex" => codex::delete_session(&validated_root, &validated_source, session_id),
-                "claude" => claude::delete_session(&validated_root, &validated_source, session_id),
-                "opencode" => {
-                    opencode::delete_session(&validated_root, &validated_source, session_id)
-                }
-                "openclaw" => {
-                    openclaw::delete_session(&validated_root, &validated_source, session_id)
-                }
-                "gemini" => gemini::delete_session(&validated_root, &validated_source, session_id),
-                "hermes" => hermes::delete_session(&validated_root, &validated_source, session_id),
-                _ => Err(format!("Unsupported provider: {provider_id}")),
-            };
+            let provider = session_provider(provider_id)?;
+            return (provider.delete)(&validated_root, &validated_source, session_id);
         }
     }
 
@@ -188,17 +250,8 @@ fn delete_session_with_roots(
 }
 
 fn provider_roots(provider_id: &str) -> Result<Vec<PathBuf>, String> {
-    let roots = match provider_id {
-        "codex" => codex::session_roots(),
-        "claude" => vec![crate::config::get_claude_config_dir().join("projects")],
-        "opencode" => vec![opencode::get_opencode_data_dir()],
-        "openclaw" => vec![crate::openclaw_config::get_openclaw_dir().join("agents")],
-        "gemini" => vec![crate::gemini_config::get_gemini_dir().join("tmp")],
-        "hermes" => vec![crate::hermes_config::get_hermes_dir().join("sessions")],
-        _ => return Err(format!("Unsupported provider: {provider_id}")),
-    };
-
-    Ok(roots)
+    let provider = session_provider(provider_id)?;
+    Ok((provider.roots)())
 }
 
 fn canonicalize_existing_path(path: &Path, label: &str) -> Result<PathBuf, String> {
@@ -248,7 +301,24 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app_config::AppType;
+    use std::collections::BTreeSet;
     use tempfile::tempdir;
+
+    #[test]
+    fn session_registry_covers_every_capable_app_once() {
+        let expected = AppType::all()
+            .filter(|app| app.capabilities().sessions)
+            .map(|app| app.as_str().to_string())
+            .collect::<BTreeSet<_>>();
+        let registered = SESSION_PROVIDERS
+            .iter()
+            .map(|provider| provider.id.to_string())
+            .collect::<BTreeSet<_>>();
+
+        assert_eq!(registered, expected);
+        assert_eq!(registered.len(), SESSION_PROVIDERS.len());
+    }
 
     fn write_codex_session(path: &Path, session_id: &str) {
         std::fs::write(

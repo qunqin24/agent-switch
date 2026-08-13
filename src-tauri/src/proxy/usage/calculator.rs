@@ -52,7 +52,7 @@ impl CostCalculator {
     /// 按 app_type 选择输入 token 语义后计算成本。
     ///
     /// Codex/OpenAI Responses 与 Gemini 的输入 token 字段包含 cache read 部分；
-    /// Claude/Anthropic 的 input_tokens 已经是 fresh input。
+    /// Claude/Anthropic 与 Pi 的 input_tokens 已经是 fresh input。
     pub fn calculate_for_app(
         app_type: &str,
         usage: &TokenUsage,
@@ -77,7 +77,7 @@ impl CostCalculator {
         let million = Decimal::from(1_000_000);
 
         // OpenAI/Gemini 风格的 input_tokens 包含缓存命中，需要扣除后再按输入价计费；
-        // Claude/Anthropic 风格的 input_tokens 已经是 fresh input，不能再次扣减。
+        // Claude/Anthropic/Pi 风格的 input_tokens 已经是 fresh input，不能再次扣减。
         let billable_input_tokens = if input_includes_cache_read {
             usage.input_tokens.saturating_sub(usage.cache_read_tokens)
         } else {

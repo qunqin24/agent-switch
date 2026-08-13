@@ -79,9 +79,11 @@ pub async fn list_cli_provided_skills(app: &AppType) -> Result<Vec<CliProvidedSk
         AppType::Codex => list_codex_builtin_skills(),
         AppType::Gemini => Ok(list_gemini_builtin_skills()),
         AppType::OpenCode => list_opencode_provided_skills().await,
-        AppType::Claude | AppType::ClaudeDesktop | AppType::OpenClaw | AppType::Hermes => {
-            Ok(Vec::new())
-        }
+        AppType::Claude
+        | AppType::ClaudeDesktop
+        | AppType::OpenClaw
+        | AppType::Hermes
+        | AppType::Pi => Ok(Vec::new()),
     }
 }
 

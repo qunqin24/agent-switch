@@ -13,13 +13,13 @@ const MAX_BACKUPS: usize = 10;
 pub struct ConfigService;
 
 impl ConfigService {
-    /// 为当前 config.json 创建备份，返回备份 ID（若文件不存在则返回空字符串）。
+    /// 为指定 JSON 配置创建备份，返回备份 ID（若文件不存在则返回空字符串）。
     pub fn create_backup(config_path: &Path) -> Result<String, AppError> {
         if !config_path.exists() {
             return Ok(String::new());
         }
 
-        let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
+        let timestamp = Utc::now().format("%Y%m%d_%H%M%S_%6f");
         let backup_id = format!("backup_{timestamp}");
 
         let backup_dir = config_path
@@ -32,6 +32,17 @@ impl ConfigService {
         let backup_path = backup_dir.join(format!("{backup_id}.json"));
         let contents = fs::read(config_path).map_err(|e| AppError::io(config_path, e))?;
         fs::write(&backup_path, contents).map_err(|e| AppError::io(&backup_path, e))?;
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let source_mode = fs::metadata(config_path)
+                .map_err(|e| AppError::io(config_path, e))?
+                .permissions()
+                .mode();
+            fs::set_permissions(&backup_path, fs::Permissions::from_mode(source_mode))
+                .map_err(|e| AppError::io(&backup_path, e))?;
+        }
 
         Self::cleanup_old_backups(&backup_dir, MAX_BACKUPS)?;
 
@@ -135,6 +146,9 @@ impl ConfigService {
             }
             AppType::Hermes => {
                 // Hermes uses additive mode, no live sync needed
+            }
+            AppType::Pi => {
+                // Pi uses additive mode, no exclusive live sync needed
             }
         }
 

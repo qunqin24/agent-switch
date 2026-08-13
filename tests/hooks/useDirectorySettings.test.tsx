@@ -70,6 +70,7 @@ describe("useDirectorySettings", () => {
       if (app === "gemini") return "/remote/gemini";
       if (app === "opencode") return "/remote/opencode";
       if (app === "openclaw") return "/remote/openclaw";
+      if (app === "pi") return "/remote/pi";
       return "/remote/hermes";
     });
     selectConfigDirectoryMock.mockReset();
@@ -93,7 +94,32 @@ describe("useDirectorySettings", () => {
       opencode: "/remote/opencode",
       openclaw: "/remote/openclaw",
       hermes: "/remote/hermes",
+      pi: "/remote/pi",
+      piSession: "/home/mock/.pi/agent/sessions",
     });
+  });
+
+  it("stores an explicit Pi session directory selected by the user", async () => {
+    selectConfigDirectoryMock.mockResolvedValue("/sessions/pi");
+    const { result } = renderHook(() =>
+      useDirectorySettings({
+        settings: createSettings({ piSessionDir: undefined }),
+        onUpdateSettings,
+      }),
+    );
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    await act(async () => {
+      await result.current.browsePiSessionDir();
+    });
+
+    expect(selectConfigDirectoryMock).toHaveBeenCalledWith(
+      "/home/mock/.pi/agent/sessions",
+    );
+    expect(onUpdateSettings).toHaveBeenCalledWith({
+      piSessionDir: "/sessions/pi",
+    });
+    expect(result.current.resolvedDirs.piSession).toBe("/sessions/pi");
   });
 
   it("updates claude directory when browsing succeeds", async () => {

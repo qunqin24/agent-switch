@@ -36,6 +36,7 @@ vi.mock("@/hooks/useSkills", () => ({
         opencode: true,
         openclaw: false,
         hermes: false,
+        pi: true,
       },
       skills: [
         {
@@ -50,6 +51,7 @@ vi.mock("@/hooks/useSkills", () => ({
             gemini: true,
             opencode: true,
             hermes: false,
+            pi: true,
           },
           installedAt: 1,
           updatedAt: 0,
