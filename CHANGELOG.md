@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Fixed macOS in-app upgrades from pre-rename versions leaving the outer application bundle named `CC Switch.app`; the first launch now safely renames it to `Agent Switch.app`, refreshes LaunchServices, and relaunches from the new path without overwriting an existing app.
 - Fixed DeepSeek API keys disappearing when enabling or switching the provider by safely backfilling credentials without overwriting OAuth state.
 - Fixed Codex provider switching so model catalogs and CLI-owned configuration are preserved and restored consistently.
 - Fixed provider-editor focus styling and preset-selection behavior.

@@ -19,6 +19,8 @@ mod init_status;
 mod lightweight;
 #[cfg(target_os = "linux")]
 mod linux_fix;
+#[cfg(any(target_os = "macos", test))]
+mod macos_bundle_migration;
 mod mcp;
 mod openclaw_config;
 mod opencode_config;
@@ -224,6 +226,17 @@ fn macos_tray_icon() -> Option<Image<'static>> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "macos")]
+    match macos_bundle_migration::migrate_legacy_bundle_and_relaunch() {
+        Ok(true) => std::process::exit(0),
+        Ok(false) => {}
+        Err(error) => {
+            // 目标已存在或目录不可写时绝不覆盖、绝不退出：继续从旧路径运行，
+            // 用户仍可正常使用应用或手动处理冲突。
+            eprintln!("macOS 应用包名称迁移未完成，将继续从当前路径运行: {error}");
+        }
+    }
+
     let mut builder = tauri::Builder::default();
 
     #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
