@@ -1021,6 +1021,7 @@
     "officialNoApiKey": "官方登入無需填寫 API Key，直接儲存即可",
     "codexOfficialNoApiKey": "官方無需填寫 API Key，直接儲存即可",
     "codexApiKeyAutoFill": "只需要填這裡，下方 auth.json 會自動填寫",
+    "codexDeepSeekApiKeyAutoFill": "只需要填這裡，啟用後會自動寫入 config.toml 的 experimental_bearer_token",
     "apiKeyAutoFill": "只需要填這裡，下方設定會自動填寫",
     "cnOfficialApiKeyHint": "只需填寫 API Key，請求位址已預設",
     "aggregatorApiKeyHint": "只需填寫 API Key，請求位址已預設",
@@ -1144,10 +1145,15 @@
     "quickSetSuccess": "已將模型名稱套用至所有角色",
     "advancedOptionsToggle": "進階選項",
     "advancedOptionsHint": "包含 API 格式、驗證欄位、模型對應等設定。大多數場景下保持預設即可。",
+    "connectionSection": "連線設定",
+    "optionsSection": "額外選項",
+    "modelSection": "模型設定",
+    "configurationSection": "設定檔",
     "categoryOfficial": "官方",
     "categoryCnOfficial": "開源官方",
     "categoryAggregation": "聚合服務",
     "categoryThirdParty": "第三方",
+    "categoryCloudProvider": "雲端服務商",
     "fetchModels": "取得模型清單",
     "fetchingModels": "正在取得...",
     "fetchModelsSuccess": "取得 {{count}} 個模型",
@@ -1295,8 +1301,8 @@
     "autoCompactLimitHint": "上下文 token 數達到此閾值時自動壓縮歷史",
     "autoCompactLimitPlaceholder": "例如: 90000",
     "localRoutingToggle": "需要本地路由映射",
-    "localRoutingOnHint": "Codex 目前僅原生支援 OpenAI Responses API 與 GPT 系列模型；如果您的供應商使用 Chat Completions 協定或非 GPT 模型（如 DeepSeek、Kimi），則需要打開本開關，並在使用過程中保持本地路由開啟。",
-    "localRoutingOffHint": "如果您的供應商不是原生 OpenAI Responses API，或者模型名不是 Codex 預設的 GPT 系列，請打開此開關。",
+    "localRoutingOnHint": "AgentSwitch 會將 Codex Responses 請求轉換為 Chat Completions；使用期間需要保持本地路由運行。",
+    "localRoutingOffHint": "上游原生相容 Codex Responses API 時可直接連線；僅當上游只支援 Chat Completions，或其 Responses 實作與 Codex 不相容時開啟。",
     "modelMappingTitle": "模型映射",
     "modelMappingHint": "產生 Codex model_catalog_json，讓 /model 指令顯示這些第三方模型名；表中條目按填寫內容原樣儲存。修改後需要重新啟動 Codex 才能重新整理模型清單。",
     "addCatalogModel": "新增模型",
@@ -1319,7 +1325,7 @@
     "reasoningEffortHint": "上游支援 low/high/max 等思考深度控制時啟用。啟用後會自動啟用思考模式，並把 Codex 的 reasoning.effort 轉成上游 Chat 參數。",
     "reasoningGroupTitle": "思考能力",
     "reasoningSectionHint": "預設供應商已自動設定；自訂供應商會按名稱/位址自動推斷。僅當自動識別不準時才需手動覆寫。",
-    "advancedSectionHint": "包含本地路由映射、模型映射、思考能力與自訂 User-Agent。供應商使用 Chat Completions 協定或非 GPT 模型時，需在此開啟本地路由映射。"
+    "advancedSectionHint": "包含本地路由映射、模型目錄、思考能力與自訂 User-Agent。上游原生相容 Codex Responses API 時無需開啟本地路由。"
   },
   "geminiConfig": {
     "envFile": "環境變數 (.env)",
@@ -1343,6 +1349,7 @@
     "configReplaceFailed": "設定替換失敗：{{error}}"
   },
   "opencode": {
+    "connectionSection": "連線設定",
     "npmPackage": "API 格式",
     "selectPackage": "選擇 API 格式",
     "npmPackageHint": "選擇 AI 服務的 API 格式",
@@ -2475,6 +2482,8 @@
     "search": "搜尋圖示",
     "searchPlaceholder": "輸入圖示名稱...",
     "noResults": "未找到相符的圖示",
+    "resultCount": "找到 {{count}} 個圖示",
+    "totalCount": "共 {{count}} 個圖示",
     "category": {
       "aiProvider": "AI 服務商",
       "cloud": "雲端平台",

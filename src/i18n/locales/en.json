@@ -1050,6 +1050,7 @@
     "officialNoApiKey": "Official login does not require API Key, save directly",
     "codexOfficialNoApiKey": "Official does not require API Key, save directly",
     "codexApiKeyAutoFill": "Just fill in here, auth.json below will be auto-filled",
+    "codexDeepSeekApiKeyAutoFill": "Enter it here; enabling the provider writes it to config.toml as experimental_bearer_token",
     "apiKeyAutoFill": "Just fill in here, config below will be auto-filled",
     "cnOfficialApiKeyHint": "💡 Only need to fill in API Key, endpoint is preset",
     "aggregatorApiKeyHint": "💡 Only need to fill in API Key, endpoint is preset",
@@ -1172,10 +1173,15 @@
     "quickSetSuccess": "Model name applied to all roles",
     "advancedOptionsToggle": "Advanced Options",
     "advancedOptionsHint": "Includes API format, auth field, and model mapping. Defaults work for most use cases.",
+    "connectionSection": "Connection",
+    "optionsSection": "Additional Options",
+    "modelSection": "Model Configuration",
+    "configurationSection": "Configuration",
     "categoryOfficial": "Official",
     "categoryCnOfficial": "Opensource Official",
     "categoryAggregation": "Aggregation",
     "categoryThirdParty": "Third Party",
+    "categoryCloudProvider": "Cloud Provider",
     "fetchModels": "Fetch Models",
     "fetchingModels": "Fetching...",
     "fetchModelsSuccess": "Found {{count}} models",
@@ -1318,8 +1324,8 @@
     "modelNameHint": "Specify the model to use, will be auto-updated in config.toml",
     "modelName": "Model Name",
     "localRoutingToggle": "Needs Local Routing",
-    "localRoutingOffHint": "If your provider is not native OpenAI Responses API, or the model name is not Codex's default GPT series, please enable this switch.",
-    "localRoutingOnHint": "Codex currently only natively supports OpenAI Responses API and GPT series models. If your provider uses the Chat Completions protocol or non-GPT models (such as DeepSeek or Kimi), enable this switch and keep local routing running while in use.",
+    "localRoutingOffHint": "Connect directly when the upstream natively supports the Codex Responses API. Enable this only for Chat Completions-only or Codex-incompatible Responses endpoints.",
+    "localRoutingOnHint": "AgentSwitch converts Codex Responses requests to Chat Completions; keep local routing running while this provider is in use.",
     "upstreamModelName": "Upstream Model Name",
     "upstreamModelNameHint": "For Chat format, enter the real upstream model here; routing converts Codex Responses requests to Chat Completions while keeping this model.",
     "modelNamePlaceholder": "e.g., gpt-5-codex",
@@ -1347,7 +1353,7 @@
     "reasoningEffortHint": "Enable when the upstream supports thinking-depth control such as low/high/max. Enabling this also turns on thinking mode and converts Codex's reasoning.effort into the upstream Chat parameter.",
     "reasoningGroupTitle": "Reasoning Capability",
     "reasoningSectionHint": "Preset providers are configured automatically; custom providers are inferred from name/URL. Override manually only when auto-detection is wrong.",
-    "advancedSectionHint": "Includes local routing, model mapping, reasoning overrides and custom User-Agent. Enable local routing here when your provider uses the Chat Completions protocol or non-GPT models."
+    "advancedSectionHint": "Includes local routing, model catalog, reasoning overrides and custom User-Agent. Native Codex-compatible Responses providers do not need local routing."
   },
   "geminiConfig": {
     "envFile": "Environment Variables (.env)",
@@ -1371,6 +1377,7 @@
     "configReplaceFailed": "Config replace failed: {{error}}"
   },
   "opencode": {
+    "connectionSection": "Connection",
     "npmPackage": "API Format",
     "selectPackage": "Select API format",
     "npmPackageHint": "Select the API format for the AI service",
@@ -2503,6 +2510,8 @@
     "search": "Search Icons",
     "searchPlaceholder": "Enter icon name...",
     "noResults": "No matching icons found",
+    "resultCount": "{{count}} icons found",
+    "totalCount": "{{count}} icons",
     "category": {
       "aiProvider": "AI Providers",
       "cloud": "Cloud Platforms",

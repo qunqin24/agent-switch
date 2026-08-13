@@ -68,6 +68,26 @@ wire_api = "responses"
 requires_openai_auth = true`;
 }
 
+/**
+ * DeepSeek exposes a Codex-compatible Responses API directly. Keep the
+ * provider id and auth-mode fields aligned with DeepSeek's Codex guide; the
+ * API key itself remains in AgentSwitch's protected provider settings and is
+ * projected to Codex command-backed auth when the provider becomes active.
+ */
+function generateDeepSeekCodexConfig(): string {
+  return `model = "deepseek-v4-flash"
+model_provider = "deepseek"
+preferred_auth_method = "apikey"
+forced_login_method = "api"
+model_reasoning_effort = "high"
+model_catalog_json = "~/.codex/models.json"
+
+[model_providers.deepseek]
+name = "deepseek"
+base_url = "https://api.deepseek.com/"
+wire_api = "responses"`;
+}
+
 function modelCatalog(
   models: Array<
     string | { model: string; displayName?: string; contextWindow?: number }
@@ -216,33 +236,21 @@ requires_openai_auth = true`,
     websiteUrl: "https://platform.deepseek.com",
     apiKeyUrl: "https://platform.deepseek.com/api_keys",
     auth: generateThirdPartyAuth(""),
-    config: generateThirdPartyConfig(
-      "deepseek",
-      "https://api.deepseek.com",
-      "deepseek-v4-flash",
-    ),
-    endpointCandidates: ["https://api.deepseek.com"],
-    apiFormat: "openai_chat",
+    config: generateDeepSeekCodexConfig(),
+    endpointCandidates: ["https://api.deepseek.com/"],
+    apiFormat: "openai_responses",
     modelCatalog: modelCatalog([
       {
         model: "deepseek-v4-flash",
-        displayName: "DeepSeek V4 Flash",
-        contextWindow: 1000000,
+        displayName: "DeepSeek-V4-Flash",
+        contextWindow: 1048576,
       },
       {
         model: "deepseek-v4-pro",
-        displayName: "DeepSeek V4 Pro",
-        contextWindow: 1000000,
+        displayName: "DeepSeek-V4-Pro",
+        contextWindow: 1048576,
       },
     ]),
-    codexChatReasoning: {
-      supportsThinking: true,
-      supportsEffort: true,
-      thinkingParam: "thinking",
-      effortParam: "reasoning_effort",
-      effortValueMode: "deepseek",
-      outputFormat: "reasoning_content",
-    },
     category: "cn_official",
     icon: "deepseek",
     iconColor: "#1E88E5",

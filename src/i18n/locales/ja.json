@@ -1050,6 +1050,7 @@
     "officialNoApiKey": "公式ログインは API Key 不要です。そのまま保存できます",
     "codexOfficialNoApiKey": "公式は API Key 不要です。そのまま保存してください",
     "codexApiKeyAutoFill": "ここに入力すれば auth.json も自動で埋まります",
+    "codexDeepSeekApiKeyAutoFill": "ここに入力すると、有効化時に config.toml の experimental_bearer_token へ自動的に書き込まれます",
     "apiKeyAutoFill": "ここに入力すれば下の設定も自動で埋まります",
     "cnOfficialApiKeyHint": "💡 API Key のみ入力すれば OK。エンドポイントはプリセット済みです",
     "aggregatorApiKeyHint": "💡 API Key のみ入力すれば OK。エンドポイントはプリセット済みです",
@@ -1172,10 +1173,15 @@
     "quickSetSuccess": "モデル名をすべての役割に適用しました",
     "advancedOptionsToggle": "高級オプション",
     "advancedOptionsHint": "API フォーマット、認証フィールド、モデルマッピングの設定を含みます。通常はデフォルトのままで問題ありません。",
+    "connectionSection": "接続設定",
+    "optionsSection": "追加オプション",
+    "modelSection": "モデル設定",
+    "configurationSection": "設定ファイル",
     "categoryOfficial": "公式",
     "categoryCnOfficial": "オープンソース公式",
     "categoryAggregation": "アグリゲーター",
     "categoryThirdParty": "サードパーティ",
+    "categoryCloudProvider": "クラウドプロバイダー",
     "fetchModels": "モデル一覧を取得",
     "fetchingModels": "取得中...",
     "fetchModelsSuccess": "{{count}}件のモデルを取得",
@@ -1318,8 +1324,8 @@
     "modelNameHint": "使用するモデルを指定します。config.toml に自動更新されます",
     "modelName": "モデル名",
     "localRoutingToggle": "ローカルルーティングが必要",
-    "localRoutingOffHint": "プロバイダーがネイティブの OpenAI Responses API でない場合、またはモデル名が Codex デフォルトの GPT 系列でない場合は、このスイッチを有効にしてください。",
-    "localRoutingOnHint": "Codex は現在、OpenAI Responses API と GPT 系列モデルのみをネイティブにサポートしています。プロバイダーが Chat Completions プロトコルや非 GPT モデル（DeepSeek、Kimi など）を使用する場合は、このスイッチを有効にし、使用中はローカルルーティングを起動したままにしてください。",
+    "localRoutingOffHint": "上流が Codex Responses API にネイティブ対応している場合は直接接続できます。Chat Completions のみ、または Codex と互換性のない Responses 実装の場合にだけ有効にしてください。",
+    "localRoutingOnHint": "AgentSwitch が Codex Responses リクエストを Chat Completions に変換します。このプロバイダーの使用中はローカルルーティングを起動したままにしてください。",
     "upstreamModelName": "上流モデル名",
     "upstreamModelNameHint": "Chat 形式ではここに実際の上流モデルを入力します。ルーティングで Codex の Responses リクエストを Chat Completions に変換し、このモデルを維持します。",
     "modelNamePlaceholder": "例: gpt-5-codex",
@@ -1347,7 +1353,7 @@
     "reasoningEffortHint": "上流が low/high/max などの思考の深さの制御に対応している場合に有効化します。有効にすると思考モードも自動的にオンになり、Codex の reasoning.effort を上流の Chat パラメータに変換します。",
     "reasoningGroupTitle": "思考能力",
     "reasoningSectionHint": "プリセットの供給元は自動的に設定され、カスタム供給元は名前/URL から自動推論されます。自動識別が正しくない場合のみ手動で上書きしてください。",
-    "advancedSectionHint": "ローカルルーティング、モデルマッピング、思考能力、カスタム User-Agent の設定を含みます。供給元が Chat Completions プロトコルまたは GPT 以外のモデルを使用する場合は、ここでローカルルーティングを有効にしてください。"
+    "advancedSectionHint": "ローカルルーティング、モデルカタログ、思考能力、カスタム User-Agent の設定を含みます。Codex Responses API にネイティブ対応するプロバイダーでは、ローカルルーティングは不要です。"
   },
   "geminiConfig": {
     "envFile": "環境変数 (.env)",
@@ -1371,6 +1377,7 @@
     "configReplaceFailed": "設定の置換に失敗しました: {{error}}"
   },
   "opencode": {
+    "connectionSection": "接続設定",
     "npmPackage": "API フォーマット",
     "selectPackage": "API フォーマットを選択",
     "npmPackageHint": "AI サービスの API フォーマットを選択",
@@ -2503,6 +2510,8 @@
     "search": "アイコンを検索",
     "searchPlaceholder": "アイコン名を入力...",
     "noResults": "一致するアイコンが見つかりません",
+    "resultCount": "{{count}} 件のアイコンが見つかりました",
+    "totalCount": "{{count}} 件のアイコン",
     "category": {
       "aiProvider": "AI プロバイダー",
       "cloud": "クラウドプラットフォーム",

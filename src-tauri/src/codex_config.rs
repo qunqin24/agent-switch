@@ -14,6 +14,8 @@ use toml_edit::{Array, DocumentMut, Item, Table};
 pub const CC_SWITCH_CODEX_MODEL_PROVIDER_ID: &str = "custom";
 pub const CC_SWITCH_CODEX_MODEL_CATALOG_FILENAME: &str = "agentswitch-model-catalog.json";
 const LEGACY_CC_SWITCH_CODEX_MODEL_CATALOG_FILENAME: &str = "cc-switch-model-catalog.json";
+const DEEPSEEK_CODEX_MODEL_CATALOG_FILENAME: &str = "models.json";
+const DEEPSEEK_CODEX_MODEL_CATALOG_CONFIG_PATH: &str = "~/.codex/models.json";
 const CODEX_MODEL_CATALOG_TEMPLATE_SLUG: &str = "gpt-5.5";
 
 /// Reserved built-in provider IDs from OpenAI Codex's config/model-provider
@@ -49,6 +51,10 @@ pub fn get_codex_config_path() -> PathBuf {
 
 pub fn get_codex_model_catalog_path() -> PathBuf {
     get_codex_config_dir().join(CC_SWITCH_CODEX_MODEL_CATALOG_FILENAME)
+}
+
+fn get_deepseek_codex_model_catalog_path() -> PathBuf {
+    get_codex_config_dir().join(DEEPSEEK_CODEX_MODEL_CATALOG_FILENAME)
 }
 
 /// 获取 Codex 供应商配置文件路径
@@ -164,6 +170,25 @@ fn active_codex_model_provider_id(doc: &DocumentMut) -> Option<String> {
         .map(str::trim)
         .filter(|id| !id.is_empty())
         .map(str::to_string)
+}
+
+fn is_deepseek_api_base_url(base_url: &str) -> bool {
+    matches!(
+        base_url.trim().trim_end_matches('/'),
+        "https://api.deepseek.com" | "https://api.deepseek.com/v1"
+    )
+}
+
+fn is_deepseek_codex_config(config_text: &str) -> bool {
+    let Ok(doc) = config_text.parse::<DocumentMut>() else {
+        return false;
+    };
+
+    active_codex_model_provider_id(&doc)
+        .is_some_and(|provider_id| provider_id.eq_ignore_ascii_case("deepseek"))
+        || extract_codex_base_url(config_text)
+            .as_deref()
+            .is_some_and(is_deepseek_api_base_url)
 }
 
 pub(crate) fn is_custom_codex_model_provider_id(id: &str) -> bool {
@@ -329,11 +354,80 @@ fn codex_catalog_model_entry(
     entry_obj.insert("description".to_string(), json!(display_name));
     entry_obj.insert("context_window".to_string(), json!(context_window));
     entry_obj.insert("max_context_window".to_string(), json!(context_window));
-    entry_obj.insert("priority".to_string(), json!(1000 + priority));
-    entry_obj.insert("additional_speed_tiers".to_string(), json!([]));
-    entry_obj.insert("service_tiers".to_string(), json!([]));
     entry_obj.insert("availability_nux".to_string(), Value::Null);
     entry_obj.insert("upgrade".to_string(), Value::Null);
+
+    if let Some((description, deepseek_priority)) = match model {
+        "deepseek-v4-flash" => Some(("Latest frontier agentic coding model.", 1)),
+        "deepseek-v4-pro" => Some(("Most capable frontier agentic coding model.", 2)),
+        _ => None,
+    } {
+        // DeepSeek publishes Codex-specific catalog metadata. The capability
+        // overrides below keep native Responses requests from inheriting
+        // incompatible GPT image, WebSocket, and reasoning-level declarations.
+        entry_obj.insert("description".to_string(), json!(description));
+        entry_obj.insert("priority".to_string(), json!(deepseek_priority));
+        entry_obj.insert("prefer_websockets".to_string(), json!(false));
+        entry_obj.insert("support_verbosity".to_string(), json!(true));
+        entry_obj.insert("default_verbosity".to_string(), json!("low"));
+        entry_obj.insert("apply_patch_tool_type".to_string(), json!("freeform"));
+        entry_obj.insert("web_search_tool_type".to_string(), json!("text"));
+        entry_obj.insert("input_modalities".to_string(), json!(["text"]));
+        entry_obj.insert("supports_image_detail_original".to_string(), json!(false));
+        entry_obj.insert(
+            "truncation_policy".to_string(),
+            json!({ "mode": "tokens", "limit": 10_000 }),
+        );
+        entry_obj.insert("supports_parallel_tool_calls".to_string(), json!(true));
+        entry_obj.insert("tool_mode".to_string(), Value::Null);
+        entry_obj.insert("multi_agent_version".to_string(), json!("v2"));
+        entry_obj.insert("use_responses_lite".to_string(), json!(false));
+        entry_obj.insert(
+            "include_skills_usage_instructions".to_string(),
+            json!(false),
+        );
+        entry_obj.insert("auto_review_model_override".to_string(), Value::Null);
+        entry_obj.insert("effective_context_window_percent".to_string(), json!(95));
+        entry_obj.insert("auto_compact_token_limit".to_string(), Value::Null);
+        entry_obj.insert("comp_hash".to_string(), json!("3000"));
+        entry_obj.insert(
+            "reasoning_summary_format".to_string(),
+            json!("experimental"),
+        );
+        entry_obj.insert("default_reasoning_summary".to_string(), json!("none"));
+        entry_obj.insert("default_reasoning_level".to_string(), json!("high"));
+        entry_obj.insert(
+            "supported_reasoning_levels".to_string(),
+            json!([
+                {
+                    "effort": "low",
+                    "description": "Fast responses with lighter reasoning"
+                },
+                {
+                    "effort": "high",
+                    "description": "Extra high reasoning depth for complex problems"
+                },
+                {
+                    "effort": "max",
+                    "description": "Maximum reasoning depth for the hardest problems"
+                }
+            ]),
+        );
+        entry_obj.insert("shell_type".to_string(), json!("shell_command"));
+        entry_obj.insert("visibility".to_string(), json!("list"));
+        entry_obj.insert("minimal_client_version".to_string(), json!("0.144.0"));
+        entry_obj.insert("supported_in_api".to_string(), json!(true));
+        entry_obj.insert("experimental_supported_tools".to_string(), json!([]));
+        entry_obj.insert("supports_search_tool".to_string(), json!(true));
+        entry_obj.insert("default_service_tier".to_string(), Value::Null);
+        entry_obj.insert("supports_reasoning_summaries".to_string(), json!(true));
+        entry_obj.remove("additional_speed_tiers");
+        entry_obj.remove("service_tiers");
+    } else {
+        entry_obj.insert("priority".to_string(), json!(1000 + priority));
+        entry_obj.insert("additional_speed_tiers".to_string(), json!([]));
+        entry_obj.insert("service_tiers".to_string(), json!([]));
+    }
 
     entry
 }
@@ -351,6 +445,22 @@ fn codex_catalog_model_specs(settings: &Value, config_text: &str) -> Vec<CodexCa
         .and_then(|catalog| catalog.get("models"))
         .and_then(|models| models.as_array())
     else {
+        // Providers saved before the native DeepSeek preset gained a catalog
+        // still need the official ~/.codex/models.json on their next switch.
+        if is_deepseek_codex_config(config_text) {
+            return vec![
+                CodexCatalogModelSpec {
+                    model: "deepseek-v4-flash".to_string(),
+                    display_name: "DeepSeek-V4-Flash".to_string(),
+                    context_window: 1_048_576,
+                },
+                CodexCatalogModelSpec {
+                    model: "deepseek-v4-pro".to_string(),
+                    display_name: "DeepSeek-V4-Pro".to_string(),
+                    context_window: 1_048_576,
+                },
+            ];
+        }
         return Vec::new();
     };
 
@@ -689,15 +799,23 @@ fn set_codex_model_catalog_json_field(
 
     match catalog_path {
         Some(_) => {
-            doc["model_catalog_json"] = toml_edit::value(CC_SWITCH_CODEX_MODEL_CATALOG_FILENAME);
+            let config_path = if is_deepseek_codex_config(config_text) {
+                DEEPSEEK_CODEX_MODEL_CATALOG_CONFIG_PATH
+            } else {
+                CC_SWITCH_CODEX_MODEL_CATALOG_FILENAME
+            };
+            doc["model_catalog_json"] = toml_edit::value(config_path);
         }
         None => {
+            let deepseek_config = is_deepseek_codex_config(config_text);
             let should_remove = doc
                 .get("model_catalog_json")
                 .and_then(|item| item.as_str())
                 .map(|path| {
-                    Path::new(path).file_name().and_then(|name| name.to_str())
-                        == Some(CC_SWITCH_CODEX_MODEL_CATALOG_FILENAME)
+                    let filename = Path::new(path).file_name().and_then(|name| name.to_str());
+                    filename == Some(CC_SWITCH_CODEX_MODEL_CATALOG_FILENAME)
+                        || (deepseek_config
+                            && filename == Some(DEEPSEEK_CODEX_MODEL_CATALOG_FILENAME))
                 })
                 .unwrap_or(false);
             if should_remove {
@@ -715,7 +833,11 @@ pub fn prepare_codex_config_text_with_model_catalog(
     settings: &Value,
     config_text: &str,
 ) -> Result<String, AppError> {
-    let catalog_path = get_codex_model_catalog_path();
+    let catalog_path = if is_deepseek_codex_config(config_text) {
+        get_deepseek_codex_model_catalog_path()
+    } else {
+        get_codex_model_catalog_path()
+    };
 
     if let Some(catalog) = codex_model_catalog_from_settings(settings, config_text)? {
         let config_text = set_codex_model_catalog_json_field(config_text, Some(&catalog_path))?;
@@ -786,13 +908,19 @@ pub(crate) fn resolve_agentswitch_catalog_path(
 
     let referenced_path = Path::new(catalog_path_str);
     let referenced_filename = referenced_path.file_name().and_then(|name| name.to_str());
+    let deepseek_config = is_deepseek_codex_config(config_text);
     let is_agentswitch_owned = matches!(
         referenced_filename,
         Some(CC_SWITCH_CODEX_MODEL_CATALOG_FILENAME)
             | Some(LEGACY_CC_SWITCH_CODEX_MODEL_CATALOG_FILENAME)
-    );
+    ) || (deepseek_config
+        && referenced_filename == Some(DEEPSEEK_CODEX_MODEL_CATALOG_FILENAME));
     if !is_agentswitch_owned {
         return None;
+    }
+
+    if deepseek_config && referenced_filename == Some(DEEPSEEK_CODEX_MODEL_CATALOG_FILENAME) {
+        return Some(generated_path.with_file_name(DEEPSEEK_CODEX_MODEL_CATALOG_FILENAME));
     }
 
     if referenced_path.is_absolute() {
@@ -884,7 +1012,7 @@ pub fn prepare_codex_live_config_text_with_optional_catalog(
     settings: &Value,
     config_text: &str,
 ) -> Result<String, AppError> {
-    if settings.get("modelCatalog").is_some() {
+    if settings.get("modelCatalog").is_some() || is_deepseek_codex_config(config_text) {
         prepare_codex_config_text_with_model_catalog(settings, config_text)
     } else {
         Ok(config_text.to_string())
@@ -1130,6 +1258,43 @@ fn set_codex_command_backed_auth(
 
     doc.as_table_mut().remove("experimental_bearer_token");
     Ok(doc.to_string())
+}
+
+fn remove_agentswitch_codex_command_auth(config_text: &str) -> Result<Option<String>, AppError> {
+    if !config_text.contains(crate::codex_auth_helper::CODEX_PROVIDER_TOKEN_ARG) {
+        return Ok(None);
+    }
+
+    let mut doc = config_text
+        .parse::<DocumentMut>()
+        .map_err(|error| AppError::Message(format!("Invalid Codex config.toml: {error}")))?;
+    let Some(provider_id) = active_codex_model_provider_id(&doc) else {
+        return Ok(None);
+    };
+    let Some(provider_table) = doc
+        .get_mut("model_providers")
+        .and_then(Item::as_table_mut)
+        .and_then(|providers| providers.get_mut(provider_id.as_str()))
+        .and_then(Item::as_table_mut)
+    else {
+        return Ok(None);
+    };
+
+    let is_agentswitch_auth = provider_table
+        .get("auth")
+        .and_then(Item::as_table)
+        .and_then(|auth| auth.get("args"))
+        .and_then(Item::as_array)
+        .is_some_and(|args| {
+            args.iter()
+                .any(|arg| arg.as_str() == Some(crate::codex_auth_helper::CODEX_PROVIDER_TOKEN_ARG))
+        });
+    if !is_agentswitch_auth {
+        return Ok(None);
+    }
+
+    provider_table.remove("auth");
+    Ok(Some(doc.to_string()))
 }
 
 pub fn remove_codex_experimental_bearer_token_if(
@@ -1408,9 +1573,11 @@ pub fn write_codex_live_for_provider(
 
 /// Build the live Codex config for provider switching.
 ///
-/// The stored provider keeps its API key in `auth.OPENAI_API_KEY`. Live Codex
-/// requests retrieve it through a provider-scoped command-backed auth table,
-/// so `auth.json` stays as the user's long-lived ChatGPT login cache.
+/// The stored provider keeps its API key in `auth.OPENAI_API_KEY`. Generic
+/// third-party providers retrieve it through a provider-scoped command-backed
+/// auth table so `auth.json` stays as the user's long-lived ChatGPT login cache.
+/// Native DeepSeek follows its published Codex contract and receives a direct
+/// `experimental_bearer_token` in the active provider table instead.
 pub fn prepare_codex_provider_live_config(
     auth: &Value,
     config_text: &str,
@@ -1427,7 +1594,7 @@ fn prepare_codex_provider_live_config_for_provider(
         .or_else(|| extract_codex_experimental_bearer_token(config_text));
 
     Ok(match token {
-        Some(token) if token == "PROXY_MANAGED" => {
+        Some(token) if token == "PROXY_MANAGED" || is_deepseek_codex_config(config_text) => {
             set_codex_experimental_bearer_token(config_text, &token)?
         }
         Some(_) => set_codex_command_backed_auth(config_text, provider_id)?,
@@ -1439,9 +1606,10 @@ fn prepare_codex_provider_live_config_for_provider(
 /// `auth.OPENAI_API_KEY` so the stored provider keeps its canonical shape
 /// and generated live tokens don't leak into stored provider TOML.
 ///
-/// Only intervenes when the live config actually carries a bearer token —
-/// otherwise the function is a no-op so the caller's normal backfill path
-/// (which keeps live `auth` as the authoritative source) is unaffected.
+/// It also recognizes Agent Switch command-backed auth and restores the key
+/// from the stored template. That path matters because live `auth.json` may be
+/// the user's unrelated ChatGPT OAuth cache and must not overwrite the selected
+/// provider's database credential when switching away.
 pub fn restore_codex_provider_token_for_backfill(
     settings: &mut Value,
     template_settings: &Value,
@@ -1454,11 +1622,27 @@ pub fn restore_codex_provider_token_for_backfill(
         return Ok(());
     };
 
-    let Some(token) = extract_codex_experimental_bearer_token(&config_text) else {
-        return Ok(());
-    };
-
-    let cleaned_config = remove_codex_experimental_bearer_token(&config_text)?;
+    let (cleaned_config, token) =
+        if let Some(token) = extract_codex_experimental_bearer_token(&config_text) {
+            (remove_codex_experimental_bearer_token(&config_text)?, token)
+        } else {
+            let Some(token) = template_settings
+                .get("auth")
+                .and_then(extract_codex_auth_api_key)
+                .or_else(|| {
+                    template_settings
+                        .get("config")
+                        .and_then(Value::as_str)
+                        .and_then(extract_codex_experimental_bearer_token)
+                })
+            else {
+                return Ok(());
+            };
+            let Some(cleaned_config) = remove_agentswitch_codex_command_auth(&config_text)? else {
+                return Ok(());
+            };
+            (cleaned_config, token)
+        };
 
     if let Some(obj) = settings.as_object_mut() {
         obj.insert("config".to_string(), Value::String(cleaned_config));
@@ -1939,6 +2123,115 @@ model = "gpt-5.4"
     }
 
     #[test]
+    fn prepare_deepseek_live_config_uses_published_direct_bearer_auth() {
+        let input = r#"model = "deepseek-v4-flash"
+model_provider = "deepseek"
+preferred_auth_method = "apikey"
+forced_login_method = "api"
+model_reasoning_effort = "high"
+model_catalog_json = "~/.codex/models.json"
+
+[model_providers.deepseek]
+name = "deepseek"
+base_url = "https://api.deepseek.com/"
+wire_api = "responses"
+"#;
+
+        let result = prepare_codex_provider_live_config_for_provider(
+            Some("deepseek-provider"),
+            &json!({"OPENAI_API_KEY": "sk-deepseek"}),
+            input,
+        )
+        .expect("prepare DeepSeek live config");
+        let parsed: toml::Value = toml::from_str(&result).expect("parse DeepSeek live config");
+        let provider = parsed
+            .get("model_providers")
+            .and_then(|value| value.get("deepseek"))
+            .expect("DeepSeek provider table");
+
+        assert_eq!(
+            provider
+                .get("experimental_bearer_token")
+                .and_then(|value| value.as_str()),
+            Some("sk-deepseek")
+        );
+        assert!(
+            provider.get("auth").is_none(),
+            "DeepSeek's native Codex integration uses experimental_bearer_token, not command auth"
+        );
+        assert_eq!(
+            parsed
+                .get("model_catalog_json")
+                .and_then(|value| value.as_str()),
+            Some("~/.codex/models.json")
+        );
+        assert_eq!(
+            parsed
+                .get("preferred_auth_method")
+                .and_then(|value| value.as_str()),
+            Some("apikey")
+        );
+        assert_eq!(
+            parsed
+                .get("forced_login_method")
+                .and_then(|value| value.as_str()),
+            Some("api")
+        );
+    }
+
+    #[test]
+    fn command_auth_backfill_restores_stored_key_instead_of_oauth_auth() {
+        let stored_config = r#"model_provider = "vendor_alpha"
+model = "gpt-5.4"
+
+[model_providers.vendor_alpha]
+name = "Vendor Alpha"
+base_url = "https://alpha.example/v1"
+wire_api = "responses"
+"#;
+        let template_settings = json!({
+            "auth": {"OPENAI_API_KEY": "sk-preserved"},
+            "config": stored_config
+        });
+        let live_config = prepare_codex_provider_live_config_for_provider(
+            Some("provider-db-id"),
+            template_settings.get("auth").expect("stored auth"),
+            stored_config,
+        )
+        .expect("prepare command-backed live config");
+        let mut live_settings = json!({
+            "auth": {
+                "auth_mode": "chatgpt",
+                "tokens": {"access_token": "oauth-access"}
+            },
+            "config": live_config
+        });
+
+        restore_codex_settings_for_backfill(&mut live_settings, &template_settings, true)
+            .expect("restore provider settings for backfill");
+
+        assert_eq!(
+            live_settings
+                .pointer("/auth/OPENAI_API_KEY")
+                .and_then(Value::as_str),
+            Some("sk-preserved"),
+            "switching away must not replace a provider key with the live OAuth auth.json"
+        );
+        assert!(
+            live_settings.pointer("/auth/tokens").is_none(),
+            "provider storage must not absorb the user's ChatGPT OAuth cache"
+        );
+        assert!(
+            !live_settings
+                .get("config")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .contains(crate::codex_auth_helper::CODEX_PROVIDER_TOKEN_ARG),
+            "generated command auth must be removed from the stored provider template"
+        );
+    }
+
+    #[test]
     fn prepare_provider_live_config_keeps_proxy_placeholder_as_direct_bearer() {
         let input = r#"model_provider = "vendor_alpha"
 
@@ -2286,8 +2579,8 @@ base_url = "https://production.api/v1"
             "modelCatalog": {
                 "models": [
                     {
-                        "model": "deepseek-v4-flash",
-                        "displayName": "DeepSeek V4 Flash",
+                        "model": "provider-model",
+                        "displayName": "Provider Model",
                         "contextWindow": "64000"
                     },
                     {
@@ -2307,7 +2600,7 @@ base_url = "https://production.api/v1"
         assert_eq!(models.len(), 2);
         assert_eq!(
             models[0].get("slug").and_then(|value| value.as_str()),
-            Some("deepseek-v4-flash")
+            Some("provider-model")
         );
         assert_eq!(
             models[0]
@@ -2347,6 +2640,138 @@ base_url = "https://production.api/v1"
                 .is_some_and(|value| value.is_null()),
             "generated third-party entries should not inherit GPT-5.5 launch messaging"
         );
+    }
+
+    #[test]
+    fn deepseek_v4_catalog_uses_published_codex_capabilities() {
+        let template = json!({
+            "slug": "gpt-5.5",
+            "display_name": "GPT-5.5",
+            "description": "OpenAI model",
+            "model_messages": { "instructions_template": "Codex instructions" },
+            "base_instructions": "Codex base instructions",
+            "prefer_websockets": true,
+            "web_search_tool_type": "text_and_image",
+            "input_modalities": ["text", "image"],
+            "supports_image_detail_original": true,
+            "default_reasoning_level": "xhigh",
+            "supported_reasoning_levels": [
+                { "effort": "medium", "description": "Medium" },
+                { "effort": "xhigh", "description": "Extra high" }
+            ],
+            "additional_speed_tiers": ["fast"],
+            "service_tiers": [{ "id": "priority" }]
+        });
+        let specs = vec![
+            CodexCatalogModelSpec {
+                model: "deepseek-v4-flash".to_string(),
+                display_name: "DeepSeek-V4-Flash".to_string(),
+                context_window: 1_048_576,
+            },
+            CodexCatalogModelSpec {
+                model: "deepseek-v4-pro".to_string(),
+                display_name: "DeepSeek-V4-Pro".to_string(),
+                context_window: 1_048_576,
+            },
+        ];
+
+        let catalog = codex_model_catalog_from_specs(&specs, &template);
+        let models = catalog["models"].as_array().expect("models array");
+        let flash = &models[0];
+        let pro = &models[1];
+
+        assert_eq!(flash["context_window"], json!(1_048_576));
+        assert_eq!(flash["max_context_window"], json!(1_048_576));
+        assert_eq!(flash["priority"], json!(1));
+        assert_eq!(pro["priority"], json!(2));
+        assert_eq!(flash["prefer_websockets"], json!(false));
+        assert_eq!(flash["web_search_tool_type"], json!("text"));
+        assert_eq!(flash["input_modalities"], json!(["text"]));
+        assert_eq!(flash["supports_image_detail_original"], json!(false));
+        assert_eq!(flash["multi_agent_version"], json!("v2"));
+        assert_eq!(flash["minimal_client_version"], json!("0.144.0"));
+        assert_eq!(flash["default_reasoning_level"], json!("high"));
+        assert_eq!(
+            flash["supported_reasoning_levels"],
+            json!([
+                {
+                    "effort": "low",
+                    "description": "Fast responses with lighter reasoning"
+                },
+                {
+                    "effort": "high",
+                    "description": "Extra high reasoning depth for complex problems"
+                },
+                {
+                    "effort": "max",
+                    "description": "Maximum reasoning depth for the hardest problems"
+                }
+            ])
+        );
+        assert!(flash.get("additional_speed_tiers").is_none());
+        assert!(flash.get("service_tiers").is_none());
+        assert_eq!(
+            flash.get("model_messages"),
+            template.get("model_messages"),
+            "DeepSeek catalog entries should retain the current Codex agent instructions"
+        );
+    }
+
+    #[test]
+    fn legacy_deepseek_settings_gain_the_published_default_catalog() {
+        let config = r#"model = "deepseek-v4-flash"
+model_provider = "deepseek"
+
+[model_providers.deepseek]
+name = "deepseek"
+base_url = "https://api.deepseek.com/"
+wire_api = "responses"
+"#;
+
+        let specs = codex_catalog_model_specs(&json!({}), config);
+
+        assert_eq!(
+            specs,
+            vec![
+                CodexCatalogModelSpec {
+                    model: "deepseek-v4-flash".to_string(),
+                    display_name: "DeepSeek-V4-Flash".to_string(),
+                    context_window: 1_048_576,
+                },
+                CodexCatalogModelSpec {
+                    model: "deepseek-v4-pro".to_string(),
+                    display_name: "DeepSeek-V4-Pro".to_string(),
+                    context_window: 1_048_576,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn deepseek_catalog_uses_official_models_json_path() {
+        let input = r#"model_provider = "deepseek"
+
+[model_providers.deepseek]
+name = "deepseek"
+base_url = "https://api.deepseek.com/"
+wire_api = "responses"
+"#;
+        let generated = PathBuf::from("/tmp/.codex/agentswitch-model-catalog.json");
+
+        let result =
+            set_codex_model_catalog_json_field(input, Some(Path::new("/tmp/.codex/models.json")))
+                .expect("set DeepSeek catalog path");
+        let parsed: toml::Value = toml::from_str(&result).expect("parse DeepSeek config");
+        assert_eq!(
+            parsed
+                .get("model_catalog_json")
+                .and_then(|value| value.as_str()),
+            Some("~/.codex/models.json")
+        );
+
+        let resolved = resolve_agentswitch_catalog_path(&result, &generated)
+            .expect("resolve Agent Switch-owned DeepSeek catalog");
+        assert_eq!(resolved, PathBuf::from("/tmp/.codex/models.json"));
     }
 
     #[test]

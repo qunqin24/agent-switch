@@ -10,6 +10,6 @@ describe("namespaceSvgIds", () => {
 
     expect(result).toContain('id="icon-1-brand-gradient"');
     expect(result).toContain('fill="url(#icon-1-brand-gradient)"');
-    expect(result).not.toContain('url(#brand-gradient)');
+    expect(result).not.toContain("url(#brand-gradient)");
   });
 });

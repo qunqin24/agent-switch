@@ -29,7 +29,9 @@ import {
   ChevronDown,
   ChevronRight,
   Download,
+  Link2,
   Loader2,
+  SlidersHorizontal,
   Wand2,
 } from "lucide-react";
 import EndpointSpeedTest from "./EndpointSpeedTest";
@@ -48,6 +50,7 @@ import {
   type FetchedModel,
 } from "@/lib/api/model-fetch";
 import { CustomUserAgentField } from "./CustomUserAgentField";
+import { ProviderFormSection } from "./ProviderFormSection";
 import type {
   ProviderCategory,
   ClaudeApiFormat,
@@ -574,103 +577,109 @@ export function ClaudeFormFields({
 
   return (
     <>
-      {/* GitHub Copilot OAuth 认证 */}
-      {isCopilotPreset && (
-        <CopilotAuthSection
-          selectedAccountId={selectedGitHubAccountId}
-          onAccountSelect={onGitHubAccountSelect}
-        />
-      )}
+      <ProviderFormSection
+        sectionKey="connection"
+        icon={Link2}
+        title={t("providerForm.connectionSection")}
+      >
+        {/* GitHub Copilot OAuth 认证 */}
+        {isCopilotPreset && (
+          <CopilotAuthSection
+            selectedAccountId={selectedGitHubAccountId}
+            onAccountSelect={onGitHubAccountSelect}
+          />
+        )}
 
-      {/* Codex OAuth 认证 (ChatGPT Plus/Pro) */}
-      {isCodexOauthPreset && (
-        <CodexOAuthSection
-          selectedAccountId={selectedCodexAccountId}
-          onAccountSelect={onCodexAccountSelect}
-          fastModeEnabled={codexFastMode}
-          onFastModeChange={onCodexFastModeChange}
-        />
-      )}
+        {/* Codex OAuth 认证 (ChatGPT Plus/Pro) */}
+        {isCodexOauthPreset && (
+          <CodexOAuthSection
+            selectedAccountId={selectedCodexAccountId}
+            onAccountSelect={onCodexAccountSelect}
+            fastModeEnabled={codexFastMode}
+            onFastModeChange={onCodexFastModeChange}
+          />
+        )}
 
-      {/* API Key 输入框（非 OAuth 预设时显示） */}
-      {shouldShowApiKey && !usesOAuth && (
-        <ApiKeySection
-          value={apiKey}
-          onChange={onApiKeyChange}
-          category={category}
-          shouldShowLink={shouldShowApiKeyLink}
-          websiteUrl={websiteUrl}
-          isPartner={isPartner}
-          partnerPromotionKey={partnerPromotionKey}
-        />
-      )}
+        {/* API Key 输入框（非 OAuth 预设时显示） */}
+        {shouldShowApiKey && !usesOAuth && (
+          <ApiKeySection
+            value={apiKey}
+            onChange={onApiKeyChange}
+            category={category}
+            shouldShowLink={shouldShowApiKeyLink}
+            websiteUrl={websiteUrl}
+            isPartner={isPartner}
+            partnerPromotionKey={partnerPromotionKey}
+          />
+        )}
 
-      {/* 模板变量输入 */}
-      {templateValueEntries.length > 0 && (
-        <div className="space-y-3">
-          <FormLabel>
-            {t("providerForm.parameterConfig", {
-              name: templatePresetName,
-              defaultValue: `${templatePresetName} 参数配置`,
-            })}
-          </FormLabel>
-          <div className="space-y-4">
-            {templateValueEntries.map(([key, config]) => (
-              <div key={key} className="space-y-2">
-                <FormLabel htmlFor={`template-${key}`}>
-                  {config.label}
-                </FormLabel>
-                <Input
-                  id={`template-${key}`}
-                  type="text"
-                  required
-                  value={
-                    templateValues[key]?.editorValue ??
-                    config.editorValue ??
-                    config.defaultValue ??
-                    ""
-                  }
-                  onChange={(e) => onTemplateValueChange(key, e.target.value)}
-                  placeholder={config.placeholder || config.label}
-                  autoComplete="off"
-                />
-              </div>
-            ))}
+        {/* 模板变量输入 */}
+        {templateValueEntries.length > 0 && (
+          <div className="space-y-3">
+            <FormLabel>
+              {t("providerForm.parameterConfig", {
+                name: templatePresetName,
+                defaultValue: `${templatePresetName} 参数配置`,
+              })}
+            </FormLabel>
+            <div className="space-y-4">
+              {templateValueEntries.map(([key, config]) => (
+                <div key={key} className="space-y-2">
+                  <FormLabel htmlFor={`template-${key}`}>
+                    {config.label}
+                  </FormLabel>
+                  <Input
+                    id={`template-${key}`}
+                    type="text"
+                    required
+                    value={
+                      templateValues[key]?.editorValue ??
+                      config.editorValue ??
+                      config.defaultValue ??
+                      ""
+                    }
+                    onChange={(e) => onTemplateValueChange(key, e.target.value)}
+                    placeholder={config.placeholder || config.label}
+                    autoComplete="off"
+                  />
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Base URL 输入框 */}
-      {shouldShowSpeedTest && (
-        <EndpointField
-          id="baseUrl"
-          label={t("providerForm.apiEndpoint")}
-          value={baseUrl}
-          onChange={onBaseUrlChange}
-          placeholder={t("providerForm.apiEndpointPlaceholder")}
-          hint={
-            apiFormat === "openai_responses"
-              ? t("providerForm.apiHintResponses")
-              : apiFormat === "openai_chat"
-                ? t("providerForm.apiHintOAI")
-                : apiFormat === "gemini_native"
-                  ? t("providerForm.apiHintGeminiNative")
-                  : t("providerForm.apiHint")
-          }
-          fullUrlHint={
-            apiFormat === "gemini_native"
-              ? t("providerForm.fullUrlHintGeminiNative")
-              : undefined
-          }
-          showManageButton={showEndpointTools}
-          onManageClick={
-            showEndpointTools ? () => onEndpointModalToggle(true) : undefined
-          }
-          showFullUrlToggle={showEndpointTools}
-          isFullUrl={isFullUrl}
-          onFullUrlChange={onFullUrlChange}
-        />
-      )}
+        {/* Base URL 输入框 */}
+        {shouldShowSpeedTest && (
+          <EndpointField
+            id="baseUrl"
+            label={t("providerForm.apiEndpoint")}
+            value={baseUrl}
+            onChange={onBaseUrlChange}
+            placeholder={t("providerForm.apiEndpointPlaceholder")}
+            hint={
+              apiFormat === "openai_responses"
+                ? t("providerForm.apiHintResponses")
+                : apiFormat === "openai_chat"
+                  ? t("providerForm.apiHintOAI")
+                  : apiFormat === "gemini_native"
+                    ? t("providerForm.apiHintGeminiNative")
+                    : t("providerForm.apiHint")
+            }
+            fullUrlHint={
+              apiFormat === "gemini_native"
+                ? t("providerForm.fullUrlHintGeminiNative")
+                : undefined
+            }
+            showManageButton={showEndpointTools}
+            onManageClick={
+              showEndpointTools ? () => onEndpointModalToggle(true) : undefined
+            }
+            showFullUrlToggle={showEndpointTools}
+            isFullUrl={isFullUrl}
+            onFullUrlChange={onFullUrlChange}
+          />
+        )}
+      </ProviderFormSection>
 
       {/* 端点测速弹窗 */}
       {shouldShowSpeedTest && showEndpointTools && isEndpointModalOpen && (
@@ -690,280 +699,297 @@ export function ClaudeFormFields({
 
       {shouldShowModelSelector && (
         <Collapsible open={advancedExpanded} onOpenChange={setAdvancedExpanded}>
-          <CollapsibleTrigger asChild>
-            <Button
-              type="button"
-              variant={null}
-              size="sm"
-              className="h-8 gap-1.5 px-0 text-sm font-medium text-foreground hover:opacity-70"
-            >
-              {advancedExpanded ? (
-                <ChevronDown className="h-4 w-4" />
-              ) : (
-                <ChevronRight className="h-4 w-4" />
+          <ProviderFormSection
+            sectionKey="options"
+            icon={SlidersHorizontal}
+            title={t("providerForm.advancedOptionsToggle")}
+            actions={
+              <CollapsibleTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground"
+                >
+                  {advancedExpanded ? (
+                    <ChevronDown className="h-4 w-4" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4" />
+                  )}
+                  <span className="sr-only">
+                    {t("providerForm.advancedOptionsToggle")}
+                  </span>
+                </Button>
+              </CollapsibleTrigger>
+            }
+            contentClassName="space-y-4"
+          >
+            {!advancedExpanded && (
+              <p className="text-xs text-muted-foreground">
+                {t("providerForm.advancedOptionsHint")}
+              </p>
+            )}
+            <CollapsibleContent className="space-y-4">
+              {/* API 格式选择（仅非云服务商显示） */}
+              {category !== "cloud_provider" && (
+                <div className="space-y-2">
+                  <FormLabel htmlFor="apiFormat">
+                    {t("providerForm.apiFormat", { defaultValue: "API 格式" })}
+                  </FormLabel>
+                  <Select value={apiFormat} onValueChange={onApiFormatChange}>
+                    <SelectTrigger id="apiFormat" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="anthropic">
+                        {t("providerForm.apiFormatAnthropic", {
+                          defaultValue: "Anthropic Messages (原生)",
+                        })}
+                      </SelectItem>
+                      <SelectItem value="openai_chat">
+                        {t("providerForm.apiFormatOpenAIChat", {
+                          defaultValue: "OpenAI Chat Completions (需转换)",
+                        })}
+                      </SelectItem>
+                      <SelectItem value="openai_responses">
+                        {t("providerForm.apiFormatOpenAIResponses", {
+                          defaultValue: "OpenAI Responses API (需转换)",
+                        })}
+                      </SelectItem>
+                      <SelectItem value="gemini_native">
+                        {t("providerForm.apiFormatGeminiNative", {
+                          defaultValue:
+                            "Gemini Native generateContent (需转换)",
+                        })}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {t("providerForm.apiFormatHint", {
+                      defaultValue: "选择供应商 API 的输入格式",
+                    })}
+                  </p>
+                </div>
               )}
-              {t("providerForm.advancedOptionsToggle")}
-            </Button>
-          </CollapsibleTrigger>
-          {!advancedExpanded && (
-            <p className="text-xs text-muted-foreground mt-1 ml-1">
-              {t("providerForm.advancedOptionsHint")}
-            </p>
-          )}
-          <CollapsibleContent className="space-y-4 pt-2">
-            {/* API 格式选择（仅非云服务商显示） */}
-            {category !== "cloud_provider" && (
+
+              {/* 认证字段选择器 */}
               <div className="space-y-2">
-                <FormLabel htmlFor="apiFormat">
-                  {t("providerForm.apiFormat", { defaultValue: "API 格式" })}
+                <FormLabel>
+                  {t("providerForm.authField", { defaultValue: "认证字段" })}
                 </FormLabel>
-                <Select value={apiFormat} onValueChange={onApiFormatChange}>
-                  <SelectTrigger id="apiFormat" className="w-full">
+                <Select
+                  value={apiKeyField}
+                  onValueChange={(v) =>
+                    onApiKeyFieldChange(v as ClaudeApiKeyField)
+                  }
+                >
+                  <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="anthropic">
-                      {t("providerForm.apiFormatAnthropic", {
-                        defaultValue: "Anthropic Messages (原生)",
+                    <SelectItem value="ANTHROPIC_AUTH_TOKEN">
+                      {t("providerForm.authFieldAuthToken", {
+                        defaultValue: "ANTHROPIC_AUTH_TOKEN（默认）",
                       })}
                     </SelectItem>
-                    <SelectItem value="openai_chat">
-                      {t("providerForm.apiFormatOpenAIChat", {
-                        defaultValue: "OpenAI Chat Completions (需转换)",
-                      })}
-                    </SelectItem>
-                    <SelectItem value="openai_responses">
-                      {t("providerForm.apiFormatOpenAIResponses", {
-                        defaultValue: "OpenAI Responses API (需转换)",
-                      })}
-                    </SelectItem>
-                    <SelectItem value="gemini_native">
-                      {t("providerForm.apiFormatGeminiNative", {
-                        defaultValue: "Gemini Native generateContent (需转换)",
+                    <SelectItem value="ANTHROPIC_API_KEY">
+                      {t("providerForm.authFieldApiKey", {
+                        defaultValue: "ANTHROPIC_API_KEY",
                       })}
                     </SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  {t("providerForm.apiFormatHint", {
-                    defaultValue: "选择供应商 API 的输入格式",
+                  {t("providerForm.authFieldHint", {
+                    defaultValue: "选择写入配置的认证环境变量名",
                   })}
                 </p>
               </div>
-            )}
 
-            {/* 认证字段选择器 */}
-            <div className="space-y-2">
-              <FormLabel>
-                {t("providerForm.authField", { defaultValue: "认证字段" })}
-              </FormLabel>
-              <Select
-                value={apiKeyField}
-                onValueChange={(v) =>
-                  onApiKeyFieldChange(v as ClaudeApiKeyField)
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ANTHROPIC_AUTH_TOKEN">
-                    {t("providerForm.authFieldAuthToken", {
-                      defaultValue: "ANTHROPIC_AUTH_TOKEN（默认）",
-                    })}
-                  </SelectItem>
-                  <SelectItem value="ANTHROPIC_API_KEY">
-                    {t("providerForm.authFieldApiKey", {
-                      defaultValue: "ANTHROPIC_API_KEY",
-                    })}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                {t("providerForm.authFieldHint", {
-                  defaultValue: "选择写入配置的认证环境变量名",
-                })}
-              </p>
-            </div>
-
-            {/* 模型映射 */}
-            <div className="space-y-1 pt-2 border-t">
-              <div className="flex items-center justify-between">
-                <FormLabel>{t("providerForm.modelMappingLabel")}</FormLabel>
-                <div className="flex gap-2">
-                  {/* 一键设置按钮 */}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      const value =
-                        claudeModel ||
-                        defaultSonnetModel ||
-                        defaultOpusModel ||
-                        defaultFableModel ||
-                        defaultHaikuModel;
-                      if (value) {
-                        for (const row of modelRoleRows) {
-                          const roleValue = row.supportsOneM
-                            ? value
-                            : stripClaudeOneMMarker(value);
-                          onModelChange(row.modelField, roleValue);
-                          onModelChange(
-                            row.displayNameField,
-                            stripClaudeOneMMarker(roleValue),
+              {/* 模型映射 */}
+              <div className="space-y-1 pt-2 border-t">
+                <div className="flex items-center justify-between">
+                  <FormLabel>{t("providerForm.modelMappingLabel")}</FormLabel>
+                  <div className="flex gap-2">
+                    {/* 一键设置按钮 */}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const value =
+                          claudeModel ||
+                          defaultSonnetModel ||
+                          defaultOpusModel ||
+                          defaultFableModel ||
+                          defaultHaikuModel;
+                        if (value) {
+                          for (const row of modelRoleRows) {
+                            const roleValue = row.supportsOneM
+                              ? value
+                              : stripClaudeOneMMarker(value);
+                            onModelChange(row.modelField, roleValue);
+                            onModelChange(
+                              row.displayNameField,
+                              stripClaudeOneMMarker(roleValue),
+                            );
+                          }
+                          toast.success(
+                            t("providerForm.quickSetSuccess", {
+                              defaultValue: "已将模型名称应用到所有角色",
+                            }),
                           );
                         }
-                        toast.success(
-                          t("providerForm.quickSetSuccess", {
-                            defaultValue: "已将模型名称应用到所有角色",
-                          }),
-                        );
+                      }}
+                      disabled={
+                        !claudeModel &&
+                        !defaultHaikuModel &&
+                        !defaultSonnetModel &&
+                        !defaultOpusModel &&
+                        !defaultFableModel
                       }
-                    }}
-                    disabled={
-                      !claudeModel &&
-                      !defaultHaikuModel &&
-                      !defaultSonnetModel &&
-                      !defaultOpusModel &&
-                      !defaultFableModel
-                    }
-                    className="h-7 gap-1"
-                  >
-                    <Wand2 className="h-3.5 w-3.5" />
-                    {t("providerForm.quickSetModels", {
-                      defaultValue: "一键设置",
-                    })}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleModelFetchClick}
-                    disabled={modelFetchLoading}
-                    className="h-7 gap-1"
-                  >
-                    {modelFetchLoading ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Download className="h-3.5 w-3.5" />
-                    )}
-                    {t("providerForm.fetchModels")}
-                  </Button>
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {t("providerForm.modelMappingHint")}
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              <div className="hidden grid-cols-[120px_1fr_minmax(0,1fr)_104px] gap-2 px-1 text-xs font-medium text-muted-foreground md:grid">
-                <span>
-                  {t("providerForm.modelRoleLabel", {
-                    defaultValue: "模型角色",
-                  })}
-                </span>
-                <span>
-                  {t("providerForm.modelDisplayNameLabel", {
-                    defaultValue: "显示名称",
-                  })}
-                </span>
-                <span>
-                  {t("providerForm.requestModelLabel", {
-                    defaultValue: "实际请求模型",
-                  })}
-                </span>
-                <span>
-                  {t("providerForm.modelOneMHeader", {
-                    defaultValue: "声明支持 1M",
-                  })}
-                </span>
-              </div>
-
-              {modelRoleRows.map((row) => {
-                const modelBase = stripClaudeOneMMarker(row.model);
-                const usesOneM =
-                  row.supportsOneM && hasClaudeOneMMarker(row.model);
-
-                return (
-                  <div
-                    key={row.role}
-                    className="grid grid-cols-1 gap-2 md:grid-cols-[120px_1fr_minmax(0,1fr)_104px]"
-                  >
-                    <div className="flex h-9 items-center rounded-md border border-input bg-muted px-3 text-sm font-medium text-muted-foreground">
-                      {row.label}
-                    </div>
-                    <Input
-                      value={row.displayName}
-                      onChange={(event) =>
-                        onModelChange(row.displayNameField, event.target.value)
-                      }
-                      placeholder={
-                        modelBase ||
-                        t("providerForm.modelDisplayNamePlaceholder", {
-                          defaultValue: "例如 DeepSeek V4 Pro",
-                        })
-                      }
-                      autoComplete="off"
-                    />
-                    {renderModelInput(
-                      row.inputId,
-                      modelBase,
-                      row.modelField,
-                      t("providerForm.modelPlaceholder", { defaultValue: "" }),
-                      (value) =>
-                        handleRoleModelChange(
-                          row,
-                          row.supportsOneM
-                            ? setClaudeOneMMarker(value, usesOneM)
-                            : stripClaudeOneMMarker(value),
-                        ),
-                    )}
-                    {row.supportsOneM && (
-                      <label className="flex h-9 items-center gap-2 text-sm text-muted-foreground">
-                        <Checkbox
-                          checked={usesOneM}
-                          onCheckedChange={(checked) =>
-                            handleRoleOneMChange(row, checked === true)
-                          }
-                        />
-                        {t("providerForm.modelOneMLabel", {
-                          defaultValue: "1M",
-                        })}
-                      </label>
-                    )}
+                      className="h-7 gap-1"
+                    >
+                      <Wand2 className="h-3.5 w-3.5" />
+                      {t("providerForm.quickSetModels", {
+                        defaultValue: "一键设置",
+                      })}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleModelFetchClick}
+                      disabled={modelFetchLoading}
+                      className="h-7 gap-1"
+                    >
+                      {modelFetchLoading ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Download className="h-3.5 w-3.5" />
+                      )}
+                      {t("providerForm.fetchModels")}
+                    </Button>
                   </div>
-                );
-              })}
-            </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {t("providerForm.modelMappingHint")}
+                </p>
+              </div>
 
-            <div className="space-y-2 border-t pt-4">
-              <FormLabel htmlFor="claudeModel">
-                {t("providerForm.fallbackModelLabel", {
-                  defaultValue: "默认兜底模型",
-                })}
-              </FormLabel>
-              {renderModelInput(
-                "claudeModel",
-                claudeModel,
-                "ANTHROPIC_MODEL",
-                t("providerForm.modelPlaceholder", { defaultValue: "" }),
-              )}
-              <p className="text-xs text-muted-foreground">
-                {t("providerForm.fallbackModelHint", {
-                  defaultValue:
-                    "用于未明确落到 Sonnet、Opus、Fable、Haiku 角色的请求。使用第三方/中转端点时建议填写：否则这些请求（含 Haiku 后台子任务）会以原始 Claude 模型名透传给上游，可能因上游无此模型而报错。官方端点可留空。",
-                })}
-              </p>
-            </div>
+              <div className="space-y-3">
+                <div className="hidden grid-cols-[120px_1fr_minmax(0,1fr)_104px] gap-2 px-1 text-xs font-medium text-muted-foreground md:grid">
+                  <span>
+                    {t("providerForm.modelRoleLabel", {
+                      defaultValue: "模型角色",
+                    })}
+                  </span>
+                  <span>
+                    {t("providerForm.modelDisplayNameLabel", {
+                      defaultValue: "显示名称",
+                    })}
+                  </span>
+                  <span>
+                    {t("providerForm.requestModelLabel", {
+                      defaultValue: "实际请求模型",
+                    })}
+                  </span>
+                  <span>
+                    {t("providerForm.modelOneMHeader", {
+                      defaultValue: "声明支持 1M",
+                    })}
+                  </span>
+                </div>
 
-            <CustomUserAgentField
-              id="claude-custom-user-agent"
-              value={customUserAgent}
-              onChange={onCustomUserAgentChange}
-            />
-          </CollapsibleContent>
+                {modelRoleRows.map((row) => {
+                  const modelBase = stripClaudeOneMMarker(row.model);
+                  const usesOneM =
+                    row.supportsOneM && hasClaudeOneMMarker(row.model);
+
+                  return (
+                    <div
+                      key={row.role}
+                      className="grid grid-cols-1 gap-2 md:grid-cols-[120px_1fr_minmax(0,1fr)_104px]"
+                    >
+                      <div className="flex h-9 items-center rounded-md border border-input bg-muted px-3 text-sm font-medium text-muted-foreground">
+                        {row.label}
+                      </div>
+                      <Input
+                        value={row.displayName}
+                        onChange={(event) =>
+                          onModelChange(
+                            row.displayNameField,
+                            event.target.value,
+                          )
+                        }
+                        placeholder={
+                          modelBase ||
+                          t("providerForm.modelDisplayNamePlaceholder", {
+                            defaultValue: "例如 DeepSeek V4 Pro",
+                          })
+                        }
+                        autoComplete="off"
+                      />
+                      {renderModelInput(
+                        row.inputId,
+                        modelBase,
+                        row.modelField,
+                        t("providerForm.modelPlaceholder", {
+                          defaultValue: "",
+                        }),
+                        (value) =>
+                          handleRoleModelChange(
+                            row,
+                            row.supportsOneM
+                              ? setClaudeOneMMarker(value, usesOneM)
+                              : stripClaudeOneMMarker(value),
+                          ),
+                      )}
+                      {row.supportsOneM && (
+                        <label className="flex h-9 items-center gap-2 text-sm text-muted-foreground">
+                          <Checkbox
+                            checked={usesOneM}
+                            onCheckedChange={(checked) =>
+                              handleRoleOneMChange(row, checked === true)
+                            }
+                          />
+                          {t("providerForm.modelOneMLabel", {
+                            defaultValue: "1M",
+                          })}
+                        </label>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="space-y-2 border-t pt-4">
+                <FormLabel htmlFor="claudeModel">
+                  {t("providerForm.fallbackModelLabel", {
+                    defaultValue: "默认兜底模型",
+                  })}
+                </FormLabel>
+                {renderModelInput(
+                  "claudeModel",
+                  claudeModel,
+                  "ANTHROPIC_MODEL",
+                  t("providerForm.modelPlaceholder", { defaultValue: "" }),
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {t("providerForm.fallbackModelHint", {
+                    defaultValue:
+                      "用于未明确落到 Sonnet、Opus、Fable、Haiku 角色的请求。使用第三方/中转端点时建议填写：否则这些请求（含 Haiku 后台子任务）会以原始 Claude 模型名透传给上游，可能因上游无此模型而报错。官方端点可留空。",
+                  })}
+                </p>
+              </div>
+
+              <CustomUserAgentField
+                id="claude-custom-user-agent"
+                value={customUserAgent}
+                onChange={onCustomUserAgentChange}
+              />
+            </CollapsibleContent>
+          </ProviderFormSection>
         </Collapsible>
       )}
     </>

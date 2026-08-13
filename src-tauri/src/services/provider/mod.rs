@@ -1608,7 +1608,7 @@ impl ProviderService {
     ///    b. Update local settings current_provider_xxx (device-level)
     ///    c. Update database is_current (as default for new devices)
     ///    d. Write target provider config to live files
-    ///       while preserving the CLI-owned MCP configuration
+    ///    while preserving the CLI-owned MCP configuration
     pub fn switch(state: &AppState, app_type: AppType, id: &str) -> Result<SwitchResult, AppError> {
         // Check if provider exists
         let providers = state.db.get_all_providers(app_type.as_str())?;

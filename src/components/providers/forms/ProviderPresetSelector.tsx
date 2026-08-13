@@ -3,8 +3,17 @@ import { useTranslation } from "react-i18next";
 import { FormLabel } from "@/components/ui/form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ClaudeIcon, CodexIcon, GeminiIcon } from "@/components/BrandIcons";
-import { ArrowUpAZ, Search, Zap, Star, Layers, Settings2 } from "lucide-react";
+import {
+  ArrowUpAZ,
+  Search,
+  Zap,
+  Star,
+  Layers,
+  Settings2,
+  Plus,
+} from "lucide-react";
 import type { ProviderPreset } from "@/config/claudeProviderPresets";
 import type { CodexProviderPreset } from "@/config/codexProviderPresets";
 import type { GeminiProviderPreset } from "@/config/geminiProviderPresets";
@@ -42,6 +51,21 @@ export type PresetEntry = {
   id: string;
   preset: AnyPreset;
 };
+
+// 分类标签页展示顺序；未在此列出的分类归入 "others"。
+const CATEGORY_TAB_ORDER: string[] = [
+  "official",
+  "cn_official",
+  "cloud_provider",
+  "aggregator",
+  "third_party",
+  "omo",
+  "omo-slim",
+];
+
+function getPresetCategoryKey(preset: AnyPreset): string {
+  return preset.category ?? "others";
+}
 
 export function getPresetDisplayName(
   preset: AnyPreset,
@@ -133,6 +157,28 @@ export function ProviderPresetSelector({
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
+  // 该 app 下实际存在的分类，按固定优先级排序；未识别的分类归入 "others"。
+  const availableCategories = useMemo(() => {
+    const present = new Set<string>();
+    presetEntries.forEach((entry) => {
+      present.add(getPresetCategoryKey(entry.preset));
+    });
+    const ordered = CATEGORY_TAB_ORDER.filter((c) => present.has(c));
+    if (present.has("others")) ordered.push("others");
+    return ordered;
+  }, [presetEntries]);
+
+  const [activeCategory, setActiveCategory] = useState<string>(
+    () => availableCategories[0] ?? "",
+  );
+
+  // presetEntries 变化（如切换 app）导致当前分类不再存在时，回退到第一个可用分类。
+  useEffect(() => {
+    if (!availableCategories.includes(activeCategory)) {
+      setActiveCategory(availableCategories[0] ?? "");
+    }
+  }, [availableCategories, activeCategory]);
+
   // 点击搜索区域外时收起并清空,对齐旧 Popover 的「点击外部关闭」行为
   useEffect(() => {
     if (!searchOpen) return;
@@ -170,15 +216,41 @@ export function ProviderPresetSelector({
     return () => globalThis.removeEventListener("keydown", handleKeyDown, true);
   }, []);
 
+  const isSearching = searchQuery.trim().length > 0;
+
+  // 未搜索时只展示当前分类标签页下的预设；搜索时跨分类展平匹配。
+  const activeCategoryEntries = useMemo(() => {
+    return presetEntries.filter(
+      (entry) => getPresetCategoryKey(entry.preset) === activeCategory,
+    );
+  }, [presetEntries, activeCategory]);
+
   const visiblePresetEntries = useMemo(
     () =>
-      getVisiblePresetEntries(presetEntries, {
-        query: searchQuery,
-        sortMode,
-        t,
-      }),
-    [presetEntries, searchQuery, sortMode, t],
+      getVisiblePresetEntries(
+        isSearching ? presetEntries : activeCategoryEntries,
+        {
+          query: searchQuery,
+          sortMode,
+          t,
+        },
+      ),
+    [
+      isSearching,
+      presetEntries,
+      activeCategoryEntries,
+      searchQuery,
+      sortMode,
+      t,
+    ],
   );
+
+  const handleTabChange = (value: string) => {
+    setActiveCategory(value);
+    if (searchQuery) {
+      setSearchQuery("");
+    }
+  };
 
   const getCategoryHint = (): ReactNode => {
     switch (category) {
@@ -355,20 +427,35 @@ export function ProviderPresetSelector({
           </Button>
         </div>
       </div>
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2">
+
+      <div className="flex flex-wrap items-center gap-2">
+        {/* 自定义配置是一个独立的常驻入口，不参与分类筛选：点击它只标记「使用空白配置」，
+            不会像分类标签那样切换/隐藏下方的预设网格，避免用户以为预设"全部消失了"。
+            它是一个动作按钮而非选中态：selectedPresetId 默认就是 "custom"（表示"还没挑预设"），
+            如果这里也跟着显示成选中态，会和当前激活的分类标签同时高亮，看起来像两处互相矛盾的
+            "已选中"，所以固定用一种朴素样式，不随 selectedPresetId 变化。 */}
         <button
           type="button"
           onClick={() => onPresetChange("custom")}
-          className={`inline-flex items-center justify-start gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors w-full ${
-            selectedPresetId === "custom"
-              ? "bg-blue-500 text-white dark:bg-blue-600"
-              : "bg-accent text-muted-foreground hover:bg-accent/80"
-          }`}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium border border-dashed border-border-default text-muted-foreground hover:bg-accent hover:text-foreground"
         >
-          <span className="inline-block w-4 h-4 flex-shrink-0" aria-hidden />
-          <span className="truncate">{t("providerPreset.custom")}</span>
+          <Plus className="size-3.5" />
+          {t("providerPreset.custom")}
         </button>
 
+        <Tabs value={activeCategory} onValueChange={handleTabChange}>
+          <TabsList className="h-auto flex-wrap justify-start gap-1 bg-muted p-1">
+            {availableCategories.map((cat) => (
+              <TabsTrigger key={cat} value={cat} className="min-w-0 px-3">
+                {presetCategoryLabels[cat] ??
+                  t("providerPreset.other", { defaultValue: "Other" })}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+      </div>
+
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2">
         {visiblePresetEntries.length === 0 && (
           <div className="col-span-full rounded-md border border-dashed border-border-default px-3 py-2 text-xs text-muted-foreground">
             {t("providerPreset.noSearchResults", {
@@ -380,18 +467,16 @@ export function ProviderPresetSelector({
         {visiblePresetEntries.map((entry) => {
           const isSelected = selectedPresetId === entry.id;
           const isPartner = entry.preset.isPartner;
-          const presetCategory = entry.preset.category ?? "others";
           return (
             <button
               key={entry.id}
               type="button"
-              onClick={() => onPresetChange(entry.id)}
+              onClick={() => {
+                onPresetChange(entry.id);
+                setActiveCategory(getPresetCategoryKey(entry.preset));
+              }}
               className={`${getPresetButtonClass(isSelected, entry.preset)} relative`}
               style={getPresetButtonStyle(isSelected, entry.preset)}
-              title={
-                presetCategoryLabels[presetCategory] ??
-                t("providerPreset.other")
-              }
             >
               {renderPresetIcon(entry.preset)}
               <span className="truncate">

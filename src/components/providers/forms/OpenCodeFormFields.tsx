@@ -18,6 +18,9 @@ import {
   ChevronRight,
   Loader2,
   Sparkles,
+  Link2,
+  SlidersHorizontal,
+  Layers,
 } from "lucide-react";
 import { ApiKeySection, ModelDropdown } from "./shared";
 import { Switch } from "@/components/ui/switch";
@@ -56,6 +59,7 @@ import {
   getModelsDevReasoningEfforts,
   type ModelsDevCatalogModel,
 } from "@/lib/modelsDevCatalog";
+import { ProviderFormSection } from "./ProviderFormSection";
 
 /**
  * Model ID input with local state to prevent focus loss.
@@ -297,7 +301,10 @@ export function OpenCodeFormFields({
     if (metadata.temperature) {
       capabilities.push(t("opencode.modelsDevCapabilityTemperature", "温度"));
     }
-    if (metadata.modalities?.input?.length || metadata.modalities?.output?.length) {
+    if (
+      metadata.modalities?.input?.length ||
+      metadata.modalities?.output?.length
+    ) {
       capabilities.push(
         `${metadata.modalities.input?.join("/") ?? ""} -> ${metadata.modalities.output?.join("/") ?? ""}`,
       );
@@ -306,11 +313,7 @@ export function OpenCodeFormFields({
   };
 
   const loadModelsDevMetadata = useCallback(
-    async (
-      modelKey: string,
-      model: OpenCodeModel,
-      forceRefresh = false,
-    ) => {
+    async (modelKey: string, model: OpenCodeModel, forceRefresh = false) => {
       if (
         !forceRefresh &&
         Object.prototype.hasOwnProperty.call(modelsDevMetadata, modelKey)
@@ -517,7 +520,8 @@ export function OpenCodeFormFields({
       toast.warning(
         t("opencode.modelsDevThinkingUnsupported", {
           name: metadata.name || modelKey,
-          defaultValue: "Models.dev 未标记 {{name}} 支持思考；已补充已知模型能力",
+          defaultValue:
+            "Models.dev 未标记 {{name}} 支持思考；已补充已知模型能力",
         }),
       );
     }
@@ -549,7 +553,9 @@ export function OpenCodeFormFields({
     modelsRef.current = resetModels;
     onModelsChange(resetModels);
     setThinkingProtocols(
-      Object.fromEntries(Object.keys(currentModels).map((key) => [key, protocol])),
+      Object.fromEntries(
+        Object.keys(currentModels).map((key) => [key, protocol]),
+      ),
     );
 
     for (const [modelKey, model] of Object.entries(resetModels)) {
@@ -864,73 +870,83 @@ export function OpenCodeFormFields({
 
   return (
     <>
-      {/* NPM Package Selector */}
-      <div className="space-y-2">
-        <FormLabel htmlFor="opencode-npm">
-          {t("opencode.npmPackage", {
-            defaultValue: "接口格式",
-          })}
-        </FormLabel>
-        <Select value={npm} onValueChange={handleNpmPackageChange}>
-          <SelectTrigger id="opencode-npm">
-            <SelectValue
-              placeholder={t("opencode.selectPackage", {
-                defaultValue: "Select a package",
-              })}
-            />
-          </SelectTrigger>
-          <SelectContent>
-            {opencodeNpmPackages.map((pkg) => (
-              <SelectItem key={pkg.value} value={pkg.value}>
-                {pkg.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <p className="text-xs text-muted-foreground">
-          {t("opencode.npmPackageHint", {
-            defaultValue:
-              "Select the AI SDK package that matches your provider.",
-          })}
-        </p>
-      </div>
+      {/* 连接配置：接口格式 + API Key + Base URL */}
+      <ProviderFormSection
+        sectionKey="connection"
+        icon={Link2}
+        title={t("opencode.connectionSection", {
+          defaultValue: "连接配置",
+        })}
+      >
+        {/* NPM Package Selector */}
+        <div className="space-y-2">
+          <FormLabel htmlFor="opencode-npm">
+            {t("opencode.npmPackage", {
+              defaultValue: "接口格式",
+            })}
+          </FormLabel>
+          <Select value={npm} onValueChange={handleNpmPackageChange}>
+            <SelectTrigger id="opencode-npm">
+              <SelectValue
+                placeholder={t("opencode.selectPackage", {
+                  defaultValue: "Select a package",
+                })}
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {opencodeNpmPackages.map((pkg) => (
+                <SelectItem key={pkg.value} value={pkg.value}>
+                  {pkg.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            {t("opencode.npmPackageHint", {
+              defaultValue:
+                "Select the AI SDK package that matches your provider.",
+            })}
+          </p>
+        </div>
 
-      {/* API Key */}
-      <ApiKeySection
-        value={apiKey}
-        onChange={onApiKeyChange}
-        category={category}
-        shouldShowLink={shouldShowApiKeyLink}
-        websiteUrl={websiteUrl}
-        isPartner={isPartner}
-        partnerPromotionKey={partnerPromotionKey}
-      />
-
-      {/* Base URL */}
-      <div className="space-y-2">
-        <FormLabel htmlFor="opencode-baseurl">
-          {t("opencode.baseUrl", { defaultValue: "Base URL" })}
-        </FormLabel>
-        <Input
-          id="opencode-baseurl"
-          value={baseUrl}
-          onChange={(e) => onBaseUrlChange(e.target.value)}
-          placeholder="https://api.example.com/v1"
+        {/* API Key */}
+        <ApiKeySection
+          value={apiKey}
+          onChange={onApiKeyChange}
+          category={category}
+          shouldShowLink={shouldShowApiKeyLink}
+          websiteUrl={websiteUrl}
+          isPartner={isPartner}
+          partnerPromotionKey={partnerPromotionKey}
         />
-        <p className="text-xs text-muted-foreground">
-          {t("opencode.baseUrlHint", {
-            defaultValue:
-              "The base URL for the API endpoint. Leave empty to use the default endpoint for official SDKs.",
-          })}
-        </p>
-      </div>
+
+        {/* Base URL */}
+        <div className="space-y-2">
+          <FormLabel htmlFor="opencode-baseurl">
+            {t("opencode.baseUrl", { defaultValue: "Base URL" })}
+          </FormLabel>
+          <Input
+            id="opencode-baseurl"
+            value={baseUrl}
+            onChange={(e) => onBaseUrlChange(e.target.value)}
+            placeholder="https://api.example.com/v1"
+          />
+          <p className="text-xs text-muted-foreground">
+            {t("opencode.baseUrlHint", {
+              defaultValue:
+                "The base URL for the API endpoint. Leave empty to use the default endpoint for official SDKs.",
+            })}
+          </p>
+        </div>
+      </ProviderFormSection>
 
       {/* Extra Options Editor */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <FormLabel>
-            {t("opencode.extraOptions", { defaultValue: "额外选项" })}
-          </FormLabel>
+      <ProviderFormSection
+        sectionKey="options"
+        icon={SlidersHorizontal}
+        title={t("opencode.extraOptions", { defaultValue: "额外选项" })}
+        contentClassName="space-y-3"
+        actions={
           <Button
             type="button"
             variant="outline"
@@ -941,8 +957,8 @@ export function OpenCodeFormFields({
             <Plus className="h-3.5 w-3.5" />
             {t("opencode.addExtraOption", { defaultValue: "添加" })}
           </Button>
-        </div>
-
+        }
+      >
         {Object.keys(extraOptions).length === 0 ? (
           <p className="text-sm text-muted-foreground py-2">
             {t("opencode.noExtraOptions", {
@@ -999,14 +1015,15 @@ export function OpenCodeFormFields({
               "配置额外的 SDK 选项，如 timeout、setCacheKey 等。值会自动解析类型（数字、布尔值等）。",
           })}
         </p>
-      </div>
+      </ProviderFormSection>
 
       {/* Models Editor */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <FormLabel>
-            {t("opencode.models", { defaultValue: "Models" })}
-          </FormLabel>
+      <ProviderFormSection
+        sectionKey="models"
+        icon={Layers}
+        title={t("opencode.models", { defaultValue: "Models" })}
+        contentClassName="space-y-3"
+        actions={
           <div className="flex gap-1">
             <Button
               type="button"
@@ -1034,8 +1051,8 @@ export function OpenCodeFormFields({
               {t("opencode.addModel", { defaultValue: "Add" })}
             </Button>
           </div>
-        </div>
-
+        }
+      >
         {Object.keys(models).length === 0 ? (
           <p className="text-sm text-muted-foreground py-2">
             {t("opencode.noModels", {
@@ -1117,7 +1134,8 @@ export function OpenCodeFormFields({
                       );
                       const metadata = modelsDevMetadata[key];
                       const isLoadingMetadata = modelsDevLoading.has(key);
-                      const nativeEfforts = getModelsDevReasoningEfforts(metadata);
+                      const nativeEfforts =
+                        getModelsDevReasoningEfforts(metadata);
 
                       return (
                         <div className="space-y-3 rounded-md border border-border/60 bg-muted/20 p-3">
@@ -1142,7 +1160,8 @@ export function OpenCodeFormFields({
                                       ? t(
                                           "opencode.modelsDevReasoningSupported",
                                           {
-                                            defaultValue: "Models.dev：支持思考",
+                                            defaultValue:
+                                              "Models.dev：支持思考",
                                           },
                                         )
                                       : t(
@@ -1201,147 +1220,156 @@ export function OpenCodeFormFields({
                           ) : (
                             <>
                               <div className="flex items-center justify-between gap-3">
-                            <label
-                              htmlFor={`opencode-thinking-${key}`}
-                              className="text-sm font-medium"
-                            >
-                              {t("opencode.thinkingEnabled", {
-                                defaultValue: "启用思考",
-                              })}
-                            </label>
-                            <Switch
-                              id={`opencode-thinking-${key}`}
-                              checked={settings.enabled}
-                              onCheckedChange={(enabled) =>
-                                updateModelThinking(
-                                  key,
-                                  protocol,
-                                  (current) => ({
-                                    ...current,
-                                    enabled,
-                                  }),
-                                )
-                              }
-                            />
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-2">
-                            <div className="space-y-1.5">
-                              <span className="text-xs text-muted-foreground">
-                                {t("opencode.thinkingProtocol", {
-                                  defaultValue: "配置格式",
-                                })}
-                              </span>
-                              <Select
-                                value={protocol}
-                                onValueChange={(value) =>
-                                  handleThinkingProtocolChange(
-                                    key,
-                                    value as OpenCodeThinkingProtocol,
-                                  )
-                                }
-                              >
-                                <SelectTrigger className="h-9">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="anthropic">
-                                    {t("opencode.thinkingProtocolAnthropic", {
-                                      defaultValue: "Anthropic Thinking",
-                                    })}
-                                  </SelectItem>
-                                  <SelectItem value="openai">
-                                    {t("opencode.thinkingProtocolOpenAI", {
-                                      defaultValue: "OpenAI Reasoning Effort",
-                                    })}
-                                  </SelectItem>
-                                  <SelectItem value="gemini">
-                                    {t("opencode.thinkingProtocolGemini", {
-                                      defaultValue: "Gemini Thinking Config",
-                                    })}
-                                  </SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-
-                            {protocol === "openai" ? (
-                              <div className="space-y-1.5">
-                                <span className="text-xs text-muted-foreground">
-                                  {t("opencode.thinkingEffort", {
-                                    defaultValue: "思考强度",
+                                <label
+                                  htmlFor={`opencode-thinking-${key}`}
+                                  className="text-sm font-medium"
+                                >
+                                  {t("opencode.thinkingEnabled", {
+                                    defaultValue: "启用思考",
                                   })}
-                                </span>
-                                <Select
-                                  value={settings.effort}
-                                  onValueChange={(value) =>
+                                </label>
+                                <Switch
+                                  id={`opencode-thinking-${key}`}
+                                  checked={settings.enabled}
+                                  onCheckedChange={(enabled) =>
                                     updateModelThinking(
                                       key,
                                       protocol,
                                       (current) => ({
                                         ...current,
-                                        effort: value as typeof current.effort,
+                                        enabled,
                                       }),
                                     )
                                   }
-                                >
-                                  <SelectTrigger className="h-9">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {(
-                                      [
-                                        "low",
-                                        "medium",
-                                        "high",
-                                        "xhigh",
-                                      ] as const
-                                    ).map((effort) => (
-                                      <SelectItem key={effort} value={effort}>
+                                />
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-2">
+                                <div className="space-y-1.5">
+                                  <span className="text-xs text-muted-foreground">
+                                    {t("opencode.thinkingProtocol", {
+                                      defaultValue: "配置格式",
+                                    })}
+                                  </span>
+                                  <Select
+                                    value={protocol}
+                                    onValueChange={(value) =>
+                                      handleThinkingProtocolChange(
+                                        key,
+                                        value as OpenCodeThinkingProtocol,
+                                      )
+                                    }
+                                  >
+                                    <SelectTrigger className="h-9">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="anthropic">
                                         {t(
-                                          `opencode.thinkingEffort${effort[0].toUpperCase()}${effort.slice(1)}`,
+                                          "opencode.thinkingProtocolAnthropic",
                                           {
-                                            defaultValue: effort,
+                                            defaultValue: "Anthropic Thinking",
                                           },
                                         )}
                                       </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            ) : (
-                              <div className="space-y-1.5">
-                                <span className="text-xs text-muted-foreground">
-                                  {t("opencode.thinkingBudget", {
-                                    defaultValue: "思考预算",
-                                  })}
-                                </span>
-                                <Input
-                                  type="number"
-                                  min={1}
-                                  step={1}
-                                  value={settings.budgetTokens}
-                                  onChange={(event) => {
-                                    const budgetTokens = Number(
-                                      event.target.value,
-                                    );
-                                    if (
-                                      Number.isInteger(budgetTokens) &&
-                                      budgetTokens > 0
-                                    ) {
-                                      updateModelThinking(
-                                        key,
-                                        protocol,
-                                        (current) => ({
-                                          ...current,
-                                          budgetTokens,
-                                        }),
-                                      );
-                                    }
-                                  }}
-                                  className="h-9"
-                                />
-                              </div>
-                            )}
+                                      <SelectItem value="openai">
+                                        {t("opencode.thinkingProtocolOpenAI", {
+                                          defaultValue:
+                                            "OpenAI Reasoning Effort",
+                                        })}
+                                      </SelectItem>
+                                      <SelectItem value="gemini">
+                                        {t("opencode.thinkingProtocolGemini", {
+                                          defaultValue:
+                                            "Gemini Thinking Config",
+                                        })}
+                                      </SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+
+                                {protocol === "openai" ? (
+                                  <div className="space-y-1.5">
+                                    <span className="text-xs text-muted-foreground">
+                                      {t("opencode.thinkingEffort", {
+                                        defaultValue: "思考强度",
+                                      })}
+                                    </span>
+                                    <Select
+                                      value={settings.effort}
+                                      onValueChange={(value) =>
+                                        updateModelThinking(
+                                          key,
+                                          protocol,
+                                          (current) => ({
+                                            ...current,
+                                            effort:
+                                              value as typeof current.effort,
+                                          }),
+                                        )
+                                      }
+                                    >
+                                      <SelectTrigger className="h-9">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {(
+                                          [
+                                            "low",
+                                            "medium",
+                                            "high",
+                                            "xhigh",
+                                          ] as const
+                                        ).map((effort) => (
+                                          <SelectItem
+                                            key={effort}
+                                            value={effort}
+                                          >
+                                            {t(
+                                              `opencode.thinkingEffort${effort[0].toUpperCase()}${effort.slice(1)}`,
+                                              {
+                                                defaultValue: effort,
+                                              },
+                                            )}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                ) : (
+                                  <div className="space-y-1.5">
+                                    <span className="text-xs text-muted-foreground">
+                                      {t("opencode.thinkingBudget", {
+                                        defaultValue: "思考预算",
+                                      })}
+                                    </span>
+                                    <Input
+                                      type="number"
+                                      min={1}
+                                      step={1}
+                                      value={settings.budgetTokens}
+                                      onChange={(event) => {
+                                        const budgetTokens = Number(
+                                          event.target.value,
+                                        );
+                                        if (
+                                          Number.isInteger(budgetTokens) &&
+                                          budgetTokens > 0
+                                        ) {
+                                          updateModelThinking(
+                                            key,
+                                            protocol,
+                                            (current) => ({
+                                              ...current,
+                                              budgetTokens,
+                                            }),
+                                          );
+                                        }
+                                      }}
+                                      className="h-9"
+                                    />
+                                  </div>
+                                )}
                               </div>
                             </>
                           )}
@@ -1472,14 +1500,13 @@ export function OpenCodeFormFields({
                                   ? nativeEfforts
                                   : ["low", "medium", "high"]
                                 ).map((level) => (
-                                    <SelectItem key={level} value={level}>
-                                      {t(
-                                        `opencode.thinkingLevel${level[0].toUpperCase()}${level.slice(1)}`,
-                                        { defaultValue: level },
-                                      )}
-                                    </SelectItem>
-                                  ),
-                                )}
+                                  <SelectItem key={level} value={level}>
+                                    {t(
+                                      `opencode.thinkingLevel${level[0].toUpperCase()}${level.slice(1)}`,
+                                      { defaultValue: level },
+                                    )}
+                                  </SelectItem>
+                                ))}
                               </SelectContent>
                             </Select>
                           </div>
@@ -1663,7 +1690,7 @@ export function OpenCodeFormFields({
               "Configure available models. Model ID is the API identifier, Display Name is shown in the UI.",
           })}
         </p>
-      </div>
+      </ProviderFormSection>
     </>
   );
 }

@@ -98,7 +98,9 @@ describe("OpenCode thinking settings", () => {
   });
 
   it("uses Google's native thinking configuration for Gemini efforts", () => {
-    expect(buildOpenCodeReasoningEffortVariants("gemini", ["low", "high"])).toEqual({
+    expect(
+      buildOpenCodeReasoningEffortVariants("gemini", ["low", "high"]),
+    ).toEqual({
       low: {
         thinkingConfig: { includeThoughts: true, thinkingLevel: "low" },
       },
@@ -217,9 +219,7 @@ describe("OpenCode thinking settings", () => {
 
 describe("OpenCode model display names", () => {
   it("formats GPT model IDs with an uppercase brand and title-cased suffixes", () => {
-    expect(formatOpenCodeModelDisplayName("gpt-5.6-mini")).toBe(
-      "GPT 5.6 Mini",
-    );
+    expect(formatOpenCodeModelDisplayName("gpt-5.6-mini")).toBe("GPT 5.6 Mini");
   });
 
   it("formats DeepSeek model IDs with the brand's expected casing", () => {

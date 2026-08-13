@@ -131,6 +131,16 @@ describe("ClaudeFormFields", () => {
     expect(copilotApiMock.copilotGetModelsForAccount).not.toHaveBeenCalled();
   });
 
+  it("使用统一卡片组织连接配置与高级选项", () => {
+    const { container } = renderCopilotForm();
+
+    expect(
+      Array.from(container.querySelectorAll("[data-provider-section]")).map(
+        (section) => section.getAttribute("data-provider-section"),
+      ),
+    ).toEqual(["connection", "options"]);
+  });
+
   it("点击获取模型列表后才请求当前 Copilot 账号的模型", async () => {
     renderCopilotForm();
 

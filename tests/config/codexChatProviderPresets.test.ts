@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { parse as parseToml } from "smol-toml";
 import { codexProviderPresets } from "@/config/codexProviderPresets";
 import {
   extractCodexBaseUrl,
@@ -29,16 +30,6 @@ const expectedChatPresets = new Map<
     {
       baseUrl: "https://ark.cn-beijing.volces.com/api/v3",
       contextWindows: { "doubao-seed-2-0-code-preview-latest": 256000 },
-    },
-  ],
-  [
-    "DeepSeek",
-    {
-      baseUrl: "https://api.deepseek.com",
-      contextWindows: {
-        "deepseek-v4-flash": 1000000,
-        "deepseek-v4-pro": 1000000,
-      },
     },
   ],
   [
@@ -201,5 +192,62 @@ describe("Codex Chat provider presets", () => {
         ),
       ).toEqual(expected.contextWindows);
     }
+  });
+
+  it("uses DeepSeek's native Codex Responses integration", () => {
+    const preset = codexProviderPresets.find(
+      (item) => item.name === "DeepSeek",
+    );
+    expect(preset).toBeDefined();
+    expect(preset?.apiFormat).toBe("openai_responses");
+    expect(preset?.codexChatReasoning).toBeUndefined();
+    expect(preset?.auth).toEqual({ OPENAI_API_KEY: "" });
+
+    const config = parseToml(preset?.config ?? "") as {
+      model?: string;
+      model_provider?: string;
+      preferred_auth_method?: string;
+      forced_login_method?: string;
+      model_reasoning_effort?: string;
+      model_catalog_json?: string;
+      disable_response_storage?: boolean;
+      model_providers?: Record<
+        string,
+        {
+          name?: string;
+          base_url?: string;
+          wire_api?: string;
+          requires_openai_auth?: boolean;
+        }
+      >;
+    };
+
+    expect(config).toMatchObject({
+      model: "deepseek-v4-flash",
+      model_provider: "deepseek",
+      preferred_auth_method: "apikey",
+      forced_login_method: "api",
+      model_reasoning_effort: "high",
+      model_catalog_json: "~/.codex/models.json",
+    });
+    expect(config.disable_response_storage).toBeUndefined();
+    expect(config.model_providers?.deepseek).toEqual({
+      name: "deepseek",
+      base_url: "https://api.deepseek.com/",
+      wire_api: "responses",
+    });
+    expect(preset?.endpointCandidates).toEqual(["https://api.deepseek.com/"]);
+    expect(preset?.modelCatalog).toEqual([
+      {
+        model: "deepseek-v4-flash",
+        displayName: "DeepSeek-V4-Flash",
+        contextWindow: 1048576,
+      },
+      {
+        model: "deepseek-v4-pro",
+        displayName: "DeepSeek-V4-Pro",
+        contextWindow: 1048576,
+      },
+    ]);
   });
 });

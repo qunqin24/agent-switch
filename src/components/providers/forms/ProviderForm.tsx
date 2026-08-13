@@ -3,6 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { FileJson2, Layers } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Form, FormField, FormItem, FormMessage } from "@/components/ui/form";
@@ -66,6 +67,7 @@ import GeminiConfigEditor from "./GeminiConfigEditor";
 import JsonEditor from "@/components/JsonEditor";
 import { Label } from "@/components/ui/label";
 import { ProviderPresetSelector } from "./ProviderPresetSelector";
+import { ProviderFormSection } from "./ProviderFormSection";
 import { ProviderKeyInput } from "./ProviderKeyInput";
 import { BasicFormFields } from "./BasicFormFields";
 import { ClaudeFormFields } from "./ClaudeFormFields";
@@ -174,6 +176,44 @@ export const normalizeCodexCatalogModelsForSave = (
   }
 
   return normalized;
+};
+
+export const buildCodexProviderSettings = ({
+  authText,
+  configText,
+  category,
+  catalogModels,
+}: {
+  authText: string;
+  configText: string;
+  category?: ProviderCategory;
+  catalogModels: CodexCatalogModel[];
+}): {
+  auth: unknown;
+  config: string;
+  modelCatalog?: { models: CodexCatalogModel[] };
+} => {
+  const auth = JSON.parse(authText);
+  let config =
+    category !== "official" && configText.trim()
+      ? setCodexWireApi(configText, "responses")
+      : configText;
+  // Native Responses providers also need this catalog for non-built-in model
+  // ids; API format controls proxy conversion, not model discoverability.
+  const models =
+    category !== "official"
+      ? normalizeCodexCatalogModelsForSave(catalogModels)
+      : [];
+
+  if (models.length > 0) {
+    config = setCodexModelNameInConfig(config, models[0].model);
+  }
+
+  return {
+    auth,
+    config,
+    ...(models.length > 0 ? { modelCatalog: { models } } : {}),
+  };
 };
 
 const normalizeCodexChatReasoningForSave = (
@@ -602,7 +642,11 @@ function ProviderFormFull({
       third_party: t("providerForm.categoryThirdParty", {
         defaultValue: "第三方",
       }),
+      cloud_provider: t("providerForm.categoryCloudProvider", {
+        defaultValue: "云服务商",
+      }),
       omo: "OMO",
+      "omo-slim": "OMO Slim",
     }),
     [t],
   );
@@ -1192,33 +1236,12 @@ function ProviderFormFull({
 
     if (appId === "codex") {
       try {
-        const authJson = JSON.parse(codexAuth);
-        let normalizedCodexConfig =
-          category !== "official" && (codexConfig ?? "").trim()
-            ? setCodexWireApi(codexConfig ?? "", "responses")
-            : (codexConfig ?? "");
-        const normalizedCatalogModels =
-          category !== "official" && localCodexApiFormat === "openai_chat"
-            ? normalizeCodexCatalogModelsForSave(codexCatalogModels)
-            : [];
-        // Sync first catalog row's model into config.toml so Codex uses it as default
-        if (normalizedCatalogModels.length > 0) {
-          normalizedCodexConfig = setCodexModelNameInConfig(
-            normalizedCodexConfig,
-            normalizedCatalogModels[0].model,
-          );
-        }
-        const configObj = {
-          auth: authJson,
-          config: normalizedCodexConfig,
-        } as {
-          auth: unknown;
-          config: string;
-          modelCatalog?: { models: CodexCatalogModel[] };
-        };
-        if (normalizedCatalogModels.length > 0) {
-          configObj.modelCatalog = { models: normalizedCatalogModels };
-        }
+        const configObj = buildCodexProviderSettings({
+          authText: codexAuth,
+          configText: codexConfig ?? "",
+          category,
+          catalogModels: codexCatalogModels,
+        });
         settingsConfig = JSON.stringify(configObj);
       } catch (err) {
         settingsConfig = values.settingsConfig.trim();
@@ -2105,29 +2128,35 @@ function ProviderFormFull({
 
           {appId === "opencode" &&
             (category === "omo" || category === "omo-slim") && (
-              <OmoFormFields
-                modelOptions={omoModelOptions}
-                modelVariantsMap={omoModelVariantsMap}
-                presetMetaMap={omoPresetMetaMap}
-                modelCatalogLoading={isOmoModelCatalogLoading}
-                agents={omoDraft.omoAgents}
-                onAgentsChange={omoDraft.setOmoAgents}
-                categories={
-                  category === "omo" ? omoDraft.omoCategories : undefined
-                }
-                onCategoriesChange={
-                  category === "omo" ? omoDraft.setOmoCategories : undefined
-                }
-                otherFieldsStr={omoDraft.omoOtherFieldsStr}
-                onOtherFieldsStrChange={omoDraft.setOmoOtherFieldsStr}
-                isSlim={category === "omo-slim"}
-                syncCurrentLocalFile={
-                  category === "omo-slim" &&
-                  isEditMode &&
-                  Boolean(providerId) &&
-                  providerId === currentOmoSlimProviderId
-                }
-              />
+              <ProviderFormSection
+                sectionKey="models"
+                icon={Layers}
+                title={t("providerForm.modelSection")}
+              >
+                <OmoFormFields
+                  modelOptions={omoModelOptions}
+                  modelVariantsMap={omoModelVariantsMap}
+                  presetMetaMap={omoPresetMetaMap}
+                  modelCatalogLoading={isOmoModelCatalogLoading}
+                  agents={omoDraft.omoAgents}
+                  onAgentsChange={omoDraft.setOmoAgents}
+                  categories={
+                    category === "omo" ? omoDraft.omoCategories : undefined
+                  }
+                  onCategoriesChange={
+                    category === "omo" ? omoDraft.setOmoCategories : undefined
+                  }
+                  otherFieldsStr={omoDraft.omoOtherFieldsStr}
+                  onOtherFieldsStrChange={omoDraft.setOmoOtherFieldsStr}
+                  isSlim={category === "omo-slim"}
+                  syncCurrentLocalFile={
+                    category === "omo-slim" &&
+                    isEditMode &&
+                    Boolean(providerId) &&
+                    providerId === currentOmoSlimProviderId
+                  }
+                />
+              </ProviderFormSection>
             )}
 
           {/* OpenClaw 专属字段 */}
@@ -2175,77 +2204,84 @@ function ProviderFormFull({
           )}
 
           {/* 配置编辑器：Codex、Claude、Gemini 分别使用不同的编辑器 */}
-          {appId === "codex" ? (
-            <>
-              <CodexConfigEditor
-                authValue={codexAuth}
-                configValue={codexConfig}
-                providerName={form.watch("name")}
-                showRemoteCompaction={category !== "official"}
-                isProxyTakeover={isProxyTakeover}
-                onAuthChange={setCodexAuth}
-                onConfigChange={handleCodexConfigChange}
-                useCommonConfig={useCodexCommonConfigFlag}
-                onCommonConfigToggle={handleCodexCommonConfigToggle}
-                commonConfigSnippet={codexCommonConfigSnippet}
-                onCommonConfigSnippetChange={
-                  handleCodexCommonConfigSnippetChange
-                }
-                onCommonConfigErrorClear={clearCodexCommonConfigError}
-                commonConfigError={codexCommonConfigError}
-                authError={codexAuthError}
-                configError={codexConfigError}
-                onExtract={handleCodexExtract}
-                isExtracting={isCodexExtracting}
-              />
-              {settingsConfigErrorField}
-            </>
-          ) : appId === "gemini" ? (
-            <>
-              <GeminiConfigEditor
-                envValue={geminiEnv}
-                configValue={geminiConfig}
-                onEnvChange={handleGeminiEnvChange}
-                onConfigChange={handleGeminiConfigChange}
-                useCommonConfig={useGeminiCommonConfigFlag}
-                onCommonConfigToggle={handleGeminiCommonConfigToggle}
-                commonConfigSnippet={geminiCommonConfigSnippet}
-                onCommonConfigSnippetChange={
-                  handleGeminiCommonConfigSnippetChange
-                }
-                onCommonConfigErrorClear={clearGeminiCommonConfigError}
-                commonConfigError={geminiCommonConfigError}
-                envError={envError}
-                configError={geminiConfigError}
-                onExtract={handleGeminiExtract}
-                isExtracting={isGeminiExtracting}
-              />
-              {settingsConfigErrorField}
-            </>
-          ) : appId === "opencode" &&
-            (category === "omo" || category === "omo-slim") ? (
-            <div className="space-y-2">
-              <Label>{t("provider.configJson")}</Label>
-              <JsonEditor
-                value={omoDraft.mergedOmoJsonPreview}
-                onChange={() => {}}
-                rows={14}
-                showValidation={false}
-                language="json"
-              />
-            </div>
-          ) : appId === "opencode" &&
-            category !== "omo" &&
-            category !== "omo-slim" ? (
-            <>
+          <ProviderFormSection
+            sectionKey="configuration"
+            icon={FileJson2}
+            title={t("providerForm.configurationSection")}
+          >
+            {appId === "codex" ? (
+              <>
+                <CodexConfigEditor
+                  authValue={codexAuth}
+                  configValue={codexConfig}
+                  providerName={form.watch("name")}
+                  showRemoteCompaction={category !== "official"}
+                  isProxyTakeover={isProxyTakeover}
+                  onAuthChange={setCodexAuth}
+                  onConfigChange={handleCodexConfigChange}
+                  useCommonConfig={useCodexCommonConfigFlag}
+                  onCommonConfigToggle={handleCodexCommonConfigToggle}
+                  commonConfigSnippet={codexCommonConfigSnippet}
+                  onCommonConfigSnippetChange={
+                    handleCodexCommonConfigSnippetChange
+                  }
+                  onCommonConfigErrorClear={clearCodexCommonConfigError}
+                  commonConfigError={codexCommonConfigError}
+                  authError={codexAuthError}
+                  configError={codexConfigError}
+                  onExtract={handleCodexExtract}
+                  isExtracting={isCodexExtracting}
+                />
+                {settingsConfigErrorField}
+              </>
+            ) : appId === "gemini" ? (
+              <>
+                <GeminiConfigEditor
+                  envValue={geminiEnv}
+                  configValue={geminiConfig}
+                  onEnvChange={handleGeminiEnvChange}
+                  onConfigChange={handleGeminiConfigChange}
+                  useCommonConfig={useGeminiCommonConfigFlag}
+                  onCommonConfigToggle={handleGeminiCommonConfigToggle}
+                  commonConfigSnippet={geminiCommonConfigSnippet}
+                  onCommonConfigSnippetChange={
+                    handleGeminiCommonConfigSnippetChange
+                  }
+                  onCommonConfigErrorClear={clearGeminiCommonConfigError}
+                  commonConfigError={geminiCommonConfigError}
+                  envError={envError}
+                  configError={geminiConfigError}
+                  onExtract={handleGeminiExtract}
+                  isExtracting={isGeminiExtracting}
+                />
+                {settingsConfigErrorField}
+              </>
+            ) : appId === "opencode" &&
+              (category === "omo" || category === "omo-slim") ? (
               <div className="space-y-2">
-                <Label htmlFor="settingsConfig">
-                  {t("provider.configJson")}
-                </Label>
+                <Label>{t("provider.configJson")}</Label>
                 <JsonEditor
-                  value={form.getValues("settingsConfig")}
-                  onChange={(config) => form.setValue("settingsConfig", config)}
-                  placeholder={`{
+                  value={omoDraft.mergedOmoJsonPreview}
+                  onChange={() => {}}
+                  rows={14}
+                  showValidation={false}
+                  language="json"
+                />
+              </div>
+            ) : appId === "opencode" &&
+              category !== "omo" &&
+              category !== "omo-slim" ? (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="settingsConfig">
+                    {t("provider.configJson")}
+                  </Label>
+                  <JsonEditor
+                    value={form.getValues("settingsConfig")}
+                    onChange={(config) =>
+                      form.setValue("settingsConfig", config)
+                    }
+                    placeholder={`{
   "npm": "@ai-sdk/openai-compatible",
   "options": {
     "baseURL": "https://your-api-endpoint.com",
@@ -2253,70 +2289,73 @@ function ProviderFormFull({
   },
   "models": {}
 }`}
-                  rows={14}
-                  showValidation={true}
-                  language="json"
-                />
-              </div>
-              {settingsConfigErrorField}
-            </>
-          ) : appId === "openclaw" || appId === "hermes" ? (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="settingsConfig">
-                  {t("provider.configJson")}
-                </Label>
-                <JsonEditor
-                  value={form.getValues("settingsConfig")}
-                  onChange={(config) => form.setValue("settingsConfig", config)}
-                  placeholder={
-                    appId === "hermes"
-                      ? `{
+                    rows={14}
+                    showValidation={true}
+                    language="json"
+                  />
+                </div>
+                {settingsConfigErrorField}
+              </>
+            ) : appId === "openclaw" || appId === "hermes" ? (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="settingsConfig">
+                    {t("provider.configJson")}
+                  </Label>
+                  <JsonEditor
+                    value={form.getValues("settingsConfig")}
+                    onChange={(config) =>
+                      form.setValue("settingsConfig", config)
+                    }
+                    placeholder={
+                      appId === "hermes"
+                        ? `{
   "name": "my-provider",
   "base_url": "https://api.example.com/v1",
   "api_key": ""
 }`
-                      : `{
+                        : `{
   "baseUrl": "https://api.example.com/v1",
   "apiKey": "your-api-key-here",
   "api": "openai-completions",
   "models": []
 }`
-                  }
-                  rows={14}
-                  showValidation={true}
-                  language="json"
+                    }
+                    rows={14}
+                    showValidation={true}
+                    language="json"
+                  />
+                </div>
+                <FormField
+                  control={form.control}
+                  name="settingsConfig"
+                  render={() => (
+                    <FormItem className="space-y-0">
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
-              </div>
-              <FormField
-                control={form.control}
-                name="settingsConfig"
-                render={() => (
-                  <FormItem className="space-y-0">
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </>
-          ) : (
-            <>
-              <CommonConfigEditor
-                value={form.getValues("settingsConfig")}
-                onChange={(value) => form.setValue("settingsConfig", value)}
-                useCommonConfig={useCommonConfig}
-                onCommonConfigToggle={handleCommonConfigToggle}
-                commonConfigSnippet={commonConfigSnippet}
-                onCommonConfigSnippetChange={handleCommonConfigSnippetChange}
-                commonConfigError={commonConfigError}
-                onEditClick={() => setIsCommonConfigModalOpen(true)}
-                isModalOpen={isCommonConfigModalOpen}
-                onModalClose={() => setIsCommonConfigModalOpen(false)}
-                onExtract={handleClaudeExtract}
-                isExtracting={isClaudeExtracting}
-              />
-              {settingsConfigErrorField}
-            </>
-          )}
+              </>
+            ) : (
+              <>
+                <CommonConfigEditor
+                  value={form.getValues("settingsConfig")}
+                  onChange={(value) => form.setValue("settingsConfig", value)}
+                  useCommonConfig={useCommonConfig}
+                  onCommonConfigToggle={handleCommonConfigToggle}
+                  commonConfigSnippet={commonConfigSnippet}
+                  onCommonConfigSnippetChange={handleCommonConfigSnippetChange}
+                  commonConfigError={commonConfigError}
+                  onEditClick={() => setIsCommonConfigModalOpen(true)}
+                  isModalOpen={isCommonConfigModalOpen}
+                  onModalClose={() => setIsCommonConfigModalOpen(false)}
+                  onExtract={handleClaudeExtract}
+                  isExtracting={isClaudeExtracting}
+                />
+                {settingsConfigErrorField}
+              </>
+            )}
+          </ProviderFormSection>
 
           {!isAnyOmoCategory &&
             appId !== "opencode" &&

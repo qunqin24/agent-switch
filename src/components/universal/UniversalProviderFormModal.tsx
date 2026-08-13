@@ -1,6 +1,14 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { Eye, EyeOff, RefreshCw } from "lucide-react";
+import {
+  AppWindow,
+  Eye,
+  EyeOff,
+  FileJson2,
+  Layers,
+  Link2,
+  RefreshCw,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,6 +24,7 @@ import {
   type UniversalProviderPreset,
 } from "@/config/universalProviderPresets";
 import { deepClone } from "@/utils/deepClone";
+import { ProviderFormSection } from "@/components/providers/forms/ProviderFormSection";
 
 interface UniversalProviderFormModalProps {
   isOpen: boolean;
@@ -390,7 +399,7 @@ requires_openai_auth = true`;
           </div>
         )}
 
-        {/* 基本信息 */}
+        {/* 身份信息 */}
         <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="name">
@@ -406,6 +415,44 @@ requires_openai_auth = true`;
             />
           </div>
 
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="notes">
+                {t("universalProvider.notes", { defaultValue: "备注" })}
+              </Label>
+              <Input
+                id="notes"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder={t("universalProvider.notesPlaceholder", {
+                  defaultValue: "可选：添加备注信息",
+                })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="websiteUrl">
+                {t("universalProvider.websiteUrl", {
+                  defaultValue: "官网地址",
+                })}
+              </Label>
+              <Input
+                id="websiteUrl"
+                value={websiteUrl}
+                onChange={(e) => setWebsiteUrl(e.target.value)}
+                placeholder={t("universalProvider.websiteUrlPlaceholder", {
+                  defaultValue: "https://example.com（可选，用于在列表中显示）",
+                })}
+              />
+            </div>
+          </div>
+        </div>
+
+        <ProviderFormSection
+          sectionKey="connection"
+          icon={Link2}
+          title={t("providerForm.connectionSection")}
+        >
           <div className="space-y-2">
             <Label htmlFor="baseUrl">
               {t("universalProvider.baseUrl", { defaultValue: "API 地址" })}
@@ -446,41 +493,17 @@ requires_openai_auth = true`;
               </Button>
             </div>
           </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="websiteUrl">
-              {t("universalProvider.websiteUrl", { defaultValue: "官网地址" })}
-            </Label>
-            <Input
-              id="websiteUrl"
-              value={websiteUrl}
-              onChange={(e) => setWebsiteUrl(e.target.value)}
-              placeholder={t("universalProvider.websiteUrlPlaceholder", {
-                defaultValue: "https://example.com（可选，用于在列表中显示）",
-              })}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="notes">
-              {t("universalProvider.notes", { defaultValue: "备注" })}
-            </Label>
-            <Input
-              id="notes"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder={t("universalProvider.notesPlaceholder", {
-                defaultValue: "可选：添加备注信息",
-              })}
-            />
-          </div>
-        </div>
+        </ProviderFormSection>
 
         {/* 应用启用 */}
-        <div className="space-y-3">
-          <Label>
-            {t("universalProvider.enabledApps", { defaultValue: "启用的应用" })}
-          </Label>
+        <ProviderFormSection
+          sectionKey="apps"
+          icon={AppWindow}
+          title={t("universalProvider.enabledApps", {
+            defaultValue: "启用的应用",
+          })}
+          contentClassName="space-y-3"
+        >
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between rounded-lg border p-3">
               <div className="flex items-center gap-2">
@@ -513,14 +536,16 @@ requires_openai_auth = true`;
               />
             </div>
           </div>
-        </div>
+        </ProviderFormSection>
 
         {/* 模型配置 */}
-        <div className="space-y-4">
-          <Label>
-            {t("universalProvider.modelConfig", { defaultValue: "模型配置" })}
-          </Label>
-
+        <ProviderFormSection
+          sectionKey="models"
+          icon={Layers}
+          title={t("universalProvider.modelConfig", {
+            defaultValue: "模型配置",
+          })}
+        >
           {/* Claude 模型 */}
           {claudeEnabled && (
             <div className="space-y-3 rounded-lg border p-4">
@@ -630,16 +655,17 @@ requires_openai_auth = true`;
               </div>
             </div>
           )}
-        </div>
+        </ProviderFormSection>
 
         {/* 配置 JSON 预览 */}
         {isEditMode && (claudeEnabled || codexEnabled || geminiEnabled) && (
-          <div className="space-y-4">
-            <Label>
-              {t("universalProvider.configJsonPreview", {
-                defaultValue: "配置 JSON 预览",
-              })}
-            </Label>
+          <ProviderFormSection
+            sectionKey="configuration"
+            icon={FileJson2}
+            title={t("universalProvider.configJsonPreview", {
+              defaultValue: "配置 JSON 预览",
+            })}
+          >
             <p className="text-xs text-muted-foreground">
               {t("universalProvider.configJsonPreviewHint", {
                 defaultValue:
@@ -691,7 +717,7 @@ requires_openai_auth = true`;
                 />
               </div>
             )}
-          </div>
+          </ProviderFormSection>
         )}
       </div>
 

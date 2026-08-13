@@ -16,10 +16,13 @@ export interface ModelsDevCacheRefreshResult {
 
 export const modelsDevCacheApi = {
   getModelMetadata(modelId: string, displayName?: string) {
-    return invoke<ModelsDevCatalogModel | null>("get_models_dev_model_metadata", {
-      modelId,
-      displayName,
-    });
+    return invoke<ModelsDevCatalogModel | null>(
+      "get_models_dev_model_metadata",
+      {
+        modelId,
+        displayName,
+      },
+    );
   },
 
   getPricingCatalog<T>() {

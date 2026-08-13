@@ -85,7 +85,15 @@ fn sync_codex_provider_writes_config_without_touching_auth() {
         "auth": {
             "OPENAI_API_KEY": "codex-key"
         },
-        "config": r#"base_url = "https://codex.test""#
+        "config": r#"model_provider = "codex-test"
+model = "gpt-5.4"
+
+[model_providers.codex-test]
+name = "Codex Test"
+base_url = "https://codex.test/v1"
+wire_api = "responses"
+requires_openai_auth = true
+"#
     });
 
     let provider = Provider::with_id(
@@ -123,8 +131,9 @@ fn sync_codex_provider_writes_config_without_touching_auth() {
         "config.toml should contain base_url from provider config"
     );
     assert!(
-        toml_text.contains("experimental_bearer_token"),
-        "config.toml should contain provider-scoped bearer token"
+        toml_text.contains("[model_providers.codex-test.auth]")
+            && toml_text.contains("--codex-provider-token"),
+        "generic third-party config should use provider-scoped command auth"
     );
 
     let manager = config.get_manager(&AppType::Codex).expect("codex manager");
@@ -135,12 +144,12 @@ fn sync_codex_provider_writes_config_without_touching_auth() {
         .and_then(|v| v.as_str())
         .expect("config string");
     assert!(
-        !synced_cfg.contains("experimental_bearer_token"),
-        "provider storage should not persist generated live bearer token"
+        !synced_cfg.contains("[model_providers.codex-test.auth]"),
+        "provider storage should not persist generated command auth"
     );
     assert!(
-        toml_text.contains("experimental_bearer_token"),
-        "live config should include generated bearer token"
+        !toml_text.contains("experimental_bearer_token"),
+        "generic third-party config should not expose a direct bearer token"
     );
 }
 

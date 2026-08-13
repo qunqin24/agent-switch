@@ -298,8 +298,8 @@ fn hermes_global_skills_follow_external_dirs_configuration() {
         .contains("reads the global Skills directory directly"));
 }
 
-#[tokio::test(flavor = "current_thread")]
-async fn globally_linked_skill_cannot_be_updated_from_a_cli_scope() {
+#[test]
+fn globally_linked_skill_cannot_be_updated_from_a_cli_scope() {
     let _guard = test_mutex().lock().expect("acquire test mutex");
     reset_test_fs();
     let home = ensure_test_home();
@@ -311,10 +311,12 @@ async fn globally_linked_skill_cannot_be_updated_from_a_cli_scope() {
     let linked = SkillService::set_global_link(&state.db, "global-skill", &AppType::Claude, true)
         .expect("link global skill");
 
-    let error = SkillService::new()
-        .update_app_skill(&state.db, &AppType::Claude, &linked.id)
-        .await
-        .expect_err("CLI update must reject a globally linked Skill");
+    let error = futures::executor::block_on(SkillService::new().update_app_skill(
+        &state.db,
+        &AppType::Claude,
+        &linked.id,
+    ))
+    .expect_err("CLI update must reject a globally linked Skill");
 
     assert!(
         error.to_string().contains("global library"),

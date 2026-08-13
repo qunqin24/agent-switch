@@ -24,6 +24,9 @@ import {
   ChevronDown,
   ChevronRight,
   Loader2,
+  Layers,
+  Link2,
+  SlidersHorizontal,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -42,6 +45,7 @@ import {
 } from "@/lib/api/model-fetch";
 import { openclawApiProtocols } from "@/config/openclawProviderPresets";
 import type { ProviderCategory, OpenClawModel } from "@/types";
+import { ProviderFormSection } from "./ProviderFormSection";
 
 interface OpenClawFormFieldsProps {
   // Base URL
@@ -204,87 +208,100 @@ export function OpenClawFormFields({
 
   return (
     <>
-      {/* API Protocol Selector */}
-      <div className="space-y-2">
-        <FormLabel htmlFor="openclaw-api">
-          {t("openclaw.apiProtocol", {
-            defaultValue: "API 协议",
-          })}
-        </FormLabel>
-        <Select value={api} onValueChange={onApiChange}>
-          <SelectTrigger id="openclaw-api">
-            <SelectValue
-              placeholder={t("openclaw.selectProtocol", {
-                defaultValue: "选择 API 协议",
-              })}
-            />
-          </SelectTrigger>
-          <SelectContent>
-            {openclawApiProtocols.map((protocol) => (
-              <SelectItem key={protocol.value} value={protocol.value}>
-                {protocol.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <p className="text-xs text-muted-foreground">
-          {t("openclaw.apiProtocolHint", {
-            defaultValue:
-              "选择与供应商 API 兼容的协议类型。大多数供应商使用 OpenAI Completions 格式。",
-          })}
-        </p>
-      </div>
-
-      {/* Base URL */}
-      <div className="space-y-2">
-        <FormLabel htmlFor="openclaw-baseurl">
-          {t("openclaw.baseUrl", { defaultValue: "API 端点" })}
-        </FormLabel>
-        <Input
-          id="openclaw-baseurl"
-          value={baseUrl}
-          onChange={(e) => onBaseUrlChange(e.target.value)}
-          placeholder="https://api.example.com/v1"
-        />
-        <p className="text-xs text-muted-foreground">
-          {t("openclaw.baseUrlHint", {
-            defaultValue: "供应商的 API 端点地址。",
-          })}
-        </p>
-      </div>
-
-      {/* API Key */}
-      <ApiKeySection
-        value={apiKey}
-        onChange={onApiKeyChange}
-        category={category}
-        shouldShowLink={shouldShowApiKeyLink}
-        websiteUrl={websiteUrl}
-        isPartner={isPartner}
-        partnerPromotionKey={partnerPromotionKey}
-      />
-
-      {/* User-Agent */}
-      <div className="flex items-center justify-between">
-        <div className="space-y-0.5">
-          <FormLabel>
-            {t("openclaw.userAgent", { defaultValue: "发送 User-Agent" })}
+      <ProviderFormSection
+        sectionKey="connection"
+        icon={Link2}
+        title={t("providerForm.connectionSection")}
+      >
+        {/* API Protocol Selector */}
+        <div className="space-y-2">
+          <FormLabel htmlFor="openclaw-api">
+            {t("openclaw.apiProtocol", {
+              defaultValue: "API 协议",
+            })}
           </FormLabel>
+          <Select value={api} onValueChange={onApiChange}>
+            <SelectTrigger id="openclaw-api">
+              <SelectValue
+                placeholder={t("openclaw.selectProtocol", {
+                  defaultValue: "选择 API 协议",
+                })}
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {openclawApiProtocols.map((protocol) => (
+                <SelectItem key={protocol.value} value={protocol.value}>
+                  {protocol.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <p className="text-xs text-muted-foreground">
-            {t("openclaw.userAgentHint", {
-              defaultValue: "部分供应商需要浏览器 User-Agent 才能正常访问。",
+            {t("openclaw.apiProtocolHint", {
+              defaultValue:
+                "选择与供应商 API 兼容的协议类型。大多数供应商使用 OpenAI Completions 格式。",
             })}
           </p>
         </div>
-        <Switch checked={userAgent} onCheckedChange={onUserAgentChange} />
-      </div>
+
+        {/* Base URL */}
+        <div className="space-y-2">
+          <FormLabel htmlFor="openclaw-baseurl">
+            {t("openclaw.baseUrl", { defaultValue: "API 端点" })}
+          </FormLabel>
+          <Input
+            id="openclaw-baseurl"
+            value={baseUrl}
+            onChange={(e) => onBaseUrlChange(e.target.value)}
+            placeholder="https://api.example.com/v1"
+          />
+          <p className="text-xs text-muted-foreground">
+            {t("openclaw.baseUrlHint", {
+              defaultValue: "供应商的 API 端点地址。",
+            })}
+          </p>
+        </div>
+
+        {/* API Key */}
+        <ApiKeySection
+          value={apiKey}
+          onChange={onApiKeyChange}
+          category={category}
+          shouldShowLink={shouldShowApiKeyLink}
+          websiteUrl={websiteUrl}
+          isPartner={isPartner}
+          partnerPromotionKey={partnerPromotionKey}
+        />
+      </ProviderFormSection>
+
+      {/* User-Agent */}
+      <ProviderFormSection
+        sectionKey="options"
+        icon={SlidersHorizontal}
+        title={t("providerForm.optionsSection")}
+      >
+        <div className="flex items-center justify-between gap-4">
+          <div className="space-y-0.5">
+            <FormLabel>
+              {t("openclaw.userAgent", { defaultValue: "发送 User-Agent" })}
+            </FormLabel>
+            <p className="text-xs text-muted-foreground">
+              {t("openclaw.userAgentHint", {
+                defaultValue: "部分供应商需要浏览器 User-Agent 才能正常访问。",
+              })}
+            </p>
+          </div>
+          <Switch checked={userAgent} onCheckedChange={onUserAgentChange} />
+        </div>
+      </ProviderFormSection>
 
       {/* Models Editor */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <FormLabel>
-            {t("openclaw.models", { defaultValue: "模型列表" })}
-          </FormLabel>
+      <ProviderFormSection
+        sectionKey="models"
+        icon={Layers}
+        title={t("openclaw.models", { defaultValue: "模型列表" })}
+        contentClassName="space-y-3"
+        actions={
           <div className="flex gap-1">
             <Button
               type="button"
@@ -312,8 +329,8 @@ export function OpenClawFormFields({
               {t("openclaw.addModel", { defaultValue: "添加模型" })}
             </Button>
           </div>
-        </div>
-
+        }
+      >
         {models.length === 0 ? (
           <p className="text-sm text-muted-foreground py-2">
             {t("openclaw.noModels", {
@@ -664,7 +681,7 @@ export function OpenClawFormFields({
               "配置该供应商支持的模型。第一个模型为默认模型（Primary），其余为回退模型（Fallback）。拖拽或调整顺序可更改默认模型。",
           })}
         </p>
-      </div>
+      </ProviderFormSection>
     </>
   );
 }

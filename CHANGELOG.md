@@ -1,9 +1,30 @@
 # Changelog
 
-All notable changes to CC Switch will be documented in this file.
+All notable changes to Agent Switch will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [3.17.0] - 2026-08-13
+
+### Added
+
+- Rebranded the maintained application as Agent Switch while retaining compatibility with existing CC Switch data, configuration, deep links, and updater migrations.
+- Added native DeepSeek Codex Responses integration based on the official Codex setup, including a generated `~/.codex/models.json` catalog and bearer-token authentication.
+- Added per-application and global Skills management, repository browsing, update checks, backups, and safe rendered documentation.
+- Added the unified MCP panel and OpenCode web-search settings.
+
+### Changed
+
+- Refreshed built-in provider presets and reorganized provider forms into consistent, easier-to-scan sections.
+- Updated the macOS application icon with a white system-style background and added a reproducible icon-generation script.
+- Improved Skills installation, synchronization, migration compatibility, and application-specific storage behavior.
+
+### Fixed
+
+- Fixed DeepSeek API keys disappearing when enabling or switching the provider by safely backfilling credentials without overwriting OAuth state.
+- Fixed Codex provider switching so model catalogs and CLI-owned configuration are preserved and restored consistently.
+- Fixed provider-editor focus styling and preset-selection behavior.
 
 ## [3.16.10] - 2026-07-16
 

@@ -83,7 +83,8 @@ export function findOfficialModelsDevProviderId(
   const nameMatches = Object.entries(modelIndex)
     .filter(
       ([, model]) =>
-        normalizedName && normalizeIdentifier(model.name || "") === normalizedName,
+        normalizedName &&
+        normalizeIdentifier(model.name || "") === normalizedName,
     )
     .map(([canonicalId]) => canonicalId);
   return nameMatches.length === 1 ? providerPrefix(nameMatches[0]) : undefined;
@@ -154,9 +155,10 @@ export function findModelsDevCatalogModel(
     if (!normalizedOfficialProvider) {
       return idMatches.length === 1 ? idMatches[0][1] : undefined;
     }
-    return idMatches.find(([canonicalId]) =>
-      normalizeIdentifier(providerPrefix(canonicalId) ?? "") ===
-      normalizedOfficialProvider,
+    return idMatches.find(
+      ([canonicalId]) =>
+        normalizeIdentifier(providerPrefix(canonicalId) ?? "") ===
+        normalizedOfficialProvider,
     )?.[1];
   }
 

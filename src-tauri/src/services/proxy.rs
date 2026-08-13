@@ -3564,15 +3564,18 @@ wire_api = "responses"
             parsed_backup
                 .get("model_providers")
                 .and_then(|providers| providers.get("deepseek"))
-                .and_then(|provider| provider.get("auth"))
-                .and_then(|auth| auth.get("command"))
-                .and_then(|command| command.as_str())
-                .is_some(),
-            "restore backup should carry Codex command-backed authentication"
+                .and_then(|provider| provider.get("experimental_bearer_token"))
+                .and_then(|token| token.as_str())
+                == Some("deepseek-key"),
+            "DeepSeek restore backup should retain the published direct bearer authentication"
         );
         assert!(
-            !backup_config.contains("deepseek-key"),
-            "restore backup must not embed the provider token in config.toml"
+            parsed_backup
+                .get("model_providers")
+                .and_then(|providers| providers.get("deepseek"))
+                .and_then(|provider| provider.get("auth"))
+                .is_none(),
+            "native DeepSeek auth should not be rewritten as command auth"
         );
 
         state
@@ -5407,8 +5410,10 @@ disable_response_storage = true
         )
         .expect("set common config snippet");
 
-        let mut proxy_config = ProxyConfig::default();
-        proxy_config.listen_port = 0;
+        let proxy_config = ProxyConfig {
+            listen_port: 0,
+            ..Default::default()
+        };
         db.update_proxy_config(proxy_config)
             .await
             .expect("set test proxy config");
@@ -5545,8 +5550,10 @@ requires_openai_auth = true
         let db = Arc::new(Database::memory().expect("init db"));
         let state = crate::store::AppState::new(db.clone());
 
-        let mut proxy_config = ProxyConfig::default();
-        proxy_config.listen_port = 0;
+        let proxy_config = ProxyConfig {
+            listen_port: 0,
+            ..Default::default()
+        };
         db.update_proxy_config(proxy_config)
             .await
             .expect("set test proxy config");

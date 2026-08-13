@@ -63,6 +63,7 @@ type TestPresetEntry = {
   };
 };
 
+// 四个分类各一条，用于验证「默认只展示第一个可用分类」以及「切换标签页」的行为。
 const presetEntries: TestPresetEntry[] = [
   {
     id: "gamma",
@@ -104,6 +105,39 @@ const presetEntries: TestPresetEntry[] = [
   },
 ] satisfies TestPresetEntry[];
 
+// 同一分类下的多条预设，用于验证单个标签页内部的排序/原始顺序行为。
+const sameCategoryEntries: TestPresetEntry[] = [
+  {
+    id: "c-gamma",
+    preset: {
+      name: "Gamma Raw",
+      nameKey: "preset.gamma",
+      websiteUrl: "https://gamma.example.com",
+      settingsConfig: {},
+      category: "official",
+    },
+  },
+  {
+    id: "c-alpha",
+    preset: {
+      name: "Alpha Raw",
+      nameKey: "preset.alpha",
+      websiteUrl: "https://alpha.example.com/v1",
+      settingsConfig: {},
+      category: "official",
+    },
+  },
+  {
+    id: "c-beta",
+    preset: {
+      name: "Beta Gateway",
+      websiteUrl: "https://CN-Gateway.example.com",
+      settingsConfig: {},
+      category: "official",
+    },
+  },
+] satisfies TestPresetEntry[];
+
 function getIds(entries: ReadonlyArray<{ id: string }>) {
   return entries.map((entry) => entry.id);
 }
@@ -135,8 +169,11 @@ function renderSelector({
 
 function getPresetButtonTexts() {
   const knownNames = new Set([
-    "providerPreset.custom",
     ...presetEntries.flatMap((entry) => [
+      entry.preset.name,
+      entry.preset.nameKey ?? entry.preset.name,
+    ]),
+    ...sameCategoryEntries.flatMap((entry) => [
       entry.preset.name,
       entry.preset.nameKey ?? entry.preset.name,
     ]),
@@ -146,6 +183,10 @@ function getPresetButtonTexts() {
     .getAllByRole("button")
     .map((button) => button.textContent?.trim() ?? "")
     .filter((text) => knownNames.has(text));
+}
+
+function getTabTexts() {
+  return screen.getAllByRole("tab").map((tab) => tab.textContent?.trim() ?? "");
 }
 
 function getSearchButton() {
@@ -229,44 +270,72 @@ describe("ProviderPresetSelector pure helpers", () => {
 });
 
 describe("ProviderPresetSelector", () => {
-  it("默认按传入的预设数组顺序渲染，不按分类或名称重新排序", () => {
+  it("渲染常驻的「自定义配置」按钮与各分类标签页，默认激活第一个可用分类", () => {
     renderSelector();
 
-    expect(getPresetButtonTexts()).toEqual([
-      "providerPreset.custom",
-      "preset.gamma",
-      "preset.alpha",
-      "Beta Gateway",
-      "Delta Mirror",
-    ]);
+    // 自定义配置是独立的常驻按钮，不是分类标签页的一部分
+    expect(
+      screen.getByRole("button", { name: "providerPreset.custom" }),
+    ).toBeInTheDocument();
+    expect(getTabTexts()).toEqual(["官方", "国产官方", "聚合服务", "第三方"]);
+
+    // 默认激活优先级最高的可用分类（official），只展示该分类下的预设
+    expect(getPresetButtonTexts()).toEqual(["preset.alpha"]);
   });
 
-  it("点击排序按钮后普通 preset A-Z，再点恢复原顺序", async () => {
+  it("点击分类标签后切换展示对应分类的预设，其余分类的预设不再展示", async () => {
     const user = userEvent.setup();
     renderSelector();
 
-    await user.click(getSortButton());
+    await user.click(screen.getByRole("tab", { name: "国产官方" }));
+    expect(getPresetButtonTexts()).toEqual(["Beta Gateway"]);
+
+    await user.click(screen.getByRole("tab", { name: "聚合服务" }));
+    expect(getPresetButtonTexts()).toEqual(["preset.gamma"]);
+  });
+
+  it("点击「自定义配置」按钮立即选中 custom，且不影响当前分类标签页下预设的展示", async () => {
+    const user = userEvent.setup();
+    const onPresetChange = vi.fn();
+    renderSelector({ onPresetChange });
+
+    await user.click(
+      screen.getByRole("button", { name: "providerPreset.custom" }),
+    );
+
+    expect(onPresetChange).toHaveBeenCalledWith("custom");
+    // 自定义配置只是标记选中状态，不是分类标签页，预设网格（当前分类 official）保持可见
+    expect(
+      screen.getByRole("button", { name: "preset.alpha" }),
+    ).toBeInTheDocument();
+  });
+
+  it("点击排序按钮后对当前分类内的 preset A-Z 排序，再点恢复原顺序", async () => {
+    const user = userEvent.setup();
+    renderSelector({ entries: sameCategoryEntries });
 
     expect(getPresetButtonTexts()).toEqual([
-      "providerPreset.custom",
+      "preset.gamma",
+      "preset.alpha",
       "Beta Gateway",
-      "Delta Mirror",
+    ]);
+
+    await user.click(getSortButton());
+    expect(getPresetButtonTexts()).toEqual([
+      "Beta Gateway",
       "preset.alpha",
       "preset.gamma",
     ]);
 
     await user.click(getSortButton());
-
     expect(getPresetButtonTexts()).toEqual([
-      "providerPreset.custom",
       "preset.gamma",
       "preset.alpha",
       "Beta Gateway",
-      "Delta Mirror",
     ]);
   });
 
-  it("搜索只过滤普通 preset，自定义配置始终保留", async () => {
+  it("搜索跨分类展平匹配的 preset，自定义配置标签始终保留", async () => {
     const user = userEvent.setup();
     renderSelector();
 
@@ -290,7 +359,7 @@ describe("ProviderPresetSelector", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("搜索无普通 preset 结果时保留自定义配置并显示空状态", async () => {
+  it("搜索无普通 preset 结果时保留自定义配置标签并显示空状态", async () => {
     const user = userEvent.setup();
     renderSelector();
 
@@ -319,16 +388,16 @@ describe("ProviderPresetSelector", () => {
     ).toBeInTheDocument();
   });
 
-  it("所有预设按钮填满网格列宽(w-full)实现等宽对齐", () => {
-    renderSelector();
+  it("同一分类下所有预设按钮填满网格列宽(w-full)实现等宽对齐", () => {
+    renderSelector({ entries: sameCategoryEntries });
 
     const presetButtons = screen.getAllByRole("button");
     const fullWidthButtons = presetButtons.filter((btn) =>
       btn.className.includes("w-full"),
     );
 
-    // 至少包含 custom + 4 个预设 = 5 个等宽按钮(搜索/排序按钮为 size-8 不计入)
-    expect(fullWidthButtons.length).toBeGreaterThanOrEqual(5);
+    // 3 个同分类预设 = 3 个等宽按钮(搜索/排序按钮为 size-8 不计入)
+    expect(fullWidthButtons.length).toBeGreaterThanOrEqual(3);
   });
 
   it("preset.icon 存在时按钮内渲染图标元素(img/svg)", () => {
@@ -376,16 +445,6 @@ describe("ProviderPresetSelector", () => {
     expect(placeholder).not.toBeNull();
   });
 
-  it("custom 按钮同样渲染占位元素,文字与带图标的预设按钮对齐", () => {
-    renderSelector();
-
-    const customButton = screen.getByRole("button", {
-      name: "providerPreset.custom",
-    });
-    const placeholder = customButton.querySelector("span[aria-hidden]");
-    expect(placeholder).not.toBeNull();
-  });
-
   it("点击放大镜 inline 切换搜索输入框可见性,ESC 收起并清空", async () => {
     const user = userEvent.setup();
     renderSelector();
@@ -402,7 +461,7 @@ describe("ProviderPresetSelector", () => {
     const input = getSearchInput();
     expect(input).toBeInTheDocument();
 
-    // 输入关键字过滤
+    // 输入关键字过滤（跨分类展平，能匹配到 cn_official 分类下的 Beta Gateway）
     await user.type(input, "gateway");
     expect(
       screen.getByRole("button", { name: "Beta Gateway" }),
@@ -415,9 +474,9 @@ describe("ProviderPresetSelector", () => {
         name: /providerPreset\.(searchInput|searchPlaceholder)|搜索预设|search/i,
       }),
     ).not.toBeInTheDocument();
-    // 收起后所有预设恢复显示
+    // 收起后恢复到收起前的分类标签页（默认 official），preset.alpha 重新可见
     expect(
-      screen.getByRole("button", { name: "preset.gamma" }),
+      screen.getByRole("button", { name: "preset.alpha" }),
     ).toBeInTheDocument();
   });
 
@@ -501,9 +560,9 @@ describe("ProviderPresetSelector", () => {
         name: /providerPreset\.(searchInput|searchPlaceholder)|搜索预设|search/i,
       }),
     ).not.toBeInTheDocument();
-    // 收起后清空 query,所有预设恢复显示
+    // 收起后清空 query，恢复到收起前的分类标签页（默认 official）
     expect(
-      screen.getByRole("button", { name: "preset.gamma" }),
+      screen.getByRole("button", { name: "preset.alpha" }),
     ).toBeInTheDocument();
   });
 });

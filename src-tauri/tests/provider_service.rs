@@ -370,7 +370,7 @@ requires_openai_auth = true
 }
 
 #[test]
-fn provider_service_switch_codex_preserves_oauth_and_backfills_api_key_from_live_token() {
+fn provider_service_switch_codex_preserves_oauth_and_backfills_api_key_from_command_auth() {
     let _guard = test_mutex().lock().expect("acquire test mutex");
     reset_test_fs();
     enable_codex_official_auth_preservation();
@@ -485,22 +485,26 @@ requires_openai_auth = true
     let live_config = std::fs::read_to_string(agent_switch_lib::get_codex_config_path())
         .expect("read config.toml");
     let parsed_live: toml::Value = toml::from_str(&live_config).expect("parse live config");
-    assert_eq!(
-        parsed_live
-            .get("model_providers")
-            .and_then(|v| v.get("aihubmix"))
-            .and_then(|v| v.get("experimental_bearer_token"))
-            .and_then(|v| v.as_str()),
-        Some("bridge-key"),
-        "third-party key should be injected into the selected live provider table"
+    let live_provider = parsed_live
+        .get("model_providers")
+        .and_then(|v| v.get("aihubmix"))
+        .expect("selected live provider table");
+    assert!(
+        live_provider
+            .get("auth")
+            .and_then(|auth| auth.get("command"))
+            .and_then(|value| value.as_str())
+            .is_some(),
+        "generic third-party providers should retrieve their key through command auth"
     );
-    assert_eq!(
-        parsed_live
-            .get("model_providers")
-            .and_then(|v| v.get("aihubmix"))
-            .and_then(|v| v.get("requires_openai_auth"))
-            .and_then(|v| v.as_bool()),
-        Some(true)
+    assert!(
+        live_provider.get("experimental_bearer_token").is_none()
+            && !live_config.contains("bridge-key"),
+        "generic provider keys should not be embedded in config.toml"
+    );
+    assert!(
+        live_provider.get("requires_openai_auth").is_none(),
+        "command auth must remove mutually exclusive legacy auth flags"
     );
 
     ProviderService::switch(&state, AppType::Codex, "plain-provider")
@@ -567,12 +571,16 @@ wire_api = "responses"
     write_codex_live_atomic(&oauth_auth, Some(official_config))
         .expect("seed official Codex OAuth live config");
 
-    let deepseek_provider_config = r#"model_provider = "deepseek"
-model = "deepseek-chat"
+    let deepseek_provider_config = r#"model = "deepseek-v4-flash"
+model_provider = "deepseek"
+preferred_auth_method = "apikey"
+forced_login_method = "api"
+model_reasoning_effort = "high"
+model_catalog_json = "~/.codex/models.json"
 
 [model_providers.deepseek]
-name = "DeepSeek"
-base_url = "https://api.deepseek.com/v1"
+name = "deepseek"
+base_url = "https://api.deepseek.com/"
 wire_api = "responses"
 "#;
     let mut initial_config = MultiAppConfig::default();
@@ -601,7 +609,21 @@ wire_api = "responses"
             "DeepSeek".to_string(),
             json!({
                 "auth": {"OPENAI_API_KEY": "deepseek-key"},
-                "config": deepseek_provider_config
+                "config": deepseek_provider_config,
+                "modelCatalog": {
+                    "models": [
+                        {
+                            "model": "deepseek-v4-flash",
+                            "displayName": "DeepSeek-V4-Flash",
+                            "contextWindow": 1_048_576
+                        },
+                        {
+                            "model": "deepseek-v4-pro",
+                            "displayName": "DeepSeek-V4-Pro",
+                            "contextWindow": 1_048_576
+                        }
+                    ]
+                }
             }),
             None,
         );
@@ -626,13 +648,42 @@ wire_api = "responses"
     let config_after_switch =
         std::fs::read_to_string(agent_switch_lib::get_codex_config_path()).expect("read config");
     assert!(
-        config_after_switch.contains("https://api.deepseek.com/v1"),
+        config_after_switch.contains("https://api.deepseek.com/"),
         "normal switch should write the DeepSeek endpoint before takeover"
     );
     assert!(
         config_after_switch.contains("deepseek-key"),
         "normal switch should inject the DeepSeek key into config.toml"
     );
+    let parsed_deepseek_config: toml::Value =
+        toml::from_str(&config_after_switch).expect("parse DeepSeek config.toml");
+    assert_eq!(
+        parsed_deepseek_config
+            .get("model_catalog_json")
+            .and_then(|value| value.as_str()),
+        Some("~/.codex/models.json"),
+        "DeepSeek should use the catalog path published in its Codex integration guide"
+    );
+    assert!(
+        parsed_deepseek_config
+            .get("model_providers")
+            .and_then(|value| value.get("deepseek"))
+            .and_then(|value| value.get("auth"))
+            .is_none(),
+        "DeepSeek should use direct bearer auth rather than Agent Switch command auth"
+    );
+
+    let models_path = agent_switch_lib::get_codex_config_path().with_file_name("models.json");
+    let models: serde_json::Value =
+        read_json_file(&models_path).expect("read generated DeepSeek models.json");
+    let slugs = models
+        .get("models")
+        .and_then(|value| value.as_array())
+        .expect("DeepSeek catalog models")
+        .iter()
+        .filter_map(|model| model.get("slug").and_then(|value| value.as_str()))
+        .collect::<Vec<_>>();
+    assert_eq!(slugs, vec!["deepseek-v4-flash", "deepseek-v4-pro"]);
 
     state
         .proxy_service
@@ -658,7 +709,7 @@ wire_api = "responses"
         "enabling takeover should move the proxy placeholder into config.toml"
     );
     assert!(
-        !config_after_takeover.contains("https://api.deepseek.com/v1"),
+        !config_after_takeover.contains("https://api.deepseek.com/"),
         "takeover live config should not keep the upstream DeepSeek endpoint"
     );
 
@@ -675,7 +726,7 @@ wire_api = "responses"
         .and_then(|value| value.as_str())
         .unwrap_or_default();
     assert!(
-        backup_config.contains("https://api.deepseek.com/v1")
+        backup_config.contains("https://api.deepseek.com/")
             && backup_config.contains("deepseek-key"),
         "takeover backup should remain the restorable DeepSeek config"
     );
@@ -696,7 +747,7 @@ wire_api = "responses"
     let restored_config = std::fs::read_to_string(agent_switch_lib::get_codex_config_path())
         .expect("read restored config");
     assert!(
-        restored_config.contains("https://api.deepseek.com/v1")
+        restored_config.contains("https://api.deepseek.com/")
             && restored_config.contains("deepseek-key"),
         "disabling takeover should restore the selected DeepSeek live config"
     );
@@ -704,16 +755,29 @@ wire_api = "responses"
         !restored_config.contains("PROXY_MANAGED"),
         "restored live config must not keep the proxy placeholder"
     );
+
+    ProviderService::switch(&state, AppType::Codex, "official-provider")
+        .expect("switch away from DeepSeek without losing its key");
+    let providers = state
+        .db
+        .get_all_providers(AppType::Codex.as_str())
+        .expect("read providers after switching away from DeepSeek");
+    assert_eq!(
+        providers
+            .get("deepseek-provider")
+            .and_then(|provider| { provider.settings_config.pointer("/auth/OPENAI_API_KEY") })
+            .and_then(|value| value.as_str()),
+        Some("deepseek-key"),
+        "enabling DeepSeek and then switching away must keep the input API key in provider storage"
+    );
 }
 
 #[test]
-fn provider_service_switch_codex_default_overwrites_official_auth_when_preservation_off() {
+fn provider_service_switch_codex_ignores_legacy_auth_preservation_opt_out() {
     let _guard = test_mutex().lock().expect("acquire test mutex");
     reset_test_fs();
-    // Intentionally do NOT enable preservation: this locks the default opt-out
-    // behavior where switching to a third-party provider rewrites auth.json,
-    // discarding the user's ChatGPT OAuth login. It is the dual of
-    // `provider_service_switch_codex_preserves_oauth_and_backfills_api_key_from_live_token`.
+    // Intentionally do NOT enable preservation. The legacy opt-out is ignored:
+    // third-party providers use command auth and must not erase ChatGPT OAuth.
     let _home = ensure_test_home();
 
     let live_auth = json!({
@@ -783,14 +847,24 @@ requires_openai_auth = true
 
     let auth_value: serde_json::Value =
         read_json_file(&agent_switch_lib::get_codex_auth_path()).expect("read auth.json");
-    assert_eq!(
-        auth_value.get("OPENAI_API_KEY").and_then(|v| v.as_str()),
-        Some("third-party-key"),
-        "default (preservation off) should overwrite auth.json with the third-party API key"
-    );
     assert!(
-        auth_value.pointer("/tokens/access_token").is_none(),
-        "default switch must clear the official ChatGPT OAuth token from live auth.json"
+        auth_value
+            .get("OPENAI_API_KEY")
+            .is_some_and(|value| value.is_null()),
+        "third-party switching should leave the OAuth auth.json API key slot unchanged"
+    );
+    assert_eq!(
+        auth_value
+            .pointer("/tokens/access_token")
+            .and_then(|value| value.as_str()),
+        Some("official-oauth-token"),
+        "the ignored legacy opt-out must not erase the user's ChatGPT OAuth token"
+    );
+    let live_config = std::fs::read_to_string(agent_switch_lib::get_codex_config_path())
+        .expect("read third-party live config");
+    assert!(
+        live_config.contains("--codex-provider-token") && !live_config.contains("third-party-key"),
+        "third-party credentials should be retrieved through command auth"
     );
 }
 
@@ -1343,8 +1417,10 @@ wire_api = "responses"
         .and_then(|v| v.as_str())
         .unwrap_or_default();
     assert!(
-        backup_config.contains("new-key") && backup_config.contains("deepseek-new"),
-        "restore backup should be rebuilt from the newly selected provider"
+        backup_config.contains("deepseek-new")
+            && backup_config.contains("--codex-provider-token")
+            && !backup_config.contains("new-key"),
+        "restore backup should be rebuilt with the newly selected provider's command auth"
     );
 
     let current = state

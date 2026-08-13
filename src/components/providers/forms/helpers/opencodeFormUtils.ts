@@ -240,7 +240,7 @@ export function buildOpenCodeReasoningEffortVariants(
                 thinkingLevel: effort,
               },
             }
-        : { reasoningEffort: effort },
+          : { reasoningEffort: effort },
     ]),
   );
 }
@@ -256,7 +256,8 @@ export function removeAutomaticOpenCodeThinkingVariants(
 ): Record<string, unknown> {
   const generated = buildOpenCodeThinkingVariants(protocol);
   const isCompleteGeneratedBatch = Object.entries(generated).every(
-    ([level, value]) => JSON.stringify(variants[level]) === JSON.stringify(value),
+    ([level, value]) =>
+      JSON.stringify(variants[level]) === JSON.stringify(value),
   );
   if (!isCompleteGeneratedBatch) return variants;
 
@@ -312,7 +313,8 @@ export function getOpenCodeReasoningEffort(
   const options = model.options ?? {};
   if (protocol === "gemini") {
     const thinkingConfig = options.thinkingConfig;
-    return isRecord(thinkingConfig) && typeof thinkingConfig.thinkingLevel === "string"
+    return isRecord(thinkingConfig) &&
+      typeof thinkingConfig.thinkingLevel === "string"
       ? thinkingConfig.thinkingLevel
       : undefined;
   }

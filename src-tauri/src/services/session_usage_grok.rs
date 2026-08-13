@@ -243,7 +243,7 @@ fn collect_turn_models_from_events(path: &Path, models: &mut GrokTurnModelMap) {
         return;
     };
 
-    for line in BufReader::new(file).lines().flatten() {
+    for line in BufReader::new(file).lines().map_while(Result::ok) {
         let Ok(event) = serde_json::from_str::<serde_json::Value>(&line) else {
             continue;
         };
@@ -380,7 +380,7 @@ fn collect_timestamp_models_from_log(
     let file = fs::File::open(log_path)
         .map_err(|error| AppError::Config(format!("无法打开 Grok unified 日志: {error}")))?;
     let mut models = HashMap::new();
-    for line in BufReader::new(file).lines().flatten() {
+    for line in BufReader::new(file).lines().map_while(Result::ok) {
         if !line.contains("shell.turn.inference_done") {
             continue;
         }

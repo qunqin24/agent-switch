@@ -84,16 +84,19 @@ const JsonEditor: React.FC<JsonEditorProps> = ({
     // 创建编辑器扩展
     const minHeightPx = height ? undefined : Math.max(1, rows) * 18;
 
-    // 使用 baseTheme 定义基础样式，优先级低于 oneDark，但可以正确响应主题
+    // 使用 baseTheme 定义基础样式，根节点必须通过 `&` 选择器匹配
     const baseTheme = EditorView.baseTheme({
-      ".cm-editor": {
+      "&": {
         border: "1px solid hsl(var(--border))",
         borderRadius: "0.5rem",
         background: "transparent",
       },
-      ".cm-editor.cm-focused": {
+      "&.cm-focused": {
+        outline: "none !important",
+        borderColor: "hsl(var(--primary)) !important",
+      },
+      ".cm-content": {
         outline: "none",
-        borderColor: "hsl(var(--primary))",
       },
       ".cm-scroller": {
         background: "transparent",
@@ -104,10 +107,10 @@ const JsonEditor: React.FC<JsonEditorProps> = ({
         color: "hsl(var(--muted-foreground))",
       },
       ".cm-selectionBackground, .cm-content ::selection": {
-        background: "hsl(var(--primary) / 0.18)",
+        background: "hsl(var(--primary) / 0.18) !important",
       },
       ".cm-selectionMatch": {
-        background: "hsl(var(--primary) / 0.12)",
+        background: "hsl(var(--primary) / 0.12) !important",
       },
       ".cm-activeLine": {
         background: "hsl(var(--primary) / 0.08)",
@@ -156,14 +159,17 @@ const JsonEditor: React.FC<JsonEditorProps> = ({
       // 在 oneDark 之后强制覆盖边框样式
       extensions.push(
         EditorView.theme({
-          ".cm-editor": {
+          "&": {
             border: "1px solid hsl(var(--border))",
             borderRadius: "0.5rem",
             background: "transparent",
           },
-          ".cm-editor.cm-focused": {
+          "&.cm-focused": {
+            outline: "none !important",
+            borderColor: "hsl(var(--primary)) !important",
+          },
+          ".cm-content": {
             outline: "none",
-            borderColor: "hsl(var(--primary))",
           },
           ".cm-scroller": {
             background: "transparent",
@@ -174,10 +180,10 @@ const JsonEditor: React.FC<JsonEditorProps> = ({
             color: "hsl(var(--muted-foreground))",
           },
           ".cm-selectionBackground, .cm-content ::selection": {
-            background: "hsl(var(--primary) / 0.18)",
+            background: "hsl(var(--primary) / 0.18) !important",
           },
           ".cm-selectionMatch": {
-            background: "hsl(var(--primary) / 0.12)",
+            background: "hsl(var(--primary) / 0.12) !important",
           },
           ".cm-activeLine": {
             background: "hsl(var(--primary) / 0.08)",

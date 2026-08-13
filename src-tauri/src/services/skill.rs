@@ -2573,11 +2573,10 @@ impl SkillService {
         app: &AppType,
         app_skill: &AppSkill,
         skill_id: &str,
-        owner: &str,
-        repository: &str,
-        branch: &str,
+        repository: (&str, &str, &str),
         dest: &Path,
     ) -> Result<AppSkill> {
+        let (owner, repository, branch) = repository;
         let records = db.get_all_installed_skills()?;
         let previous = records.get(skill_id).cloned();
         let (new_name, new_description) =
@@ -2849,9 +2848,7 @@ impl SkillService {
                     app,
                     &app_skill,
                     skill_id,
-                    &owner,
-                    &name,
-                    &updated_branch,
+                    (&owner, &name, &updated_branch),
                     &dest,
                 );
             }
@@ -2916,9 +2913,7 @@ impl SkillService {
                 app,
                 &app_skill,
                 skill_id,
-                &owner,
-                &name,
-                &used_branch,
+                (&owner, &name, &used_branch),
                 &dest,
             )
         })();
@@ -4507,7 +4502,7 @@ impl SkillService {
 
         let write_backup = || -> Result<()> {
             let skill_backup_dir = backup_path.join("skill");
-            Self::copy_dir_recursive(&source_path, &skill_backup_dir)?;
+            Self::copy_dir_recursive(source_path, &skill_backup_dir)?;
 
             let metadata = SkillBackupMetadata {
                 skill: skill.clone(),
