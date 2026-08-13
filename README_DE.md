@@ -1,15 +1,13 @@
 <div align="center">
 
-# AgentSwitch
+# Agent Switch
 
 ### Der All-in-One-Manager für Claude Code, Claude Desktop, Codex, Gemini CLI, OpenCode, OpenClaw & Hermes Agent
 
-[![Version](https://img.shields.io/github/v/release/farion1231/cc-switch?color=blue&label=version)](https://github.com/farion1231/cc-switch/releases)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/farion1231/cc-switch/releases)
+[![Version](https://img.shields.io/github/v/release/qwq202/agent-switch?color=blue&label=version)](https://github.com/qwq202/agent-switch/releases)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/qwq202/agent-switch/releases)
 [![Built with Tauri](https://img.shields.io/badge/built%20with-Tauri%202-orange.svg)](https://tauri.app/)
-[![Downloads](https://img.shields.io/github/downloads/farion1231/cc-switch/total)](https://github.com/farion1231/cc-switch/releases/latest)
-
-<a href="https://trendshift.io/repositories/15372" target="_blank"><img src="https://trendshift.io/api/badge/repositories/15372" alt="farion1231%2Fcc-switch | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+[![Downloads](https://img.shields.io/github/downloads/qwq202/agent-switch/total)](https://github.com/qwq202/agent-switch/releases/latest)
 
 [English](README.md) | [中文](README_ZH.md) | [日本語](README_JA.md) | Deutsch | [Changelog](CHANGELOG.md)
 
@@ -17,7 +15,7 @@
 
 ## ❤️Sponsoren
 
-> [Möchten Sie hier erscheinen?](mailto:farion1231@gmail.com)
+> [Möchten Sie dieses Projekt unterstützen?](https://github.com/qwq202/agent-switch/issues)
 
 <details open>
 <summary>Zum Einklappen klicken</summary>
@@ -36,13 +34,13 @@ Kimi K2.6 ist ein quelloffenes, nativ multimodales Agenten-Modell von Moonshot A
 
 <tr>
 <td width="180"><a href="https://aigocode.com/invite/CC-SWITCH"><img src="assets/partners/logos/aigocode.png" alt="AIGoCode" width="150"></a></td>
-<td>Danke an AIGoCode für die Unterstützung dieses Projekts! AIGoCode ist eine All-in-One-Plattform, die Claude Code, Codex und die neuesten Gemini-Modelle integriert und Ihnen stabile, effiziente und äußerst kostengünstige KI-Coding-Dienste bietet. Die Plattform stellt flexible Abonnementpläne bereit, birgt kein Risiko einer Kontosperrung, ermöglicht Direktzugriff ohne VPN und reagiert blitzschnell. AIGoCode hat ein besonderes Angebot für AgentSwitch-Nutzer vorbereitet: Wenn Sie sich über <a href="https://aigocode.com/invite/CC-SWITCH">diesen Link</a> registrieren, erhalten Sie bei Ihrer ersten Aufladung zusätzliche 10 % Bonusguthaben!</td>
+<td>Danke an AIGoCode für die Unterstützung dieses Projekts! AIGoCode ist eine All-in-One-Plattform, die Claude Code, Codex und die neuesten Gemini-Modelle integriert und Ihnen stabile, effiziente und äußerst kostengünstige KI-Coding-Dienste bietet. Die Plattform stellt flexible Abonnementpläne bereit, birgt kein Risiko einer Kontosperrung, ermöglicht Direktzugriff ohne VPN und reagiert blitzschnell. AIGoCode hat ein besonderes Angebot für Agent Switch-Nutzer vorbereitet: Wenn Sie sich über <a href="https://aigocode.com/invite/CC-SWITCH">diesen Link</a> registrieren, erhalten Sie bei Ihrer ersten Aufladung zusätzliche 10 % Bonusguthaben!</td>
 </tr>
 
 <tr>
 <td width="180"><a href="https://www.aicodemirror.com/register?invitecode=9915W3"><img src="assets/partners/logos/aicodemirror.jpg" alt="AICodeMirror" width="150"></a></td>
 <td>Danke an AICodeMirror für die Unterstützung dieses Projekts! AICodeMirror stellt offizielle, hochstabile Relay-Dienste für Claude Code / Codex / Gemini CLI bereit, mit unternehmensgerechter Nebenläufigkeit, schneller Rechnungsstellung und rund um die Uhr verfügbarem dediziertem technischem Support.
-Offizielle Kanäle von Claude Code / Codex / Gemini zu 38 % / 2 % / 9 % des Originalpreises, mit zusätzlichen Rabatten beim Aufladen! AICodeMirror bietet besondere Vorteile für AgentSwitch-Nutzer: Registrieren Sie sich über <a href="https://www.aicodemirror.com/register?invitecode=9915W3">diesen Link</a> und erhalten Sie 20 % Rabatt auf Ihre erste Aufladung; Unternehmenskunden erhalten bis zu 25 % Rabatt!</td>
+Offizielle Kanäle von Claude Code / Codex / Gemini zu 38 % / 2 % / 9 % des Originalpreises, mit zusätzlichen Rabatten beim Aufladen! AICodeMirror bietet besondere Vorteile für Agent Switch-Nutzer: Registrieren Sie sich über <a href="https://www.aicodemirror.com/register?invitecode=9915W3">diesen Link</a> und erhalten Sie 20 % Rabatt auf Ihre erste Aufladung; Unternehmenskunden erhalten bis zu 25 % Rabatt!</td>
 </tr>
 
 <tr>
@@ -84,17 +82,17 @@ Registrieren Sie sich jetzt über <a href="https://pateway.ai/?ch=etzpm8&aff=WB6
 
 <tr>
 <td width="180"><a href="https://crazyrouter.com/register?aff=OZcm&ref=cc-switch"><img src="assets/partners/logos/crazyrouter.png" alt="Crazyrouter" width="150"></a></td>
-<td>Danke an Crazyrouter für die Unterstützung dieses Projekts! Crazyrouter ist eine leistungsstarke KI-API-Aggregationsplattform — ein API-Schlüssel für mehr als 300 Modelle, darunter Claude Code, Codex, Gemini CLI und weitere. Alle Modelle zu 55 % des offiziellen Preises, mit automatischem Failover, intelligentem Routing und unbegrenzter Nebenläufigkeit. Crazyrouter bietet ein exklusives Angebot für AgentSwitch-Nutzer: Registrieren Sie sich über <a href="https://crazyrouter.com/register?aff=OZcm&ref=cc-switch">diesen Link</a> und kontaktieren Sie den Kundensupport, um <strong>2 $ Gratisguthaben</strong> zu erhalten!</td>
+<td>Danke an Crazyrouter für die Unterstützung dieses Projekts! Crazyrouter ist eine leistungsstarke KI-API-Aggregationsplattform — ein API-Schlüssel für mehr als 300 Modelle, darunter Claude Code, Codex, Gemini CLI und weitere. Alle Modelle zu 55 % des offiziellen Preises, mit automatischem Failover, intelligentem Routing und unbegrenzter Nebenläufigkeit. Crazyrouter bietet ein exklusives Angebot für Agent Switch-Nutzer: Registrieren Sie sich über <a href="https://crazyrouter.com/register?aff=OZcm&ref=cc-switch">diesen Link</a> und kontaktieren Sie den Kundensupport, um <strong>2 $ Gratisguthaben</strong> zu erhalten!</td>
 </tr>
 
 <tr>
 <td width="180"><a href="https://www.right.codes/register?aff=CCSWITCH"><img src="assets/partners/logos/rightcode.jpg" alt="RightCode" width="150"></a></td>
-<td>Danke an Right Code für die Unterstützung dieses Projekts! Right Code stellt zuverlässig Routing-Dienste für Modelle wie Claude Code, Codex und Gemini bereit, wahlweise mit nutzungsbasierter Abrechnung oder monatlichem Abonnement. Rechnungen sind beim Aufladen verfügbar, und Unternehmens- sowie Teamkunden erhalten dedizierten Einzelsupport. Right Code bietet außerdem einen exklusiven Rabatt für AgentSwitch-Nutzer: Registrieren Sie sich über <a href="https://www.right.codes/register?aff=CCSWITCH">diesen Link</a> und erhalten Sie bei jeder Aufladung nutzungsbasiertes Guthaben in Höhe von 5 % des gezahlten Betrags.</td>
+<td>Danke an Right Code für die Unterstützung dieses Projekts! Right Code stellt zuverlässig Routing-Dienste für Modelle wie Claude Code, Codex und Gemini bereit, wahlweise mit nutzungsbasierter Abrechnung oder monatlichem Abonnement. Rechnungen sind beim Aufladen verfügbar, und Unternehmens- sowie Teamkunden erhalten dedizierten Einzelsupport. Right Code bietet außerdem einen exklusiven Rabatt für Agent Switch-Nutzer: Registrieren Sie sich über <a href="https://www.right.codes/register?aff=CCSWITCH">diesen Link</a> und erhalten Sie bei jeder Aufladung nutzungsbasiertes Guthaben in Höhe von 5 % des gezahlten Betrags.</td>
 </tr>
 
 <tr>
 <td width="180"><a href="https://www.sssaicode.com/register?ref=DCP0SM"><img src="assets/partners/logos/sssaicode.png" alt="SSSAiCode" width="150"></a></td>
-<td>Danke an SSSAiCode für die Unterstützung dieses Projekts! SSSAiCode ist ein stabiler und zuverlässiger API-Relay-Dienst, der sich der Bereitstellung stabiler, zuverlässiger und erschwinglicher Claude- und Codex-Modelldienste widmet, mit schneller Rechnungsstellung am selben Tag. SSSAiCode bietet ein besonderes Angebot für AgentSwitch-Nutzer: Registrieren Sie sich über <a href="https://www.sssaicode.com/register?ref=DCP0SM">diesen Link</a> und erhalten Sie bei jeder Aufladung 10 $ zusätzliches Guthaben!</td>
+<td>Danke an SSSAiCode für die Unterstützung dieses Projekts! SSSAiCode ist ein stabiler und zuverlässiger API-Relay-Dienst, der sich der Bereitstellung stabiler, zuverlässiger und erschwinglicher Claude- und Codex-Modelldienste widmet, mit schneller Rechnungsstellung am selben Tag. SSSAiCode bietet ein besonderes Angebot für Agent Switch-Nutzer: Registrieren Sie sich über <a href="https://www.sssaicode.com/register?ref=DCP0SM">diesen Link</a> und erhalten Sie bei jeder Aufladung 10 $ zusätzliches Guthaben!</td>
 </tr>
 
 <tr>
@@ -119,7 +117,7 @@ Registrieren Sie sich jetzt über <a href="https://pateway.ai/?ch=etzpm8&aff=WB6
 
 <tr>
 <td width="180"><a href="https://runapi.co"><img src="assets/partners/logos/runapi.jpg" alt="RunAPI" width="150"></a></td>
-<td>Danke an RunAPI für die Unterstützung dieses Projekts! RunAPI ist ein leistungsstarkes und zuverlässiges KI-Modell-API-Gateway — ein API-Schlüssel gibt Ihnen Zugriff auf mehr als 150 gängige Modelle, darunter OpenAI, Claude, Gemini, DeepSeek und Grok, zu Preisen ab 10 % des offiziellen Tarifs und mit ausgezeichneter Stabilität. Es arbeitet nahtlos mit Claude Code, OpenClaw und weiteren Werkzeugen zusammen. Exklusiver Vorteil für AgentSwitch-Nutzer: Registrieren Sie sich und kontaktieren Sie den Kundensupport, um ein kostenloses Guthaben von ¥14 einzulösen. Registrieren Sie sich über <a href="https://runapi.co">diesen Link</a>!</td>
+<td>Danke an RunAPI für die Unterstützung dieses Projekts! RunAPI ist ein leistungsstarkes und zuverlässiges KI-Modell-API-Gateway — ein API-Schlüssel gibt Ihnen Zugriff auf mehr als 150 gängige Modelle, darunter OpenAI, Claude, Gemini, DeepSeek und Grok, zu Preisen ab 10 % des offiziellen Tarifs und mit ausgezeichneter Stabilität. Es arbeitet nahtlos mit Claude Code, OpenClaw und weiteren Werkzeugen zusammen. Exklusiver Vorteil für Agent Switch-Nutzer: Registrieren Sie sich und kontaktieren Sie den Kundensupport, um ein kostenloses Guthaben von ¥14 einzulösen. Registrieren Sie sich über <a href="https://runapi.co">diesen Link</a>!</td>
 </tr>
 
 <tr>
@@ -151,11 +149,11 @@ Registrieren Sie sich jetzt über <a href="https://pateway.ai/?ch=etzpm8&aff=WB6
 
 </details>
 
-## Warum AgentSwitch?
+## Warum Agent Switch?
 
 Modernes KI-gestütztes Programmieren stützt sich auf Werkzeuge wie Claude Code, Claude Desktop, Codex, Gemini CLI, OpenCode, OpenClaw und Hermes — doch jedes hat sein eigenes Konfigurationsformat. Der Wechsel des API-Anbieters bedeutet, JSON-, TOML- oder `.env`-Dateien von Hand zu bearbeiten, und es gibt keine einheitliche Möglichkeit, MCP und Skills über mehrere Werkzeuge hinweg zu verwalten.
 
-**AgentSwitch** gibt Ihnen eine einzige Desktop-App, um alle unterstützten KI-Werkzeuge zu verwalten. Statt Konfigurationsdateien von Hand zu bearbeiten, erhalten Sie eine visuelle Oberfläche, um Anbieter mit einem Klick zu importieren und sofort zwischen ihnen zu wechseln — mit 50+ integrierten Anbieter-Presets, einheitlicher MCP- und Skills-Verwaltung und schnellem Umschalten über das System-Tray. Das Ganze gestützt auf eine zuverlässige SQLite-Datenbank mit atomaren Schreibvorgängen, die Ihre Konfigurationen vor Beschädigung schützen.
+**Agent Switch** gibt Ihnen eine einzige Desktop-App, um alle unterstützten KI-Werkzeuge zu verwalten. Statt Konfigurationsdateien von Hand zu bearbeiten, erhalten Sie eine visuelle Oberfläche, um Anbieter mit einem Klick zu importieren und sofort zwischen ihnen zu wechseln — mit 50+ integrierten Anbieter-Presets, einheitlicher MCP- und Skills-Verwaltung und schnellem Umschalten über das System-Tray. Das Ganze gestützt auf eine zuverlässige SQLite-Datenbank mit atomaren Schreibvorgängen, die Ihre Konfigurationen vor Beschädigung schützen.
 
 - **Eine App, sieben Werkzeuge** — Verwalten Sie Claude Code, Claude Desktop, Codex, Gemini CLI, OpenCode, OpenClaw und Hermes über eine einzige Oberfläche
 - **Kein manuelles Bearbeiten mehr** — 50+ Anbieter-Presets einschließlich AWS Bedrock, NVIDIA NIM und Community-Relays; einfach auswählen und umschalten
@@ -210,9 +208,9 @@ Modernes KI-gestütztes Programmieren stützt sich auf Werkzeuge wie Claude Code
 ## FAQ
 
 <details>
-<summary><strong>Welche KI-Werkzeuge unterstützt AgentSwitch?</strong></summary>
+<summary><strong>Welche KI-Werkzeuge unterstützt Agent Switch?</strong></summary>
 
-AgentSwitch unterstützt sieben Werkzeuge: **Claude Code**, **Claude Desktop**, **Codex**, **Gemini CLI**, **OpenCode**, **OpenClaw** und **Hermes**. Jedes Werkzeug verfügt über dedizierte Anbieter-Presets und Konfigurationsverwaltung.
+Agent Switch unterstützt sieben Werkzeuge: **Claude Code**, **Claude Desktop**, **Codex**, **Gemini CLI**, **OpenCode**, **OpenClaw** und **Hermes**. Jedes Werkzeug verfügt über dedizierte Anbieter-Presets und Konfigurationsverwaltung.
 
 </details>
 
@@ -226,21 +224,21 @@ Bei den meisten Werkzeugen ja — starten Sie Ihr Terminal oder das CLI-Werkzeug
 <details>
 <summary><strong>Meine Plugin-Konfiguration ist nach einem Anbieterwechsel verschwunden — was ist passiert?</strong></summary>
 
-AgentSwitch bietet eine Funktion „Gemeinsames Konfigurations-Snippet", um gemeinsame Daten (über API-Schlüssel und Endpunkte hinaus) zwischen Anbietern weiterzugeben. Gehen Sie zu „Anbieter bearbeiten" → „Panel für gemeinsame Konfiguration" → klicken Sie auf „Aus aktuellem Anbieter extrahieren", um alle gemeinsamen Daten zu speichern. Aktivieren Sie beim Anlegen eines neuen Anbieters die Option „Gemeinsame Konfiguration schreiben" (standardmäßig aktiviert), um die Plugin-Daten in den neuen Anbieter aufzunehmen. Alle Ihre Konfigurationspunkte bleiben im Standardanbieter erhalten, der beim ersten Start der App importiert wurde.
+Agent Switch bietet eine Funktion „Gemeinsames Konfigurations-Snippet", um gemeinsame Daten (über API-Schlüssel und Endpunkte hinaus) zwischen Anbietern weiterzugeben. Gehen Sie zu „Anbieter bearbeiten" → „Panel für gemeinsame Konfiguration" → klicken Sie auf „Aus aktuellem Anbieter extrahieren", um alle gemeinsamen Daten zu speichern. Aktivieren Sie beim Anlegen eines neuen Anbieters die Option „Gemeinsame Konfiguration schreiben" (standardmäßig aktiviert), um die Plugin-Daten in den neuen Anbieter aufzunehmen. Alle Ihre Konfigurationspunkte bleiben im Standardanbieter erhalten, der beim ersten Start der App importiert wurde.
 
 </details>
 
 <details>
 <summary><strong>Installation unter macOS</strong></summary>
 
-AgentSwitch für macOS ist von Apple code-signiert und notarisiert. Sie können es direkt herunterladen und installieren — es sind keine zusätzlichen Schritte erforderlich. Wir empfehlen die Verwendung des `.dmg`-Installationsprogramms.
+Der aktuelle Community-Build ist nicht mit einem Apple-Developer-Zertifikat signiert oder notarisiert. Wir empfehlen das `.dmg`; falls macOS den ersten Start blockiert, erlauben Sie die Ausführung unter „Systemeinstellungen“ → „Datenschutz & Sicherheit“.
 
 </details>
 
 <details>
 <summary><strong>Warum kann ich den aktuell aktiven Anbieter nicht löschen?</strong></summary>
 
-AgentSwitch folgt dem Designprinzip der „minimalen Eingriffstiefe" — selbst wenn Sie die App deinstallieren, funktionieren Ihre CLI-Werkzeuge weiterhin normal. Das System behält immer eine aktive Konfiguration bei, da das Löschen aller Konfigurationen das entsprechende CLI-Werkzeug unbrauchbar machen würde. Wenn Sie ein bestimmtes CLI-Werkzeug selten verwenden, können Sie es in den Einstellungen ausblenden. Wie Sie zurück zum offiziellen Login wechseln, erfahren Sie in der nächsten Frage.
+Agent Switch folgt dem Designprinzip der „minimalen Eingriffstiefe" — selbst wenn Sie die App deinstallieren, funktionieren Ihre CLI-Werkzeuge weiterhin normal. Das System behält immer eine aktive Konfiguration bei, da das Löschen aller Konfigurationen das entsprechende CLI-Werkzeug unbrauchbar machen würde. Wenn Sie ein bestimmtes CLI-Werkzeug selten verwenden, können Sie es in den Einstellungen ausblenden. Wie Sie zurück zum offiziellen Login wechseln, erfahren Sie in der nächsten Frage.
 
 </details>
 
@@ -296,39 +294,23 @@ Ausführliche Anleitungen zu jeder Funktion finden Sie im **[Benutzerhandbuch](d
 
 ### Windows-Nutzer
 
-Laden Sie das neueste Installationsprogramm `AgentSwitch-v{version}-Windows.msi` oder die portable Version `AgentSwitch-v{version}-Windows-Portable.zip` von der Seite [Releases](../../releases) herunter.
+Laden Sie das neueste Installationsprogramm `AgentSwitch-v{version}-Windows.msi` oder die portable Version `AgentSwitch-v{version}-Windows-Portable.zip` von der Seite [Releases](https://github.com/qwq202/agent-switch/releases) herunter.
 
 ### macOS-Nutzer
 
-**Methode 1: Installation über Homebrew (empfohlen)**
+**Manueller Download**
 
-```bash
-brew install --cask cc-switch
-```
+Laden Sie `AgentSwitch-v{version}-macOS.dmg` (empfohlen) oder `.zip` von der Seite [Releases](https://github.com/qwq202/agent-switch/releases) herunter.
 
-Aktualisieren:
-
-```bash
-brew upgrade --cask cc-switch
-```
-
-**Methode 2: Manueller Download**
-
-Laden Sie `AgentSwitch-v{version}-macOS.dmg` (empfohlen) oder `.zip` von der Seite [Releases](../../releases) herunter.
-
-> **Hinweis**: AgentSwitch für macOS ist von Apple code-signiert und notarisiert. Sie können es direkt installieren und öffnen.
+> **Hinweis**: Der aktuelle Community-Build ist nicht mit einem Apple-Developer-Zertifikat signiert oder notarisiert. Falls macOS den ersten Start blockiert, erlauben Sie die Ausführung unter „Systemeinstellungen“ → „Datenschutz & Sicherheit“. Das Homebrew-Paket `cc-switch` gehört zum Upstream-Projekt und installiert nicht diesen Fork.
 
 ### Arch-Linux-Nutzer
 
-**Installation über paru (empfohlen)**
-
-```bash
-paru -S cc-switch-bin
-```
+Dieser Fork veröffentlicht derzeit kein AUR-Paket. `cc-switch-bin` gehört zum Upstream-Projekt. Laden Sie die Linux-Pakete aus den [Releases](https://github.com/qwq202/agent-switch/releases) dieses Repositorys herunter.
 
 ### Linux-Nutzer
 
-Laden Sie den neuesten Linux-Build von der Seite [Releases](../../releases) herunter:
+Laden Sie den neuesten Linux-Build von der Seite [Releases](https://github.com/qwq202/agent-switch/releases) herunter:
 
 - `AgentSwitch-v{version}-Linux.deb` (Debian/Ubuntu)
 - `AgentSwitch-v{version}-Linux.rpm` (Fedora/RHEL/openSUSE)
@@ -384,9 +366,9 @@ Laden Sie den neuesten Linux-Build von der Seite [Releases](../../releases) heru
 
 ### Umgebungsanforderungen
 
-- Node.js 18+
-- pnpm 8+
-- Rust 1.85+
+- Node.js 20+
+- pnpm 10+
+- Rust 1.95 (gemäß `rust-toolchain.toml`)
 - Tauri CLI 2.8+
 
 ### Entwicklungsbefehle
@@ -527,7 +509,7 @@ Eröffnen Sie für neue Funktionen bitte vor dem Einreichen eines PR ein Issue z
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=farion1231/cc-switch&type=Date)](https://www.star-history.com/#farion1231/cc-switch&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=qwq202/agent-switch&type=Date)](https://www.star-history.com/#qwq202/agent-switch&Date)
 
 ## Lizenz
 

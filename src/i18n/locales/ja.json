@@ -1325,7 +1325,7 @@
     "modelName": "モデル名",
     "localRoutingToggle": "ローカルルーティングが必要",
     "localRoutingOffHint": "上流が Codex Responses API にネイティブ対応している場合は直接接続できます。Chat Completions のみ、または Codex と互換性のない Responses 実装の場合にだけ有効にしてください。",
-    "localRoutingOnHint": "AgentSwitch が Codex Responses リクエストを Chat Completions に変換します。このプロバイダーの使用中はローカルルーティングを起動したままにしてください。",
+    "localRoutingOnHint": "Agent Switch が Codex Responses リクエストを Chat Completions に変換します。このプロバイダーの使用中はローカルルーティングを起動したままにしてください。",
     "upstreamModelName": "上流モデル名",
     "upstreamModelNameHint": "Chat 形式ではここに実際の上流モデルを入力します。ルーティングで Codex の Responses リクエストを Chat Completions に変換し、このモデルを維持します。",
     "modelNamePlaceholder": "例: gpt-5-codex",

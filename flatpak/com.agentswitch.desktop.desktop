@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Application
-Name=AgentSwitch
+Name=Agent Switch
 Comment=All-in-One Assistant for Claude Code, Codex & Gemini CLI
 Exec=agent-switch
 Icon=com.agentswitch.desktop

@@ -1,11 +1,11 @@
-# AgentSwitch ユーザーマニュアル
+# Agent Switch ユーザーマニュアル
 
 > Claude Code / Claude Desktop / Codex / Gemini CLI / OpenCode / OpenClaw / Hermes オールインワンアシスタント
 
 ## 目次構成
 
 ```
-AgentSwitch ユーザーマニュアル
+Agent Switch ユーザーマニュアル
 │
 ├── 1. はじめに
 │   ├── 1.1 ソフトウェア紹介
@@ -90,7 +90,7 @@ AgentSwitch ユーザーマニュアル
 
 | ファイル | 内容 |
 |------|------|
-| [5.1-config-files.md](./5-faq/5.1-config-files.md) | AgentSwitch のストレージ、CLI 設定ファイル形式 |
+| [5.1-config-files.md](./5-faq/5.1-config-files.md) | Agent Switch のストレージ、CLI 設定ファイル形式 |
 | [5.2-questions.md](./5-faq/5.2-questions.md) | よくある質問と回答 |
 | [5.3-deeplink.md](./5-faq/5.3-deeplink.md) | ディープリンクプロトコル、生成と使用方法 |
 | [5.4-env-conflict.md](./5-faq/5.4-env-conflict.md) | 環境変数の競合検出と対処 |
@@ -106,14 +106,15 @@ AgentSwitch ユーザーマニュアル
 
 ## バージョン情報
 
-- ドキュメントバージョン：v3.16.0
-- 最終更新：2026-05-29
-- AgentSwitch v3.16.0+ 対応
+- ドキュメントバージョン：v3.17.0
+- 最終更新：2026-08-13
+- Agent Switch v3.17.0+ 対応
 
-### v3.16.0 の注目機能
+### v3.17.0 の注目機能
 
-- **Codex Chat Completions ルーティング**：DeepSeek、Kimi、GLM、MiniMax など Chat 専用プロバイダーを Codex で利用可能 — 詳細は [2.1 プロバイダーの追加](./2-providers/2.1-add.md)
-- **管理対象 CLI ツールのライフサイクル**：設定 / About で Claude / Codex / Gemini / OpenCode / OpenClaw / Hermes のインストール、更新、一括更新、診断に対応 — 詳細は [1.5 個人設定](./1-getting-started/1.5-settings.md)
+- **Agent Switch へのブランド統一**：現在のメンテナンス版は Agent Switch 名に統一しつつ、旧データとディープリンクの互換性を維持します。
+- **DeepSeek ネイティブ Codex Responses 対応**：DeepSeek 公式の Codex 統合に合わせてモデルカタログを生成し、Bearer Token 認証を使用します — 詳細は [2.1 プロバイダーの追加](./2-providers/2.1-add.md)
+- **Skills と MCP 管理の強化**：アプリ別同期、リポジトリ閲覧、更新確認、バックアップを改善しました。
 - **プロバイダーとモデルマトリクス更新**：提携プリセットを追加し、既定モデルと価格表を更新。Claude Opus は 4.8、該当する GPT 既定値は 5.5 に更新
 - **ルーティング対応バッジ**：Claude Code / Codex のプロバイダーカードで Local Routing 対応可否を確認可能
 - **Codex OAuth ライブモデル検出**：ChatGPT Codex 系プロバイダーは必要に応じて ChatGPT バックエンドから利用可能モデルを取得
@@ -130,5 +131,5 @@ AgentSwitch ユーザーマニュアル
 
 Issue や PR でドキュメントの改善にご協力ください：
 
-- [GitHub Issues](https://github.com/farion1231/cc-switch/issues)
-- [GitHub Repository](https://github.com/farion1231/cc-switch)
+- [GitHub Issues](https://github.com/qwq202/agent-switch/issues)
+- [GitHub Repository](https://github.com/qwq202/agent-switch)

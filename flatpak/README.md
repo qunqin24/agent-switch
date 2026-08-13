@@ -1,6 +1,6 @@
 # Flatpak Build Guide
 
-This directory contains the Flatpak manifest (`com.agentswitch.desktop`) for AgentSwitch, used to convert the generated `.deb` artifact into an installable `.flatpak` package via CI or local builds.
+This directory contains the Flatpak manifest (`com.agentswitch.desktop`) for Agent Switch, used to convert the generated `.deb` artifact into an installable `.flatpak` package via CI or local builds.
 
 ## Dependencies
 

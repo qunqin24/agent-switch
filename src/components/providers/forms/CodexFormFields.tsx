@@ -417,7 +417,7 @@ export function CodexFormFields({
                       {needsLocalRouting
                         ? t("codexConfig.localRoutingOnHint", {
                             defaultValue:
-                              "AgentSwitch 会把 Codex Responses 请求转换为 Chat Completions；使用期间需要保持本地路由运行。",
+                              "Agent Switch 会把 Codex Responses 请求转换为 Chat Completions；使用期间需要保持本地路由运行。",
                           })
                         : t("codexConfig.localRoutingOffHint", {
                             defaultValue:

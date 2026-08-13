@@ -1,27 +1,27 @@
 <div align="center">
 
-<img src="src-tauri/icons/128x128.png" width="96" alt="AgentSwitch">
+<img src="src-tauri/icons/128x128.png" width="96" alt="Agent Switch">
 
-# AgentSwitch
+# Agent Switch
 
 一个面向多种 AI 编程客户端的本地配置、路由、用量与工具管理桌面应用。
 
-[![Release](https://img.shields.io/github/v/release/qwq202/cc-switch?label=release&color=2563eb)](https://github.com/qwq202/cc-switch/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/qwq202/cc-switch/total?label=downloads)](https://github.com/qwq202/cc-switch/releases)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-64748b)](https://github.com/qwq202/cc-switch/releases/latest)
+[![Release](https://img.shields.io/github/v/release/qwq202/agent-switch?label=release&color=2563eb)](https://github.com/qwq202/agent-switch/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/qwq202/agent-switch/total?label=downloads)](https://github.com/qwq202/agent-switch/releases)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-64748b)](https://github.com/qwq202/agent-switch/releases/latest)
 [![Tauri](https://img.shields.io/badge/Tauri-2-f97316)](https://tauri.app/)
-[![License](https://img.shields.io/github/license/qwq202/cc-switch)](LICENSE)
+[![License](https://img.shields.io/github/license/qwq202/agent-switch)](LICENSE)
 
-[下载最新版](https://github.com/qwq202/cc-switch/releases/latest) · [查看更新日志](CHANGELOG.md) · [问题反馈](https://github.com/qwq202/cc-switch/issues) · [上游项目](https://github.com/farion1231/cc-switch)
+[下载最新版](https://github.com/qwq202/agent-switch/releases/latest) · [查看更新日志](CHANGELOG.md) · [问题反馈](https://github.com/qwq202/agent-switch/issues) · [上游项目](https://github.com/farion1231/cc-switch)
 
 </div>
 
 > [!IMPORTANT]
-> 本仓库是基于 [farion1231/cc-switch](https://github.com/farion1231/cc-switch) 的社区二次开发版本，不是上游作者发布的官方版本。应用继续沿用 **AgentSwitch** 名称和主要配置格式，以保持使用习惯与数据兼容；本分支的安装包、自动更新和问题反馈均由 [qwq202/cc-switch](https://github.com/qwq202/cc-switch) 独立维护。
+> 本仓库是基于 [farion1231/cc-switch](https://github.com/farion1231/cc-switch) 的社区二次开发版本，不是上游作者发布的官方版本。应用展示名现已统一为 **Agent Switch**，同时继续兼容既有配置格式；本分支的安装包、自动更新和问题反馈均由 [qwq202/agent-switch](https://github.com/qwq202/agent-switch) 独立维护。
 
 ## 这个二开版本解决什么问题
 
-上游 AgentSwitch 已经提供了成熟的供应商切换、本地代理、MCP、Skills、会话与同步能力。本分支没有重新发明这些基础设施，而是围绕日常高频使用继续打磨：让界面更紧凑，让成本统计更可信，让 OpenCode 配置更自动，也让 Claude Desktop、Codex 和 Grok Build 的安装与升级少一些意外。
+上游 CC Switch 已经提供了成熟的供应商切换、本地代理、MCP、Skills、会话与同步能力。本分支没有重新发明这些基础设施，而是围绕日常高频使用继续打磨：让界面更紧凑，让成本统计更可信，让 OpenCode 配置更自动，也让 Claude Desktop、Codex 和 Grok Build 的安装与升级少一些意外。
 
 当前分支相对上游的主要改善来自 `v3.16.5` 至 `v3.16.8` 的提交记录。
 
@@ -104,7 +104,7 @@
 
 ## 下载与安装
 
-请从本仓库的 [Releases](https://github.com/qwq202/cc-switch/releases/latest) 下载。不要使用上游仓库的安装包覆盖本分支，否则自动更新来源和功能版本可能发生变化。
+请从本仓库的 [Releases](https://github.com/qwq202/agent-switch/releases/latest) 下载。不要使用上游仓库的安装包覆盖本分支，否则自动更新来源和功能版本可能发生变化。
 
 ### Windows
 
@@ -128,7 +128,7 @@
 
 ## 快速开始
 
-1. 安装并启动 AgentSwitch。
+1. 安装并启动 Agent Switch。
 2. 在左侧选择需要管理的客户端。
 3. 添加官方预设、第三方供应商，或创建自定义配置。
 4. 填写 API Key 和 Base URL，检查模型映射后保存。
@@ -140,7 +140,7 @@
 
 ## 数据位置与隐私
 
-AgentSwitch 采用本地优先设计。供应商配置、统计数据和备份默认保存在当前用户目录，不会因为使用本应用而自动上传到项目维护者的服务器。
+Agent Switch 采用本地优先设计。供应商配置、统计数据和备份默认保存在当前用户目录，不会因为使用本应用而自动上传到项目维护者的服务器。
 
 | 数据        | 默认位置                      |
 | ----------- | ----------------------------- |
@@ -155,10 +155,10 @@ AgentSwitch 采用本地优先设计。供应商配置、统计数据和备份�
 ## 与上游的关系
 
 - 上游项目：[farion1231/cc-switch](https://github.com/farion1231/cc-switch)
-- 本二开项目：[qwq202/cc-switch](https://github.com/qwq202/cc-switch)
+- 本二开项目：[qwq202/agent-switch](https://github.com/qwq202/agent-switch)
 - 本分支保留上游 MIT License，并感谢 Jason Young 与所有上游贡献者打下的基础。
 - 上游后续的重要修复会根据兼容性评估后同步；本分支不会承诺与上游每个提交实时一致。
-- 本分支新增功能或安装包问题，请提交到本仓库的 [Issues](https://github.com/qwq202/cc-switch/issues)，不要让上游维护者承担二开版本的问题。
+- 本分支新增功能或安装包问题，请提交到本仓库的 [Issues](https://github.com/qwq202/agent-switch/issues)，不要让上游维护者承担二开版本的问题。
 
 ## 开发
 
@@ -166,7 +166,7 @@ AgentSwitch 采用本地优先设计。供应商配置、统计数据和备份�
 
 - Node.js 20+
 - pnpm 10+
-- Rust 1.85+
+- Rust 1.95（以 `rust-toolchain.toml` 为准）
 - Tauri 2 所需的平台依赖
 
 ### 常用命令

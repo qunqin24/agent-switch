@@ -1325,7 +1325,7 @@
     "modelName": "Model Name",
     "localRoutingToggle": "Needs Local Routing",
     "localRoutingOffHint": "Connect directly when the upstream natively supports the Codex Responses API. Enable this only for Chat Completions-only or Codex-incompatible Responses endpoints.",
-    "localRoutingOnHint": "AgentSwitch converts Codex Responses requests to Chat Completions; keep local routing running while this provider is in use.",
+    "localRoutingOnHint": "Agent Switch converts Codex Responses requests to Chat Completions; keep local routing running while this provider is in use.",
     "upstreamModelName": "Upstream Model Name",
     "upstreamModelNameHint": "For Chat format, enter the real upstream model here; routing converts Codex Responses requests to Chat Completions while keeping this model.",
     "modelNamePlaceholder": "e.g., gpt-5-codex",

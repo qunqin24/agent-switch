@@ -442,13 +442,13 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
 
       if (!displayVersion) {
         await settingsApi.openExternal(
-          "https://github.com/qwq202/cc-switch/releases",
+          "https://github.com/qwq202/agent-switch/releases",
         );
         return;
       }
 
       await settingsApi.openExternal(
-        `https://github.com/qwq202/cc-switch/releases/tag/${displayVersion}`,
+        `https://github.com/qwq202/agent-switch/releases/tag/${displayVersion}`,
       );
     } catch (error) {
       console.error("[AboutSection] Failed to open release notes", error);
@@ -879,7 +879,9 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
               variant="outline"
               size="sm"
               onClick={() =>
-                settingsApi.openExternal("https://github.com/qwq202/cc-switch")
+                settingsApi.openExternal(
+                  "https://github.com/qwq202/agent-switch",
+                )
               }
               className="h-7 px-3 gap-1.5 text-xs font-semibold shadow-sm hover:bg-muted/50"
             >

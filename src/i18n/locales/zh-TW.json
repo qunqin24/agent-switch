@@ -1301,7 +1301,7 @@
     "autoCompactLimitHint": "上下文 token 數達到此閾值時自動壓縮歷史",
     "autoCompactLimitPlaceholder": "例如: 90000",
     "localRoutingToggle": "需要本地路由映射",
-    "localRoutingOnHint": "AgentSwitch 會將 Codex Responses 請求轉換為 Chat Completions；使用期間需要保持本地路由運行。",
+    "localRoutingOnHint": "Agent Switch 會將 Codex Responses 請求轉換為 Chat Completions；使用期間需要保持本地路由運行。",
     "localRoutingOffHint": "上游原生相容 Codex Responses API 時可直接連線；僅當上游只支援 Chat Completions，或其 Responses 實作與 Codex 不相容時開啟。",
     "modelMappingTitle": "模型映射",
     "modelMappingHint": "產生 Codex model_catalog_json，讓 /model 指令顯示這些第三方模型名；表中條目按填寫內容原樣儲存。修改後需要重新啟動 Codex 才能重新整理模型清單。",

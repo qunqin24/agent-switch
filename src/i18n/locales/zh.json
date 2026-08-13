@@ -1325,7 +1325,7 @@
     "modelName": "模型名称",
     "localRoutingToggle": "需要本地路由映射",
     "localRoutingOffHint": "上游原生兼容 Codex Responses API 时可直接连接；仅当上游只支持 Chat Completions，或其 Responses 实现与 Codex 不兼容时开启。",
-    "localRoutingOnHint": "AgentSwitch 会把 Codex Responses 请求转换为 Chat Completions；使用期间需要保持本地路由运行。",
+    "localRoutingOnHint": "Agent Switch 会把 Codex Responses 请求转换为 Chat Completions；使用期间需要保持本地路由运行。",
     "upstreamModelName": "上游模型名称",
     "upstreamModelNameHint": "Chat 格式下这里填写真实上游模型；路由会把 Codex 的 Responses 请求转换为 Chat Completions 并保持该模型。",
     "modelNamePlaceholder": "例如: gpt-5-codex",

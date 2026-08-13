@@ -1,4 +1,4 @@
-# AgentSwitch User Manual / 用户手册 / ユーザーマニュアル
+# Agent Switch User Manual / 用户手册 / ユーザーマニュアル
 
 > Claude Code / Claude Desktop / Codex / Gemini CLI / OpenCode / OpenClaw / Hermes
 
@@ -12,11 +12,11 @@
 
 ## Version / 版本 / バージョン
 
-- Documentation version: v3.16.0
-- Last updated: 2026-05-29
-- Compatible with AgentSwitch v3.16.0+
+- Documentation version: v3.17.0
+- Last updated: 2026-08-13
+- Compatible with Agent Switch v3.17.0+
 
 ## Links
 
-- [GitHub Issues](https://github.com/farion1231/cc-switch/issues)
-- [GitHub Repository](https://github.com/farion1231/cc-switch)
+- [GitHub Issues](https://github.com/qwq202/agent-switch/issues)
+- [GitHub Repository](https://github.com/qwq202/agent-switch)

@@ -71,7 +71,7 @@ requires_openai_auth = true`;
 /**
  * DeepSeek exposes a Codex-compatible Responses API directly. Keep the
  * provider id and auth-mode fields aligned with DeepSeek's Codex guide; the
- * API key itself remains in AgentSwitch's protected provider settings and is
+ * API key itself remains in Agent Switch's protected provider settings and is
  * projected to Codex command-backed auth when the provider becomes active.
  */
 function generateDeepSeekCodexConfig(): string {

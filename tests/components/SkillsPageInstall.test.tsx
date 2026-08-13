@@ -408,7 +408,7 @@ describe("SkillsPage - skills.sh install (regression)", () => {
     expect(installMutateAsyncMock).not.toHaveBeenCalled();
   });
 
-  it("opens the Skill detail inside AgentSwitch instead of an external link", async () => {
+  it("opens the Skill detail inside Agent Switch instead of an external link", async () => {
     const skill = makeSkillsShSkill({
       name: "Skill Details",
       detailUrl: "https://skills.sh/vercel-labs/skills/find-skills",

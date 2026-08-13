@@ -1,11 +1,11 @@
-# AgentSwitch User Manual
+# Agent Switch User Manual
 
 > All-in-One Assistant for Claude Code / Claude Desktop / Codex / Gemini CLI / OpenCode / OpenClaw / Hermes
 
 ## Table of Contents
 
 ```
-AgentSwitch User Manual
+Agent Switch User Manual
 │
 ├── 1. Getting Started
 │   ├── 1.1 Introduction
@@ -90,7 +90,7 @@ AgentSwitch User Manual
 
 | File | Description |
 |------|-------------|
-| [5.1-config-files.md](./5-faq/5.1-config-files.md) | AgentSwitch storage, CLI configuration file formats |
+| [5.1-config-files.md](./5-faq/5.1-config-files.md) | Agent Switch storage, CLI configuration file formats |
 | [5.2-questions.md](./5-faq/5.2-questions.md) | Frequently asked questions |
 | [5.3-deeplink.md](./5-faq/5.3-deeplink.md) | Deep link protocol, generation and usage |
 | [5.4-env-conflict.md](./5-faq/5.4-env-conflict.md) | Environment variable conflict detection and resolution |
@@ -106,14 +106,15 @@ AgentSwitch User Manual
 
 ## Version Information
 
-- Documentation version: v3.16.0
-- Last updated: 2026-05-29
-- Applicable to AgentSwitch v3.16.0+
+- Documentation version: v3.17.0
+- Last updated: 2026-08-13
+- Applicable to Agent Switch v3.17.0+
 
-### v3.16.0 Highlights
+### v3.17.0 Highlights
 
-- **Codex Chat Completions routing**: route Chat-only providers such as DeepSeek, Kimi, GLM, and MiniMax through Codex. See [2.1 Add Provider](./2-providers/2.1-add.md)
-- **Managed CLI tool lifecycle**: install, update, update all, and diagnose Claude / Codex / Gemini / OpenCode / OpenClaw / Hermes from Settings / About. See [1.5 Personalization](./1-getting-started/1.5-settings.md)
+- **Agent Switch branding**: the maintained fork now uses the Agent Switch name while preserving legacy data and deep-link compatibility.
+- **Native DeepSeek Codex Responses support**: generated model catalog and bearer-token authentication follow DeepSeek's official Codex integration. See [2.1 Add Provider](./2-providers/2.1-add.md)
+- **Expanded Skills and MCP management**: improved per-application synchronization, repository browsing, updates, and backups.
 - **Provider and model refresh**: new partner presets, refreshed default models and pricing, Claude Opus 4.8 defaults, and GPT 5.5 defaults where applicable
 - **Routing support badges**: Claude Code / Codex provider cards indicate whether a provider can be served through Local Routing
 - **Codex OAuth live model discovery**: ChatGPT Codex providers fetch available models from the ChatGPT backend on demand
@@ -130,5 +131,5 @@ AgentSwitch User Manual
 
 Feel free to submit Issues or PRs to improve the documentation:
 
-- [GitHub Issues](https://github.com/farion1231/cc-switch/issues)
-- [GitHub Repository](https://github.com/farion1231/cc-switch)
+- [GitHub Issues](https://github.com/qwq202/agent-switch/issues)
+- [GitHub Repository](https://github.com/qwq202/agent-switch)
