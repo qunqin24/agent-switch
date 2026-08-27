@@ -1564,6 +1564,7 @@ pub fn write_codex_live_for_provider(
     } else {
         let live_config = prepare_codex_provider_live_config_for_provider(
             Some(provider_id),
+            category,
             auth,
             config_text.unwrap_or(""),
         )?;
@@ -1582,11 +1583,24 @@ pub fn prepare_codex_provider_live_config(
     auth: &Value,
     config_text: &str,
 ) -> Result<String, AppError> {
-    prepare_codex_provider_live_config_for_provider(None, auth, config_text)
+    prepare_codex_provider_live_config_with_category(None, auth, config_text)
+}
+
+/// Same as [`prepare_codex_provider_live_config`], but told whether the config
+/// belongs to an official (ChatGPT OAuth) provider. Anything other than
+/// `Some("official")` is treated as third-party, so the OpenAI-auth fields are
+/// stripped even when the provider carries no token.
+pub fn prepare_codex_provider_live_config_with_category(
+    category: Option<&str>,
+    auth: &Value,
+    config_text: &str,
+) -> Result<String, AppError> {
+    prepare_codex_provider_live_config_for_provider(None, category, auth, config_text)
 }
 
 fn prepare_codex_provider_live_config_for_provider(
     provider_id: Option<&str>,
+    category: Option<&str>,
     auth: &Value,
     config_text: &str,
 ) -> Result<String, AppError> {
@@ -1598,8 +1612,55 @@ fn prepare_codex_provider_live_config_for_provider(
             set_codex_experimental_bearer_token(config_text, &token)?
         }
         Some(_) => set_codex_command_backed_auth(config_text, provider_id)?,
-        None => config_text.to_string(),
+        None => strip_codex_openai_auth_fields_for_third_party(category, config_text)?,
     })
+}
+
+/// 无 token 的第三方供应商落盘前的兜底清理。
+///
+/// 有 token 时 `set_codex_command_backed_auth` / `set_codex_experimental_bearer_token`
+/// 已经剥掉这些字段；没有 token 时模板文本原样落盘，`requires_openai_auth = true`
+/// 会让 Codex 拿 `auth.json` 里用户的 ChatGPT OAuth 凭据去请求第三方 base_url，
+/// `env_key` 则会把本机同名环境变量里的密钥发给第三方后端——两者都不是用户
+/// 在 Agent Switch 里选择的认证来源。
+///
+/// 官方供应商原样返回：统一会话开关注入的 `[model_providers.custom]`
+/// （见 `codex_unified_official_provider_table`）刻意用 `requires_openai_auth = true`
+/// 把认证路由回 ChatGPT 登录，那是正确用法，不能破坏。
+fn strip_codex_openai_auth_fields_for_third_party(
+    category: Option<&str>,
+    config_text: &str,
+) -> Result<String, AppError> {
+    if category == Some("official")
+        || config_text.trim().is_empty()
+        || (!config_text.contains("requires_openai_auth") && !config_text.contains("env_key"))
+    {
+        return Ok(config_text.to_string());
+    }
+
+    let mut doc = config_text
+        .parse::<DocumentMut>()
+        .map_err(|error| AppError::Message(format!("Invalid Codex config.toml: {error}")))?;
+    let Some(provider_id) = active_codex_model_provider_id(&doc) else {
+        return Ok(config_text.to_string());
+    };
+    let Some(provider_table) = doc
+        .get_mut("model_providers")
+        .and_then(Item::as_table_mut)
+        .and_then(|providers| providers.get_mut(provider_id.as_str()))
+        .and_then(Item::as_table_mut)
+    else {
+        return Ok(config_text.to_string());
+    };
+    // 兜底：即使 category 没能一路传下来，也不要拆掉统一会话注入的官方表。
+    if table_matches_codex_unified_official_provider(provider_table) {
+        return Ok(config_text.to_string());
+    }
+
+    provider_table.remove("env_key");
+    provider_table.remove("env_key_instructions");
+    provider_table.remove("requires_openai_auth");
+    Ok(doc.to_string())
 }
 
 /// During DB backfill, lift a live `experimental_bearer_token` back into
@@ -2048,6 +2109,7 @@ model = "gpt-5.4"
 
         let result = prepare_codex_provider_live_config_for_provider(
             Some("provider-db-id"),
+            Some("third_party"),
             &json!({"OPENAI_API_KEY": "sk-test"}),
             input,
         )
@@ -2123,6 +2185,81 @@ model = "gpt-5.4"
     }
 
     #[test]
+    fn prepare_provider_live_config_strips_openai_auth_fields_when_third_party_has_no_token() {
+        let input = r#"model_provider = "custom"
+model = "gpt-5.5"
+disable_response_storage = true
+
+[model_providers.custom]
+name = "Azure OpenAI"
+base_url = "https://vendor.example/openai"
+env_key = "OPENAI_API_KEY"
+env_key_instructions = "export OPENAI_API_KEY"
+query_params = { "api-version" = "2025-04-01-preview" }
+wire_api = "responses"
+requires_openai_auth = true
+"#;
+
+        let result = prepare_codex_provider_live_config_for_provider(
+            Some("provider-db-id"),
+            Some("third_party"),
+            &json!({}),
+            input,
+        )
+        .expect("prepare live config without a token");
+
+        assert!(
+            !result.contains("requires_openai_auth"),
+            "a third-party live config must not route auth to the ChatGPT login: {result}"
+        );
+        assert!(
+            !result.contains("env_key"),
+            "a third-party live config must not pull credentials from the environment: {result}"
+        );
+
+        let parsed: toml::Value = toml::from_str(&result).expect("parse live config");
+        let provider = parsed
+            .get("model_providers")
+            .and_then(|value| value.get("custom"))
+            .expect("active provider table");
+        assert_eq!(
+            provider.get("base_url").and_then(|value| value.as_str()),
+            Some("https://vendor.example/openai"),
+            "unrelated provider fields must survive the strip"
+        );
+        assert!(
+            provider.get("query_params").is_some(),
+            "unrelated provider fields must survive the strip: {result}"
+        );
+    }
+
+    #[test]
+    fn prepare_provider_live_config_keeps_official_unified_session_auth_routing() {
+        let input = inject_codex_unified_session_bucket("model = \"gpt-5.5\"\n")
+            .expect("inject unified session routing");
+
+        let result = prepare_codex_provider_live_config_for_provider(
+            Some("official-provider"),
+            Some("official"),
+            &json!({}),
+            &input,
+        )
+        .expect("prepare official live config");
+
+        assert_eq!(
+            result, input,
+            "the unified-session official table legitimately needs requires_openai_auth"
+        );
+
+        let without_category = prepare_codex_provider_live_config(&json!({}), &input)
+            .expect("prepare live config without a category");
+        assert_eq!(
+            without_category, input,
+            "the injected official table shape must survive even when the category is unknown"
+        );
+    }
+
+    #[test]
     fn prepare_deepseek_live_config_uses_published_direct_bearer_auth() {
         let input = r#"model = "deepseek-v4-flash"
 model_provider = "deepseek"
@@ -2139,6 +2276,7 @@ wire_api = "responses"
 
         let result = prepare_codex_provider_live_config_for_provider(
             Some("deepseek-provider"),
+            Some("cn_official"),
             &json!({"OPENAI_API_KEY": "sk-deepseek"}),
             input,
         )
@@ -2195,6 +2333,7 @@ wire_api = "responses"
         });
         let live_config = prepare_codex_provider_live_config_for_provider(
             Some("provider-db-id"),
+            Some("third_party"),
             template_settings.get("auth").expect("stored auth"),
             stored_config,
         )

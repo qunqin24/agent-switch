@@ -44,7 +44,11 @@ impl ProxyService {
                     &mut effective_settings,
                     existing_value,
                 )?;
-                Self::preserve_codex_oauth_auth_in_backup(&mut effective_settings, existing_value)?;
+                Self::preserve_codex_oauth_auth_in_backup(
+                    &mut effective_settings,
+                    existing_value,
+                    provider.category.as_deref(),
+                )?;
             }
 
             // 统一会话开关：备份是接管释放时恢复 live 的来源，官方配置的
@@ -214,6 +218,7 @@ impl ProxyService {
     pub(super) fn preserve_codex_oauth_auth_in_backup(
         target_settings: &mut Value,
         existing_backup: &Value,
+        category: Option<&str>,
     ) -> Result<(), String> {
         if !crate::settings::preserve_codex_official_auth_on_switch() {
             return Ok(());
@@ -233,11 +238,13 @@ impl ProxyService {
 
         let provider_auth = target_obj.get("auth").cloned().unwrap_or_else(|| json!({}));
         if let Some(config_text) = target_obj.get("config").and_then(|value| value.as_str()) {
-            let live_config = crate::codex_config::prepare_codex_provider_live_config(
-                &provider_auth,
-                config_text,
-            )
-            .map_err(|e| format!("更新 Codex 备份配置失败: {e}"))?;
+            let live_config =
+                crate::codex_config::prepare_codex_provider_live_config_with_category(
+                    category,
+                    &provider_auth,
+                    config_text,
+                )
+                .map_err(|e| format!("更新 Codex 备份配置失败: {e}"))?;
             target_obj.insert("config".to_string(), json!(live_config));
         }
         target_obj.insert("auth".to_string(), existing_auth);
