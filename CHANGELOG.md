@@ -7,9 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.17.2] - 2026-08-27
+
+### Added
+
+- Codex model mapping now auto-fills each model's context window from models.dev metadata when fetching the model list, selecting a model, or leaving the model field, without overwriting values you already entered.
+- Added toolbar and per-row "Auto Configure" buttons to the Codex model mapping table that force a fresh models.dev lookup, bypassing the in-memory cache.
+- Each Codex model mapping row can now expand into a detail panel showing models.dev capability metadata (reasoning support, tool calling, modalities) with editable context window and default reasoning level, matching the OpenCode form experience.
+- Codex model catalog entries support a `defaultReasoningLevel` override; the supported reasoning levels list is maintained automatically so Codex accepts the chosen level. Existing data without the field behaves exactly as before.
+- Switching to a Codex provider that forces API-key login (`forced_login_method = "api"`, e.g. the DeepSeek preset) now shows a note that the ChatGPT account remains signed in and is restored when switching back (all four languages).
+
 ### Changed
 
 - Replaced the legacy Windows MSI wizard as the recommended installer with a branded, one-click NSIS setup. Windows updates now use the signed NSIS artifact, while MSI remains available for enterprise deployment and existing per-user MSI installations migrate without creating a duplicate app installation.
+
+### Fixed
+
+- Switching to the official Codex provider no longer wipes ChatGPT OAuth tokens from `~/.codex/auth.json` when the stored provider record only holds an API key: the tokens are preserved and only `OPENAI_API_KEY` is updated. Note that in this case Codex follows the preserved ChatGPT login unless `preferred_auth_method` says otherwise.
+- Keyless third-party Codex providers no longer leak OpenAI credentials: `requires_openai_auth` and `env_key = "OPENAI_API_KEY"` left in stored templates are stripped from the live `config.toml` on every switch path, including proxy-takeover backup and restore, so Codex never routes ChatGPT OAuth or shell API keys to a third-party base URL.
+- Third-party Codex presets, custom templates, the NewAPI aggregator template, and deep-link imports no longer generate `requires_openai_auth = true` (the Codex default is already `false`); the backend still strips it from legacy data.
 
 ## [3.17.1] - 2026-08-14
 
