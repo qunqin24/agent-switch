@@ -58,6 +58,22 @@ describe("Windows installer packaging", () => {
     expect(workflow).toContain("*.msi)");
   });
 
+  it("calls bundler-provided NSIS macros with the arity tauri-bundler expects", () => {
+    const installer = readText("src-tauri/nsis/installer.nsi");
+
+    // utils.nsh defines `!macro CheckIfAppIsRunning executableName productName`.
+    // Calling it without arguments makes makensis abort the whole build, which
+    // only shows up on the Windows release job.
+    const calls = installer.match(/^\s*!insertmacro CheckIfAppIsRunning.*$/gm);
+
+    expect(calls).toHaveLength(2);
+    for (const call of calls ?? []) {
+      expect(call.trim()).toBe(
+        '!insertmacro CheckIfAppIsRunning "${MAINBINARYNAME}.exe" "${PRODUCTNAME}"',
+      );
+    }
+  });
+
   it("migrates legacy per-user MSI installs and preserves their directory", () => {
     const installer = readText("src-tauri/nsis/installer.nsi");
     const restoreInstallLocation = installer.slice(

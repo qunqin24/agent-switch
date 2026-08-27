@@ -1,5 +1,9 @@
 ; Agent Switch custom NSIS template.
-; Based on tauri-bundler v2.4.0's official installer.nsi template.
+; Based on tauri-bundler v2.8.1's official installer.nsi template
+; (crates/tauri-bundler/src/bundle/windows/nsis/installer.nsi).
+; When bumping @tauri-apps/cli, re-diff this file against that template:
+; macros provided by the bundler's utils.nsh (e.g. CheckIfAppIsRunning) can
+; change arity between releases and only fail at Windows bundle time.
 ; Product-specific changes keep the first install to one confirmation page and
 ; migrate both machine-wide and per-user WiX installations safely.
 Unicode true
@@ -649,7 +653,7 @@ Section Install
     !insertmacro NSIS_HOOK_PREINSTALL
   !endif
 
-  !insertmacro CheckIfAppIsRunning
+  !insertmacro CheckIfAppIsRunning "${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
 
   ; Copy main executable
   File "${MAINBINARYSRCPATH}"
@@ -786,7 +790,7 @@ Section Uninstall
     !insertmacro NSIS_HOOK_PREUNINSTALL
   !endif
 
-  !insertmacro CheckIfAppIsRunning
+  !insertmacro CheckIfAppIsRunning "${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
 
   ; Delete the app directory and its content from disk
   ; Copy main executable
