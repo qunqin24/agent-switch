@@ -249,6 +249,8 @@ export interface CodexCatalogModel {
   model: string;
   displayName?: string;
   contextWindow?: string | number;
+  /** 写入 catalog 条目的 default_reasoning_level；留空表示沿用 Codex 模板默认值 */
+  defaultReasoningLevel?: string;
 }
 
 // Claude 认证字段类型

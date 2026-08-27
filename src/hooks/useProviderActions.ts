@@ -20,6 +20,7 @@ import {
 import { extractErrorMessage } from "@/utils/errorUtils";
 import { openclawKeys } from "@/hooks/useOpenClaw";
 import {
+  codexConfigForcesApiKeyLogin,
   extractCodexWireApi,
   isCodexChatWireApi,
 } from "@/utils/providerConfigUtils";
@@ -269,8 +270,22 @@ export function useProviderActions(
             messageKey = "notifications.addToConfigSuccess";
             defaultMessage = "已添加到配置";
           }
+          // 该供应商把 Codex 钉在 API-Key 登录模式时，ChatGPT 账号只是被
+          // 隐藏而非登出，需要额外说明一句以免用户误以为掉登录。
+          const forcesApiKeyLogin =
+            activeApp === "codex" &&
+            codexConfigForcesApiKeyLogin(
+              (provider.settingsConfig as Record<string, any>)?.config,
+            );
+
           toast.success(t(messageKey, { defaultValue: defaultMessage }), {
             closeButton: true,
+            description: forcesApiKeyLogin
+              ? t("notifications.codexForcedApiKeyLogin", {
+                  defaultValue:
+                    "Codex 将进入 API-Key 登录模式，ChatGPT 账号仍保留，切回后自动恢复",
+                })
+              : undefined,
           });
         }
       } catch {

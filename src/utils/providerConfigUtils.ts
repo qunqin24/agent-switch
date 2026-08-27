@@ -1479,6 +1479,46 @@ export const setCodexTopLevelInt = (
   return finalizeTomlText(lines);
 };
 
+const TOML_FORCED_LOGIN_METHOD_PATTERN =
+  /^\s*forced_login_method\s*=\s*['"]?\s*api\s*['"]?\s*(?:#.*)?$/;
+const TOML_PREFERRED_AUTH_METHOD_PATTERN =
+  /^\s*preferred_auth_method\s*=\s*['"]?\s*apikey\s*['"]?\s*(?:#.*)?$/;
+
+/**
+ * 判断 Codex 配置是否把客户端钉在 API-Key 登录模式。
+ *
+ * DeepSeek 等预设按各自发布的 Codex 接入约定写入顶级
+ * `forced_login_method = "api"` / `preferred_auth_method = "apikey"`，
+ * Codex 客户端据此隐藏 ChatGPT 账号。这是预期行为，但用户看不出账号只是
+ * 被隐藏而非登出，所以切换成功时需要额外说明一句。
+ *
+ * 只看顶级键：`[model_providers.*]` 段里的同名键不控制客户端登录模式。
+ */
+export const codexConfigForcesApiKeyLogin = (
+  configText: string | undefined | null,
+): boolean => {
+  try {
+    const text = normalizeTomlText(
+      typeof configText === "string" ? configText : "",
+    );
+    if (!text) return false;
+
+    const lines = text.split("\n");
+    const topLevelEndIndex = getTopLevelEndIndex(lines);
+    for (let i = 0; i < topLevelEndIndex; i += 1) {
+      if (
+        TOML_FORCED_LOGIN_METHOD_PATTERN.test(lines[i]) ||
+        TOML_PREFERRED_AUTH_METHOD_PATTERN.test(lines[i])
+      ) {
+        return true;
+      }
+    }
+    return false;
+  } catch {
+    return false;
+  }
+};
+
 // 从 Codex TOML 配置中移除顶级字段行
 export const removeCodexTopLevelField = (
   configText: string,

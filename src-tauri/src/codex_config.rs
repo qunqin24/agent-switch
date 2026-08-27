@@ -284,6 +284,45 @@ pub fn codex_auth_has_login_material(auth: &Value) -> bool {
     })
 }
 
+/// 读取当前 live `~/.codex/auth.json`，不存在或不可解析时返回 `None`。
+fn read_codex_live_auth() -> Option<Value> {
+    let auth_path = get_codex_auth_path();
+    if !auth_path.exists() {
+        return None;
+    }
+    read_json_file::<Value>(&auth_path).ok()
+}
+
+/// 官方供应商落盘 `auth.json` 前的 ChatGPT 登录保护。
+///
+/// 数据库里的官方记录（典型如 "OpenAI Official"）常常只存了一个
+/// `OPENAI_API_KEY`——老版本导入 / 回填的结果——而不带 ChatGPT 登录的
+/// `tokens` 三件套。这类记录一旦被整份写进 `~/.codex/auth.json`，用户真实的
+/// `tokens{id_token, access_token, refresh_token, account_id}` 会被直接抹掉，
+/// Codex 随即掉登录且无法自愈（refresh_token 已不可恢复）。
+///
+/// 因此：现存 live auth 带 OAuth 登录材料、而待写 auth 只有 API Key 时，以
+/// 现存 auth 为基底合并——保留 `tokens` / `auth_mode` / `last_refresh` 等全部
+/// 既有字段，只写入/更新 `OPENAI_API_KEY`。待写 auth 自身带 OAuth 材料时
+/// （真正的官方登录存档）维持原有的整份覆盖语义，返回 `None`。
+fn merge_codex_official_auth_preserving_oauth(incoming: &Value, existing: &Value) -> Option<Value> {
+    // 待写的是真正的 OAuth 存档：整份覆盖才是正确语义。
+    if codex_auth_has_oauth_login_material(incoming) {
+        return None;
+    }
+    // 现存 live 没有可保护的 ChatGPT 登录：无需合并。
+    if !codex_auth_has_oauth_login_material(existing) {
+        return None;
+    }
+
+    let existing_obj = existing.as_object()?;
+    let api_key = extract_codex_auth_api_key(incoming)?;
+
+    let mut merged = existing_obj.clone();
+    merged.insert("OPENAI_API_KEY".to_string(), Value::String(api_key));
+    Some(Value::Object(merged))
+}
+
 pub fn codex_auth_has_oauth_login_material(auth: &Value) -> bool {
     let Some(obj) = auth.as_object() else {
         return false;
@@ -337,11 +376,46 @@ fn extract_codex_top_level_u64(config_text: &str, field: &str) -> Option<u64> {
         .filter(|value| *value > 0)
 }
 
+/// Pin `default_reasoning_level` to a user-chosen effort.
+///
+/// The template (and the DeepSeek overrides below) declare which efforts the
+/// entry advertises; Codex only accepts a default that appears in
+/// `supported_reasoning_levels`, so an override outside that list is appended
+/// rather than silently dropped.
+fn apply_codex_default_reasoning_level(
+    entry_obj: &mut serde_json::Map<String, Value>,
+    level: &str,
+) {
+    entry_obj.insert("default_reasoning_level".to_string(), json!(level));
+
+    let already_supported = entry_obj
+        .get("supported_reasoning_levels")
+        .and_then(|value| value.as_array())
+        .map(|levels| {
+            levels
+                .iter()
+                .any(|item| item.get("effort").and_then(|effort| effort.as_str()) == Some(level))
+        })
+        .unwrap_or(false);
+    if already_supported {
+        return;
+    }
+
+    let mut levels = entry_obj
+        .get("supported_reasoning_levels")
+        .and_then(|value| value.as_array())
+        .cloned()
+        .unwrap_or_default();
+    levels.push(json!({ "effort": level, "description": level }));
+    entry_obj.insert("supported_reasoning_levels".to_string(), json!(levels));
+}
+
 fn codex_catalog_model_entry(
     template: &Value,
     model: &str,
     display_name: &str,
     context_window: u64,
+    default_reasoning_level: Option<&str>,
     priority: usize,
 ) -> Value {
     let mut entry = template.clone();
@@ -429,6 +503,12 @@ fn codex_catalog_model_entry(
         entry_obj.insert("service_tiers".to_string(), json!([]));
     }
 
+    // Applied last so an explicit user choice wins over the template and over
+    // the DeepSeek preset's hard-coded "high".
+    if let Some(level) = default_reasoning_level {
+        apply_codex_default_reasoning_level(entry_obj, level);
+    }
+
     entry
 }
 
@@ -437,6 +517,7 @@ struct CodexCatalogModelSpec {
     model: String,
     display_name: String,
     context_window: u64,
+    default_reasoning_level: Option<String>,
 }
 
 fn codex_catalog_model_specs(settings: &Value, config_text: &str) -> Vec<CodexCatalogModelSpec> {
@@ -453,11 +534,13 @@ fn codex_catalog_model_specs(settings: &Value, config_text: &str) -> Vec<CodexCa
                     model: "deepseek-v4-flash".to_string(),
                     display_name: "DeepSeek-V4-Flash".to_string(),
                     context_window: 1_048_576,
+                    default_reasoning_level: None,
                 },
                 CodexCatalogModelSpec {
                     model: "deepseek-v4-pro".to_string(),
                     display_name: "DeepSeek-V4-Pro".to_string(),
                     context_window: 1_048_576,
+                    default_reasoning_level: None,
                 },
             ];
         }
@@ -497,10 +580,19 @@ fn codex_catalog_model_specs(settings: &Value, config_text: &str) -> Vec<CodexCa
         )
         .unwrap_or(default_context_window);
 
+        let default_reasoning_level = model_config
+            .get("defaultReasoningLevel")
+            .or_else(|| model_config.get("default_reasoning_level"))
+            .and_then(|value| value.as_str())
+            .map(str::trim)
+            .filter(|level| !level.is_empty())
+            .map(str::to_string);
+
         specs.push(CodexCatalogModelSpec {
             model: model.to_string(),
             display_name: display_name.to_string(),
             context_window,
+            default_reasoning_level,
         });
     }
 
@@ -768,6 +860,7 @@ fn codex_model_catalog_from_specs(specs: &[CodexCatalogModelSpec], template: &Va
                 &spec.model,
                 &spec.display_name,
                 spec.context_window,
+                spec.default_reasoning_level.as_deref(),
                 index,
             )
         })
@@ -972,6 +1065,18 @@ fn build_simplified_catalog_from_texts(config_text: &str, catalog_text: &str) ->
             .filter(|v| *v > 0 && *v != default_context_window)
         {
             obj.insert("contextWindow".to_string(), json!(context_window));
+        }
+
+        // Round-trips a pinned default effort. Template-inherited values are
+        // echoed back too, which is a no-op: rewriting them reproduces the very
+        // level the entry already advertises.
+        if let Some(level) = entry
+            .get("default_reasoning_level")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            obj.insert("defaultReasoningLevel".to_string(), json!(level));
         }
 
         entries.push(Value::Object(obj));
@@ -1560,7 +1665,18 @@ pub fn write_codex_live_for_provider(
     let should_write_auth = category == Some("official") && codex_auth_has_login_material(auth);
 
     if should_write_auth {
-        write_codex_live_atomic(auth, config_text)
+        // 只带 API Key 的官方记录不得抹掉 live 里的 ChatGPT 登录，
+        // 见 `merge_codex_official_auth_preserving_oauth`。
+        let merged = if crate::settings::preserve_codex_official_auth_on_switch() {
+            read_codex_live_auth()
+                .and_then(|existing| merge_codex_official_auth_preserving_oauth(auth, &existing))
+        } else {
+            None
+        };
+        match merged {
+            Some(merged) => write_codex_live_atomic(&merged, config_text),
+            None => write_codex_live_atomic(auth, config_text),
+        }
     } else {
         let live_config = prepare_codex_provider_live_config_for_provider(
             Some(provider_id),
@@ -1661,6 +1777,36 @@ fn strip_codex_openai_auth_fields_for_third_party(
     provider_table.remove("env_key_instructions");
     provider_table.remove("requires_openai_auth");
     Ok(doc.to_string())
+}
+
+/// 代理接管期间重建的 Codex live 备份，在进库前无条件消毒第三方配置文本。
+///
+/// 备份是接管释放时的恢复来源，而恢复走 `write_codex_live_verbatim` 原样落盘，
+/// 绕过了 `write_codex_live_for_provider` 里的兜底剥离。旧版本创建的无 key
+/// 第三方 provider，存储配置里仍可能带着 `requires_openai_auth`/`env_key`；
+/// 不在进备份前剥掉，接管释放恢复出来的 live config.toml 就会把用户的
+/// ChatGPT 登录态或本机同名环境变量里的密钥送去第三方 base_url。
+///
+/// 官方 category（含统一会话注入产物）不受影响，见
+/// `strip_codex_openai_auth_fields_for_third_party`。
+pub fn strip_codex_third_party_openai_auth_from_settings(
+    category: Option<&str>,
+    settings: &mut Value,
+) -> Result<(), AppError> {
+    let Some(config_text) = settings
+        .get("config")
+        .and_then(|value| value.as_str())
+        .map(str::to_string)
+    else {
+        return Ok(());
+    };
+    let stripped = strip_codex_openai_auth_fields_for_third_party(category, &config_text)?;
+    if stripped != config_text {
+        if let Some(obj) = settings.as_object_mut() {
+            obj.insert("config".to_string(), Value::String(stripped));
+        }
+    }
+    Ok(())
 }
 
 /// During DB backfill, lift a live `experimental_bearer_token` back into
@@ -2781,6 +2927,177 @@ base_url = "https://production.api/v1"
         );
     }
 
+    /// Template mirroring the shape Codex publishes in models_cache.json.
+    fn reasoning_catalog_template() -> Value {
+        json!({
+            "slug": "gpt-5.5",
+            "display_name": "GPT-5.5",
+            "description": "OpenAI model",
+            "model_messages": { "instructions_template": "Codex instructions" },
+            "default_reasoning_level": "medium",
+            "supported_reasoning_levels": [
+                { "effort": "medium", "description": "Medium" },
+                { "effort": "xhigh", "description": "Extra high" }
+            ]
+        })
+    }
+
+    #[test]
+    fn catalog_entry_keeps_template_reasoning_level_without_an_override() {
+        let catalog = codex_model_catalog_from_specs(
+            &[CodexCatalogModelSpec {
+                model: "glm-5.2".to_string(),
+                display_name: "GLM 5.2".to_string(),
+                context_window: 204_800,
+                default_reasoning_level: None,
+            }],
+            &reasoning_catalog_template(),
+        );
+        let entry = &catalog["models"][0];
+
+        assert_eq!(entry["default_reasoning_level"], json!("medium"));
+        assert_eq!(
+            entry["supported_reasoning_levels"],
+            reasoning_catalog_template()["supported_reasoning_levels"]
+        );
+    }
+
+    #[test]
+    fn catalog_entry_pins_a_supported_default_reasoning_level() {
+        let catalog = codex_model_catalog_from_specs(
+            &[CodexCatalogModelSpec {
+                model: "glm-5.2".to_string(),
+                display_name: "GLM 5.2".to_string(),
+                context_window: 204_800,
+                default_reasoning_level: Some("xhigh".to_string()),
+            }],
+            &reasoning_catalog_template(),
+        );
+        let entry = &catalog["models"][0];
+
+        assert_eq!(entry["default_reasoning_level"], json!("xhigh"));
+        assert_eq!(
+            entry["supported_reasoning_levels"],
+            reasoning_catalog_template()["supported_reasoning_levels"],
+            "an already advertised effort must not be duplicated"
+        );
+    }
+
+    #[test]
+    fn catalog_entry_advertises_an_override_the_template_omits() {
+        let catalog = codex_model_catalog_from_specs(
+            &[CodexCatalogModelSpec {
+                model: "glm-5.2".to_string(),
+                display_name: "GLM 5.2".to_string(),
+                context_window: 204_800,
+                default_reasoning_level: Some("low".to_string()),
+            }],
+            &reasoning_catalog_template(),
+        );
+        let entry = &catalog["models"][0];
+
+        assert_eq!(entry["default_reasoning_level"], json!("low"));
+        assert_eq!(
+            entry["supported_reasoning_levels"],
+            json!([
+                { "effort": "medium", "description": "Medium" },
+                { "effort": "xhigh", "description": "Extra high" },
+                { "effort": "low", "description": "low" }
+            ]),
+            "Codex only accepts a default that appears in supported_reasoning_levels"
+        );
+    }
+
+    #[test]
+    fn deepseek_catalog_entry_lets_the_user_override_the_default_level() {
+        let catalog = codex_model_catalog_from_specs(
+            &[CodexCatalogModelSpec {
+                model: "deepseek-v4-flash".to_string(),
+                display_name: "DeepSeek-V4-Flash".to_string(),
+                context_window: 1_048_576,
+                default_reasoning_level: Some("low".to_string()),
+            }],
+            &reasoning_catalog_template(),
+        );
+        let entry = &catalog["models"][0];
+
+        assert_eq!(
+            entry["default_reasoning_level"],
+            json!("low"),
+            "an explicit choice must win over the DeepSeek preset's hard-coded high"
+        );
+        assert_eq!(
+            entry["supported_reasoning_levels"]
+                .as_array()
+                .expect("levels")
+                .len(),
+            3,
+            "low is already part of the DeepSeek level list"
+        );
+    }
+
+    #[test]
+    fn catalog_specs_read_the_default_reasoning_level_from_settings() {
+        let specs = codex_catalog_model_specs(
+            &json!({
+                "modelCatalog": {
+                    "models": [
+                        { "model": "glm-5.2", "defaultReasoningLevel": " high " },
+                        { "model": "kimi-k2", "default_reasoning_level": "" },
+                        { "model": "minimax-m2" }
+                    ]
+                }
+            }),
+            "",
+        );
+
+        assert_eq!(
+            specs
+                .iter()
+                .map(|spec| spec.default_reasoning_level.clone())
+                .collect::<Vec<_>>(),
+            vec![Some("high".to_string()), None, None]
+        );
+    }
+
+    #[test]
+    fn simplified_catalog_round_trips_the_default_reasoning_level() {
+        let catalog = json!({
+            "models": [
+                {
+                    "slug": "glm-5.2",
+                    "display_name": "GLM 5.2",
+                    "context_window": 204_800,
+                    "default_reasoning_level": "high"
+                },
+                {
+                    "slug": "kimi-k2",
+                    "display_name": "kimi-k2",
+                    "context_window": 262_144,
+                    "default_reasoning_level": "   "
+                }
+            ]
+        });
+
+        let simplified = build_simplified_catalog_from_texts("", &catalog.to_string())
+            .expect("simplified catalog");
+
+        assert_eq!(
+            simplified,
+            json!({
+                "models": [
+                    {
+                        "model": "glm-5.2",
+                        "displayName": "GLM 5.2",
+                        "contextWindow": 204_800,
+                        "defaultReasoningLevel": "high"
+                    },
+                    { "model": "kimi-k2", "contextWindow": 262_144 }
+                ]
+            })
+        );
+    }
+
     #[test]
     fn deepseek_v4_catalog_uses_published_codex_capabilities() {
         let template = json!({
@@ -2806,11 +3123,13 @@ base_url = "https://production.api/v1"
                 model: "deepseek-v4-flash".to_string(),
                 display_name: "DeepSeek-V4-Flash".to_string(),
                 context_window: 1_048_576,
+                default_reasoning_level: None,
             },
             CodexCatalogModelSpec {
                 model: "deepseek-v4-pro".to_string(),
                 display_name: "DeepSeek-V4-Pro".to_string(),
                 context_window: 1_048_576,
+                default_reasoning_level: None,
             },
         ];
 
@@ -2876,11 +3195,13 @@ wire_api = "responses"
                     model: "deepseek-v4-flash".to_string(),
                     display_name: "DeepSeek-V4-Flash".to_string(),
                     context_window: 1_048_576,
+                    default_reasoning_level: None,
                 },
                 CodexCatalogModelSpec {
                     model: "deepseek-v4-pro".to_string(),
                     display_name: "DeepSeek-V4-Pro".to_string(),
                     context_window: 1_048_576,
+                    default_reasoning_level: None,
                 },
             ]
         );
@@ -3335,6 +3656,310 @@ command = "live"
                 .and_then(|value| value.get("command"))
                 .and_then(|value| value.as_str()),
             Some("live")
+        );
+    }
+
+    /// 临时 HOME，隔离 `~/.codex` 读写；Drop 时恢复原环境变量。
+    struct CodexTestHome {
+        #[allow(dead_code)]
+        dir: tempfile::TempDir,
+        original_home: Option<String>,
+        original_userprofile: Option<String>,
+        original_test_home: Option<String>,
+    }
+
+    impl CodexTestHome {
+        fn new() -> Self {
+            let dir = tempfile::TempDir::new().expect("create temp home");
+            let original_home = std::env::var("HOME").ok();
+            let original_userprofile = std::env::var("USERPROFILE").ok();
+            let original_test_home = std::env::var("CC_SWITCH_TEST_HOME").ok();
+
+            std::env::set_var("HOME", dir.path());
+            std::env::set_var("USERPROFILE", dir.path());
+            std::env::set_var("CC_SWITCH_TEST_HOME", dir.path());
+            crate::settings::reload_settings().expect("reload settings for temp home");
+
+            Self {
+                dir,
+                original_home,
+                original_userprofile,
+                original_test_home,
+            }
+        }
+    }
+
+    impl Drop for CodexTestHome {
+        fn drop(&mut self) {
+            match &self.original_home {
+                Some(value) => std::env::set_var("HOME", value),
+                None => std::env::remove_var("HOME"),
+            }
+            match &self.original_userprofile {
+                Some(value) => std::env::set_var("USERPROFILE", value),
+                None => std::env::remove_var("USERPROFILE"),
+            }
+            match &self.original_test_home {
+                Some(value) => std::env::set_var("CC_SWITCH_TEST_HOME", value),
+                None => std::env::remove_var("CC_SWITCH_TEST_HOME"),
+            }
+            let _ = crate::settings::reload_settings();
+        }
+    }
+
+    fn read_live_auth_json() -> Value {
+        read_json_file::<Value>(&get_codex_auth_path()).expect("read live auth.json")
+    }
+
+    fn oauth_live_auth() -> Value {
+        json!({
+            "OPENAI_API_KEY": "sk-old-live",
+            "auth_mode": "chatgpt",
+            "last_refresh": "2026-01-01T00:00:00Z",
+            "tokens": {
+                "id_token": "live-id",
+                "access_token": "live-access",
+                "refresh_token": "live-refresh",
+                "account_id": "acct-live"
+            }
+        })
+    }
+
+    #[test]
+    fn merge_official_auth_keeps_live_oauth_when_incoming_is_api_key_only() {
+        let merged = merge_codex_official_auth_preserving_oauth(
+            &json!({ "OPENAI_API_KEY": "sk-stored" }),
+            &oauth_live_auth(),
+        )
+        .expect("api-key-only official auth must merge into the live OAuth record");
+
+        assert_eq!(
+            merged.get("OPENAI_API_KEY").and_then(Value::as_str),
+            Some("sk-stored"),
+            "the provider's stored key must win"
+        );
+        assert_eq!(
+            merged
+                .get("tokens")
+                .and_then(|tokens| tokens.get("refresh_token"))
+                .and_then(Value::as_str),
+            Some("live-refresh"),
+            "the ChatGPT refresh token is unrecoverable once dropped"
+        );
+        assert_eq!(
+            merged.get("auth_mode").and_then(Value::as_str),
+            Some("chatgpt")
+        );
+        assert_eq!(
+            merged.get("last_refresh").and_then(Value::as_str),
+            Some("2026-01-01T00:00:00Z")
+        );
+    }
+
+    #[test]
+    fn merge_official_auth_declines_when_incoming_carries_its_own_oauth() {
+        assert!(
+            merge_codex_official_auth_preserving_oauth(
+                &json!({
+                    "auth_mode": "chatgpt",
+                    "tokens": { "refresh_token": "incoming-refresh" }
+                }),
+                &oauth_live_auth(),
+            )
+            .is_none(),
+            "a real OAuth archive must keep the full-overwrite semantics"
+        );
+    }
+
+    #[test]
+    fn merge_official_auth_declines_when_live_has_no_oauth() {
+        assert!(
+            merge_codex_official_auth_preserving_oauth(
+                &json!({ "OPENAI_API_KEY": "sk-stored" }),
+                &json!({ "OPENAI_API_KEY": "sk-live" }),
+            )
+            .is_none(),
+            "nothing to protect when the live record is API-key only"
+        );
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn official_switch_with_api_key_only_preserves_live_chatgpt_login() {
+        let _home = CodexTestHome::new();
+
+        write_codex_live_atomic(
+            &oauth_live_auth(),
+            Some("model_provider = \"openai\"\nmodel = \"gpt-5-codex\"\n"),
+        )
+        .expect("seed live ChatGPT login");
+
+        write_codex_live_for_provider(
+            "openai-official",
+            Some("official"),
+            &json!({ "OPENAI_API_KEY": "sk-stored" }),
+            Some("model_provider = \"openai\"\nmodel = \"gpt-5.5\"\n"),
+        )
+        .expect("switch to the official provider");
+
+        let live_auth = read_live_auth_json();
+        assert_eq!(
+            live_auth.get("OPENAI_API_KEY").and_then(Value::as_str),
+            Some("sk-stored"),
+            "the switched-to provider's key must land in auth.json"
+        );
+        let tokens = live_auth
+            .get("tokens")
+            .expect("ChatGPT tokens must survive");
+        assert_eq!(
+            tokens.get("refresh_token").and_then(Value::as_str),
+            Some("live-refresh")
+        );
+        assert_eq!(
+            tokens.get("access_token").and_then(Value::as_str),
+            Some("live-access")
+        );
+        assert_eq!(
+            tokens.get("id_token").and_then(Value::as_str),
+            Some("live-id")
+        );
+        assert_eq!(
+            tokens.get("account_id").and_then(Value::as_str),
+            Some("acct-live")
+        );
+        assert_eq!(
+            live_auth.get("auth_mode").and_then(Value::as_str),
+            Some("chatgpt")
+        );
+        assert!(
+            read_codex_config_text()
+                .expect("read live config")
+                .contains("gpt-5.5"),
+            "the config.toml half of the switch must still be written"
+        );
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn official_switch_with_oauth_archive_still_overwrites_live_auth() {
+        let _home = CodexTestHome::new();
+
+        write_codex_live_atomic(&oauth_live_auth(), Some("model_provider = \"openai\"\n"))
+            .expect("seed live ChatGPT login");
+
+        let archive = json!({
+            "auth_mode": "chatgpt",
+            "tokens": {
+                "id_token": "archive-id",
+                "access_token": "archive-access",
+                "refresh_token": "archive-refresh"
+            }
+        });
+        write_codex_live_for_provider(
+            "openai-official",
+            Some("official"),
+            &archive,
+            Some("model_provider = \"openai\"\n"),
+        )
+        .expect("restore an official OAuth archive");
+
+        let live_auth = read_live_auth_json();
+        assert_eq!(
+            live_auth
+                .get("tokens")
+                .and_then(|tokens| tokens.get("refresh_token"))
+                .and_then(Value::as_str),
+            Some("archive-refresh")
+        );
+        assert!(
+            live_auth.get("OPENAI_API_KEY").is_none(),
+            "a full OAuth archive replaces auth.json verbatim, stale keys included"
+        );
+        assert!(
+            live_auth.get("last_refresh").is_none(),
+            "a full OAuth archive replaces auth.json verbatim"
+        );
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn third_party_switch_never_touches_live_auth_json() {
+        let _home = CodexTestHome::new();
+
+        write_codex_live_atomic(&oauth_live_auth(), Some("model_provider = \"openai\"\n"))
+            .expect("seed live ChatGPT login");
+
+        write_codex_live_for_provider(
+            "deepseek-provider",
+            Some("cn_official"),
+            &json!({ "OPENAI_API_KEY": "sk-deepseek" }),
+            Some(DEEPSEEK_LIVE_CONFIG),
+        )
+        .expect("switch to a third-party provider");
+
+        assert_eq!(
+            read_live_auth_json(),
+            oauth_live_auth(),
+            "third-party switches must leave auth.json byte-for-byte alone"
+        );
+    }
+
+    const DEEPSEEK_LIVE_CONFIG: &str = r#"model = "deepseek-v4-flash"
+model_provider = "deepseek"
+preferred_auth_method = "apikey"
+forced_login_method = "api"
+
+[model_providers.deepseek]
+name = "deepseek"
+base_url = "https://api.deepseek.com/"
+wire_api = "responses"
+"#;
+
+    /// 切走时必须清掉上一个供应商写进 live 的 API-Key 登录强制项。
+    ///
+    /// 所有 live `config.toml` 落盘路径都是整文件重写（只有 MCP 段会从现存
+    /// 文件回捞，见 `preserve_live_codex_mcp_sections`），因此新供应商模板不
+    /// 含这两个键就等于清除。这条测试把该不变量钉住，防止将来引入按根键合并
+    /// 的写入路径后，Codex 被永久卡在 API-Key 登录模式。
+    #[test]
+    #[serial_test::serial]
+    fn switching_away_clears_forced_login_method_from_live_config() {
+        let _home = CodexTestHome::new();
+
+        write_codex_provider_live_with_catalog(
+            &json!({ "config": DEEPSEEK_LIVE_CONFIG }),
+            "deepseek-provider",
+            Some("cn_official"),
+            &json!({ "OPENAI_API_KEY": "sk-deepseek" }),
+            Some(DEEPSEEK_LIVE_CONFIG),
+        )
+        .expect("switch to DeepSeek");
+
+        let after_deepseek = read_codex_config_text().expect("read live config");
+        assert!(
+            after_deepseek.contains("forced_login_method"),
+            "DeepSeek's published contract writes the API-key login pins"
+        );
+        assert!(after_deepseek.contains("preferred_auth_method"));
+
+        let official_config = "model_provider = \"openai\"\nmodel = \"gpt-5.5\"\n";
+        write_codex_provider_live_with_catalog(
+            &json!({ "config": official_config }),
+            "openai-official",
+            Some("official"),
+            &json!({ "OPENAI_API_KEY": "sk-stored" }),
+            Some(official_config),
+        )
+        .expect("switch back to the official provider");
+
+        let after_official = read_codex_config_text().expect("read live config");
+        assert!(
+            !after_official.contains("forced_login_method"),
+            "switching away must not leave Codex pinned to API-key login: {after_official}"
+        );
+        assert!(
+            !after_official.contains("preferred_auth_method"),
+            "switching away must not leave a stale preferred_auth_method: {after_official}"
         );
     }
 }

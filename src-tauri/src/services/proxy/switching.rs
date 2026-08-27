@@ -28,6 +28,16 @@ impl ProxyService {
                 .map_err(|e| format!("构建 {app_type} 有效配置失败: {e}"))?;
 
         if matches!(app_type_enum, AppType::Codex) {
+            // 无条件消毒：备份是接管释放时 verbatim 落盘的恢复来源，而
+            // `preserve_codex_oauth_auth_in_backup` 只在现存备份带 ChatGPT 登录
+            // 材料时才会重写 config。旧版本创建的无 key 第三方 provider 仍可能
+            // 带着 `requires_openai_auth`/`env_key`，必须在进备份前剥掉。
+            crate::codex_config::strip_codex_third_party_openai_auth_from_settings(
+                provider.category.as_deref(),
+                &mut effective_settings,
+            )
+            .map_err(|e| format!("清理 {app_type} 备份配置失败: {e}"))?;
+
             let existing_backup_value = self
                 .db
                 .get_live_backup(app_type)

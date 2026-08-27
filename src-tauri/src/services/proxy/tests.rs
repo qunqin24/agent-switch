@@ -2321,6 +2321,153 @@ base_url = "https://new.example/v1"
     );
 }
 
+/// 接管中的 live 备份 auth 没有 ChatGPT 登录材料时，
+/// `preserve_codex_oauth_auth_in_backup` 会直接早退、不重写 config。
+/// 此时若热切换到旧版本创建的无 key 第三方 provider（存储配置仍带
+/// `requires_openai_auth`/`env_key`），未消毒的 config 会进备份，接管释放
+/// 时被 `write_codex_live_verbatim` 原样写回 live，Codex 就会把 ChatGPT
+/// 登录态 / shell 环境变量里的 OPENAI_API_KEY 发给第三方 base_url。
+#[tokio::test]
+#[serial]
+async fn hot_switch_codex_backup_strips_openai_auth_fields_without_oauth_backup_auth() {
+    let _home = TempHome::new();
+    crate::settings::reload_settings().expect("reload settings");
+
+    let db = Arc::new(Database::memory().expect("init db"));
+    let service = ProxyService::new(db.clone());
+
+    let current = Provider::with_id(
+        "current".to_string(),
+        "RightCode".to_string(),
+        json!({
+            "auth": {
+                "OPENAI_API_KEY": "rightcode-key"
+            },
+            "config": r#"model_provider = "rightcode"
+model = "gpt-5.4"
+
+[model_providers.rightcode]
+name = "RightCode"
+base_url = "https://rightcode.example/v1"
+wire_api = "responses"
+"#
+        }),
+        None,
+    );
+    // 旧版本模板：无 key，且带着 requires_openai_auth / env_key。
+    let mut legacy_keyless = Provider::with_id(
+        "legacy".to_string(),
+        "Legacy Vendor".to_string(),
+        json!({
+            "auth": {
+                "OPENAI_API_KEY": ""
+            },
+            "config": r#"model_provider = "custom"
+model = "gpt-5.5"
+
+[model_providers.custom]
+name = "Legacy Vendor"
+base_url = "https://legacy.example/v1"
+env_key = "OPENAI_API_KEY"
+wire_api = "responses"
+requires_openai_auth = true
+"#
+        }),
+        None,
+    );
+    legacy_keyless.category = Some("third_party".to_string());
+
+    db.save_provider("codex", &current)
+        .expect("save current provider");
+    db.save_provider("codex", &legacy_keyless)
+        .expect("save legacy provider");
+    db.set_current_provider("codex", "current")
+        .expect("set current provider");
+    crate::settings::set_current_provider(&AppType::Codex, Some("current"))
+        .expect("set local current provider");
+
+    // 现存备份的 auth 只有 API key，没有 ChatGPT OAuth 材料 —— 早退分支。
+    db.save_live_backup(
+        "codex",
+        &serde_json::to_string(&current.settings_config).expect("serialize current provider"),
+    )
+    .await
+    .expect("seed live backup");
+    assert!(
+        !crate::codex_config::codex_auth_has_oauth_login_material(
+            current.settings_config.get("auth").expect("provider auth")
+        ),
+        "this regression only reproduces when the backup auth carries no ChatGPT login"
+    );
+
+    service
+        .write_codex_live(&json!({
+            "auth": {
+                "OPENAI_API_KEY": PROXY_TOKEN_PLACEHOLDER
+            },
+            "config": r#"model_provider = "rightcode"
+model = "gpt-5.4"
+
+[model_providers.rightcode]
+name = "RightCode"
+base_url = "http://127.0.0.1:15721/v1"
+wire_api = "responses"
+"#
+        }))
+        .expect("seed taken-over Codex live config");
+
+    service
+        .hot_switch_provider("codex", "legacy")
+        .await
+        .expect("hot switch Codex provider");
+
+    let backup = db
+        .get_live_backup("codex")
+        .await
+        .expect("get live backup")
+        .expect("backup exists");
+    let stored: Value = serde_json::from_str(&backup.original_config).expect("parse backup json");
+    let backup_config = stored
+        .get("config")
+        .and_then(|v| v.as_str())
+        .expect("backup config string");
+
+    assert!(
+        !backup_config.contains("requires_openai_auth"),
+        "restore backup must not route third-party auth to the ChatGPT login: {backup_config}"
+    );
+    assert!(
+        !backup_config.contains("env_key"),
+        "restore backup must not pull third-party credentials from the environment: {backup_config}"
+    );
+
+    service
+        .restore_live_config_for_app_with_fallback(&AppType::Codex)
+        .await
+        .expect("restore Codex live config");
+
+    let live = service.read_codex_live().expect("read Codex live config");
+    let live_config = live
+        .get("config")
+        .and_then(|v| v.as_str())
+        .expect("live config string");
+    assert!(
+        !live_config.contains("requires_openai_auth") && !live_config.contains("env_key"),
+        "releasing the takeover must not restore OpenAI-auth routing for a third-party provider: {live_config}"
+    );
+
+    let parsed_live: toml::Value = toml::from_str(live_config).expect("parse live config");
+    assert_eq!(
+        parsed_live
+            .get("model_providers")
+            .and_then(|v| v.get("custom"))
+            .and_then(|v| v.get("base_url"))
+            .and_then(|v| v.as_str()),
+        Some("https://legacy.example/v1"),
+        "unrelated provider fields must survive the sanitize"
+    );
+}
+
 #[tokio::test]
 #[serial]
 async fn hot_switch_codex_provider_preserves_provider_model_provider_in_backup_and_restore() {

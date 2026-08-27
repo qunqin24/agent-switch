@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  codexConfigForcesApiKeyLogin,
   extractCodexBaseUrl,
   extractCodexExperimentalBearerToken,
   extractCodexModelName,
@@ -70,9 +71,9 @@ describe("Codex TOML utils", () => {
       "",
       "[model_providers.custom]",
       'name = "custom"',
-      "base_url = \"https://su'us.codes/v1\"",
+      'base_url = "https://su\'us.codes/v1"',
       'wire_api = "responses"',
-      'requires_openai_auth = true',
+      "requires_openai_auth = true",
       "",
     ].join("\n");
 
@@ -93,7 +94,7 @@ describe("Codex TOML utils", () => {
       'base_url = "https://old.example/v1"',
       'base_url = "https://older.example/v1"',
       'wire_api = "responses"',
-      'requires_openai_auth = true',
+      "requires_openai_auth = true",
       "",
     ].join("\n");
 
@@ -445,5 +446,66 @@ describe("Codex TOML utils", () => {
     ].join("\n");
 
     expect(extractCodexExperimentalBearerToken(input)).toBe("top-level-key");
+  });
+
+  describe("codexConfigForcesApiKeyLogin", () => {
+    it("detects the API-key login pins written by presets like DeepSeek", () => {
+      const input = [
+        'model = "deepseek-v4-flash"',
+        'model_provider = "deepseek"',
+        'preferred_auth_method = "apikey"',
+        'forced_login_method = "api"',
+        "",
+        "[model_providers.deepseek]",
+        'base_url = "https://api.deepseek.com/"',
+        "",
+      ].join("\n");
+
+      expect(codexConfigForcesApiKeyLogin(input)).toBe(true);
+    });
+
+    it("detects each pin on its own", () => {
+      expect(codexConfigForcesApiKeyLogin('forced_login_method = "api"')).toBe(
+        true,
+      );
+      expect(
+        codexConfigForcesApiKeyLogin("preferred_auth_method = 'apikey'"),
+      ).toBe(true);
+    });
+
+    it("ignores configs without the pins", () => {
+      const input = [
+        'model_provider = "openai"',
+        'model = "gpt-5.5"',
+        "",
+        "[model_providers.openai]",
+        'wire_api = "responses"',
+        "",
+      ].join("\n");
+
+      expect(codexConfigForcesApiKeyLogin(input)).toBe(false);
+      expect(codexConfigForcesApiKeyLogin("")).toBe(false);
+      expect(codexConfigForcesApiKeyLogin(undefined)).toBe(false);
+      expect(codexConfigForcesApiKeyLogin(null)).toBe(false);
+    });
+
+    it("ignores the same keys nested inside a section", () => {
+      const input = [
+        'model_provider = "vendor"',
+        "",
+        "[model_providers.vendor]",
+        'forced_login_method = "api"',
+        'preferred_auth_method = "apikey"',
+        "",
+      ].join("\n");
+
+      expect(codexConfigForcesApiKeyLogin(input)).toBe(false);
+    });
+
+    it("ignores non-apikey values", () => {
+      expect(
+        codexConfigForcesApiKeyLogin('preferred_auth_method = "chatgpt"'),
+      ).toBe(false);
+    });
   });
 });
