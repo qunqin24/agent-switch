@@ -2592,7 +2592,9 @@
     "source": {
       "omoSlim": "OMO Slim",
       "managedByOmoSlim": "OMO Slim が管理",
-      "readOnlyHint": "この Agent は OMO Slim によって管理されているため、ここでは閲覧のみ可能です。OMO Slim 設定で変更してください。"
+      "readOnlyHint": "この Agent は OMO Slim によって管理されているため、ここでは閲覧のみ可能です。OMO Slim 設定で変更してください。",
+      "builtIn": "組み込み",
+      "builtInHint": "選択したスコープで組み込みエージェントをカスタマイズします。未設定の項目は OpenCode の既定値と他の設定を継承します。リセットすると現在のスコープの上書きが削除されます。プロジェクトには引き続きグローバル設定が適用されます。"
     },
     "sections": {
       "identity": "基本情報",
@@ -2631,7 +2633,8 @@
       "promptPlaceholder": "この Agent のシステムプロンプトを入力…",
       "advanced": "高度な frontmatter フィールド",
       "advancedHint": "フォームで管理されないトップレベル項目のみ表示します。JSON オブジェクトが必要です。",
-      "restartHint": "保存後に OpenCode を再起動して Agent を再読み込みしてください。"
+      "restartHint": "保存後に OpenCode を再起動して Agent を再読み込みしてください。",
+      "builtInPromptPlaceholder": "カスタムシステムプロンプトを入力します。「既定に戻す」で組み込みプロンプトに戻せます。"
     },
     "permissions": {
       "title": "ツール権限",
@@ -2697,11 +2700,26 @@
     },
     "notifications": {
       "saved": "Agent を保存しました",
-      "deleted": "Agent を削除しました"
+      "deleted": "Agent を削除しました",
+      "reset": "組み込みエージェントを既定に戻しました。OpenCode を再起動してください。"
     },
     "delete": {
       "title": "Agent を削除",
       "message": "Agent「{{name}}」を削除しますか？Markdown ファイルも削除されます。"
+    },
+    "reset": {
+      "button": "既定に戻す",
+      "title": "組み込みエージェントを既定に戻す",
+      "message": "「{{scope}}」スコープの「{{name}}」のカスタム設定をすべて削除しますか？未保存の変更も破棄されます。他のスコープの設定は引き続き適用されます。OpenCode を再起動してください。"
+    },
+    "builtInDescriptions": {
+      "build": "開発とツール実行用の既定エージェント。",
+      "plan": "計画と分析用のエージェント。",
+      "general": "複雑な問題や複数手順のタスクを処理する汎用サブエージェント。",
+      "explore": "コードベースの検索と探索用のサブエージェント。",
+      "compaction": "コンテキストを自動圧縮する非表示のシステムエージェント。",
+      "title": "セッションタイトルを自動生成する非表示のシステムエージェント。",
+      "summary": "セッションを自動要約する非表示のシステムエージェント。"
     }
   },
   "modelTest": {

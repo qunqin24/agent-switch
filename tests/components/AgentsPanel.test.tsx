@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentsPanel } from "@/components/agents/AgentsPanel";
 import type { OpenCodeAgentDocument } from "@/lib/api/opencodeAgents";
@@ -7,6 +13,7 @@ const agentMocks = vi.hoisted(() => ({
   list: vi.fn(),
   save: vi.fn(),
   delete: vi.fn(),
+  reset: vi.fn(),
   listMcpServerIds: vi.fn(),
   open: vi.fn(),
   listModels: vi.fn(),
@@ -17,6 +24,7 @@ vi.mock("@/lib/api/opencodeAgents", () => ({
     list: (...args: unknown[]) => agentMocks.list(...args),
     save: (...args: unknown[]) => agentMocks.save(...args),
     delete: (...args: unknown[]) => agentMocks.delete(...args),
+    reset: (...args: unknown[]) => agentMocks.reset(...args),
     listMcpServerIds: () => agentMocks.listMcpServerIds(),
   },
 }));
@@ -76,6 +84,7 @@ const builtInPermissionKeys = [
 ];
 
 beforeEach(() => {
+  Element.prototype.scrollIntoView = vi.fn();
   agentMocks.list.mockReset().mockResolvedValue([explorer]);
   agentMocks.save
     .mockReset()
@@ -86,6 +95,7 @@ beforeEach(() => {
       }),
     );
   agentMocks.delete.mockReset().mockResolvedValue(undefined);
+  agentMocks.reset.mockReset().mockResolvedValue(undefined);
   agentMocks.listMcpServerIds
     .mockReset()
     .mockResolvedValue(["context7", "github"]);
@@ -102,6 +112,176 @@ beforeEach(() => {
 });
 
 describe("AgentsPanel", () => {
+  const nativePlan: OpenCodeAgentDocument = {
+    id: "plan",
+    scope: "global",
+    filePath: "",
+    frontmatter: {},
+    prompt: "",
+    builtIn: true,
+    defaultFrontmatter: { mode: "primary" },
+  };
+
+  it("preserves a deny-all permission when allowing a single built-in tool", async () => {
+    agentMocks.list.mockResolvedValue([
+      { ...nativePlan, frontmatter: { permission: "deny" } },
+    ]);
+    render(<AgentsPanel onOpenChange={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Plan/ }));
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "agents.permissions.allow" })[0],
+    );
+    fireEvent.click(screen.getByRole("button", { name: "common.save" }));
+    await waitFor(() => expect(agentMocks.save).toHaveBeenCalledTimes(1));
+    expect(agentMocks.save.mock.calls[0][1].frontmatter.permission).toEqual({
+      "*": "deny",
+      read: "allow",
+    });
+  });
+
+  it("preserves an explicit empty prompt while editing another field", async () => {
+    agentMocks.list.mockResolvedValue([
+      { ...nativePlan, hasPromptOverride: true },
+    ]);
+    render(<AgentsPanel onOpenChange={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Plan/ }));
+    fireEvent.change(
+      screen.getByPlaceholderText("agents.builtInDescriptions.plan"),
+      {
+        target: { value: "Planning agent" },
+      },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "common.save" }));
+    await waitFor(() => expect(agentMocks.save).toHaveBeenCalledTimes(1));
+    expect(agentMocks.save.mock.calls[0][1]).toMatchObject({
+      prompt: "",
+      hasPromptOverride: true,
+    });
+  });
+
+  it("labels built-in agents and edits them without overwriting inherited defaults", async () => {
+    agentMocks.list.mockResolvedValue([nativePlan]);
+    render(<AgentsPanel onOpenChange={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Plan/ }));
+    expect(screen.getAllByText("agents.source.builtIn")).toHaveLength(2);
+    expect(screen.getByDisplayValue("plan")).toBeDisabled();
+    expect(
+      screen.queryByRole("button", { name: "common.delete" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "agents.mode.primary" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    const inherit = screen.getAllByRole("button", {
+      name: "agents.permissions.inherit",
+    });
+    expect(inherit[0]).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(screen.getAllByRole("combobox")[0]);
+    fireEvent.click(
+      await screen.findByRole("option", { name: /DeepSeek V4 Flash/ }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "common.save" }));
+    await waitFor(() => expect(agentMocks.save).toHaveBeenCalledTimes(1));
+    const [location, saved, originalId] = agentMocks.save.mock.calls[0];
+    expect(location).toEqual({ scope: "global", projectDir: undefined });
+    expect(originalId).toBe("plan");
+    expect(saved.frontmatter).toEqual({
+      model: "opencode-go/deepseek-v4-flash",
+    });
+    expect(saved.prompt).toBe("");
+  });
+
+  it("resets built-in overrides and keeps the agent selected", async () => {
+    agentMocks.list.mockResolvedValue([
+      {
+        ...nativePlan,
+        frontmatter: { description: "Custom plan" },
+        prompt: "Custom prompt",
+      },
+    ]);
+    render(<AgentsPanel onOpenChange={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Plan/ }));
+    fireEvent.change(screen.getByDisplayValue("Custom plan"), {
+      target: { value: "Unsaved plan" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "agents.reset.button" }),
+    );
+    fireEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "common.cancel",
+      }),
+    );
+    expect(agentMocks.reset).not.toHaveBeenCalled();
+    expect(screen.getByDisplayValue("Unsaved plan")).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "agents.reset.button" }),
+    );
+    agentMocks.list.mockResolvedValue([nativePlan]);
+    fireEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "agents.reset.button",
+      }),
+    );
+    await waitFor(() =>
+      expect(agentMocks.reset).toHaveBeenCalledWith(
+        { scope: "global", projectDir: undefined },
+        "plan",
+      ),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByDisplayValue("Unsaved plan"),
+      ).not.toBeInTheDocument(),
+    );
+    expect(screen.getByDisplayValue("plan")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "common.save" })).toBeDisabled();
+    expect(agentMocks.delete).not.toHaveBeenCalled();
+  });
+
+  it("keeps the edited draft if resetting fails", async () => {
+    agentMocks.list.mockResolvedValue([nativePlan]);
+    agentMocks.reset.mockRejectedValue(new Error("Read-only filesystem"));
+    render(<AgentsPanel onOpenChange={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Plan/ }));
+    fireEvent.change(
+      screen.getByPlaceholderText("agents.form.builtInPromptPlaceholder"),
+      { target: { value: "My plan prompt" } },
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "agents.reset.button" }),
+    );
+    fireEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "agents.reset.button",
+      }),
+    );
+    await waitFor(() => expect(agentMocks.reset).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "common.save" })).toBeEnabled(),
+    );
+    expect(screen.getByDisplayValue("My plan prompt")).toBeInTheDocument();
+  });
+
+  it("persists explicit false when unhiding a hidden built-in agent", async () => {
+    agentMocks.list.mockResolvedValue([
+      {
+        ...nativePlan,
+        id: "title",
+        defaultFrontmatter: { mode: "primary", hidden: true, temperature: 0.5 },
+      },
+    ]);
+    render(<AgentsPanel onOpenChange={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Title/ }));
+    fireEvent.click(screen.getAllByRole("switch")[0]);
+    fireEvent.click(screen.getByRole("button", { name: "common.save" }));
+    await waitFor(() => expect(agentMocks.save).toHaveBeenCalledTimes(1));
+    expect(agentMocks.save.mock.calls[0][1].frontmatter).toEqual({
+      hidden: false,
+    });
+  });
+
   it("loads native agents and preserves advanced fields when saving", async () => {
     render(<AgentsPanel onOpenChange={vi.fn()} />);
 

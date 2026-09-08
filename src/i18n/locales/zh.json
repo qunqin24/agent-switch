@@ -2592,7 +2592,9 @@
     "source": {
       "omoSlim": "OMO Slim",
       "managedByOmoSlim": "由 OMO Slim 管理",
-      "readOnlyHint": "此 Agent 由 OMO Slim 管理，在这里仅供查看。请在 OMO Slim 配置中调整它。"
+      "readOnlyHint": "此 Agent 由 OMO Slim 管理，在这里仅供查看。请在 OMO Slim 配置中调整它。",
+      "builtIn": "内置",
+      "builtInHint": "在当前作用域自定义此内置 Agent，未设置的字段继承 OpenCode 默认值及其他配置层。恢复默认会清除当前作用域的覆盖配置；项目仍会继承全局设置。"
     },
     "sections": {
       "identity": "基本信息",
@@ -2631,7 +2633,8 @@
       "promptPlaceholder": "写入该 Agent 的系统提示词…",
       "advanced": "高级 frontmatter 字段",
       "advancedHint": "这里仅显示尚未被表单管理的顶层字段，必须是 JSON 对象。",
-      "restartHint": "保存后请重启 OpenCode，让 Agent 定义完整重载。"
+      "restartHint": "保存后请重启 OpenCode，让 Agent 定义完整重载。",
+      "builtInPromptPlaceholder": "填写自定义系统提示词；点击“恢复默认”可重新使用内置提示词。"
     },
     "permissions": {
       "title": "工具权限",
@@ -2697,11 +2700,26 @@
     },
     "notifications": {
       "saved": "Agent 已保存",
-      "deleted": "Agent 已删除"
+      "deleted": "Agent 已删除",
+      "reset": "已恢复内置 Agent 默认配置，请重启 OpenCode 生效。"
     },
     "delete": {
       "title": "删除 Agent",
       "message": "确定删除 Agent“{{name}}”吗？此操作会删除对应的 Markdown 文件。"
+    },
+    "reset": {
+      "button": "恢复默认",
+      "title": "恢复内置 Agent 默认配置",
+      "message": "确定清除“{{name}}”在“{{scope}}”范围内的全部自定义配置吗？未保存的修改也会丢弃，其他作用域的配置仍会生效。请重启 OpenCode 以重新加载 Agent。"
+    },
+    "builtInDescriptions": {
+      "build": "用于开发和执行工具的默认 Agent。",
+      "plan": "用于规划与分析的 Agent。",
+      "general": "处理复杂问题和多步骤任务的通用子 Agent。",
+      "explore": "用于搜索和探索代码库的子 Agent。",
+      "compaction": "自动压缩上下文的隐藏系统 Agent。",
+      "title": "自动生成会话标题的隐藏系统 Agent。",
+      "summary": "自动总结会话的隐藏系统 Agent。"
     }
   },
   "modelTest": {

@@ -11,6 +11,7 @@ import {
   HelpCircle,
   Plus,
   RefreshCw,
+  RotateCcw,
   Search,
   Trash2,
 } from "lucide-react";
@@ -146,8 +147,17 @@ const asRecord = (value: unknown): Record<string, unknown> =>
     : {};
 
 const toDraft = (agent: OpenCodeAgentDocument): AgentDraft => {
-  const frontmatter = asRecord(agent.frontmatter);
-  const permission = asRecord(frontmatter.permission);
+  const frontmatter = {
+    ...asRecord(agent.defaultFrontmatter),
+    ...asRecord(agent.frontmatter),
+  };
+  const rawPermission = frontmatter.permission;
+  const permission =
+    rawPermission === "allow" ||
+    rawPermission === "ask" ||
+    rawPermission === "deny"
+      ? { "*": rawPermission }
+      : asRecord(rawPermission);
   const permissions: Record<string, PermissionAction> = {};
   const permissionExtras: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(permission)) {
@@ -255,6 +265,37 @@ const draftFingerprint = (draft: AgentDraft) =>
     prompt: draft.prompt,
     advancedJson: draft.advancedJson,
   });
+
+// Native defaults are only displayed. Persist fields the user actually changed
+// so editing a model does not pin the native prompt, mode or permission rules.
+const buildBuiltInDocument = (
+  draft: AgentDraft,
+  scope: OpenCodeAgentScope,
+  agent: OpenCodeAgentDocument,
+): OpenCodeAgentDocument => {
+  const document = buildDocument(draft, scope);
+  const previous = buildDocument(toDraft(agent), scope);
+  const fields = { ...agent.frontmatter };
+  for (const key of new Set([
+    ...Object.keys(previous.frontmatter),
+    ...Object.keys(document.frontmatter),
+  ])) {
+    if (
+      JSON.stringify(previous.frontmatter[key]) ===
+      JSON.stringify(document.frontmatter[key])
+    )
+      continue;
+    if (key in document.frontmatter) fields[key] = document.frontmatter[key];
+    else if (key === "hidden" || key === "disable") fields[key] = false;
+    else delete fields[key];
+  }
+  return {
+    ...document,
+    frontmatter: fields,
+    hasPromptOverride:
+      agent.hasPromptOverride === true || draft.prompt !== agent.prompt,
+  };
+};
 
 function ModelPicker({
   value,
@@ -463,6 +504,9 @@ export function AgentsPanel({}: { onOpenChange: (open: boolean) => void }) {
   const [listScrolled, setListScrolled] = useState(false);
   const [deleteTarget, setDeleteTarget] =
     useState<OpenCodeAgentDocument | null>(null);
+  const [resetTarget, setResetTarget] = useState<OpenCodeAgentDocument | null>(
+    null,
+  );
 
   const location = useMemo(
     () => ({ scope, projectDir: scope === "project" ? projectDir : undefined }),
@@ -558,6 +602,7 @@ export function AgentsPanel({}: { onOpenChange: (open: boolean) => void }) {
     ? agents.find((agent) => agent.id === draft.originalId)
     : undefined;
   const isOmoSlimManaged = selectedAgent?.managedBy === "omo-slim";
+  const isBuiltIn = selectedAgent?.builtIn === true;
 
   const chooseProject = async () => {
     const selected = await open({ directory: true, multiple: false });
@@ -570,13 +615,16 @@ export function AgentsPanel({}: { onOpenChange: (open: boolean) => void }) {
 
   const save = async () => {
     if (!draft) return;
-    if (!draft.id.trim() || !draft.description.trim()) {
+    if (!draft.id.trim() || (!isBuiltIn && !draft.description.trim())) {
       toast.error(t("agents.validation.required"));
       return;
     }
     setSaving(true);
     try {
-      const document = buildDocument(draft, scope);
+      const document =
+        isBuiltIn && selectedAgent
+          ? buildBuiltInDocument(draft, scope, selectedAgent)
+          : buildDocument(draft, scope);
       const saved = await opencodeAgentsApi.save(
         location,
         document,
@@ -602,6 +650,21 @@ export function AgentsPanel({}: { onOpenChange: (open: boolean) => void }) {
       toast.success(t("agents.notifications.deleted"));
     } catch (error) {
       toast.error(extractErrorMessage(error));
+    }
+  };
+
+  const confirmReset = async () => {
+    if (!resetTarget || saving) return;
+    setSaving(true);
+    setResetTarget(null);
+    try {
+      await opencodeAgentsApi.reset(location, resetTarget.id);
+      await reload();
+      toast.success(t("agents.notifications.reset"));
+    } catch (error) {
+      toast.error(extractErrorMessage(error));
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -663,12 +726,14 @@ export function AgentsPanel({}: { onOpenChange: (open: boolean) => void }) {
     ) {
       return undefined;
     }
-    const actions = PERMISSION_KEYS.map(
-      (key) => draft.permissions[key] ?? "ask",
+    const actions: PermissionSelection[] = PERMISSION_KEYS.map(
+      (key) => draft.permissions[key] ?? (isBuiltIn ? "inherit" : "ask"),
     );
     const first = actions[0];
-    return actions.every((action) => action === first) ? first : undefined;
-  }, [draft]);
+    return first !== "inherit" && actions.every((action) => action === first)
+      ? first
+      : undefined;
+  }, [draft, isBuiltIn]);
 
   const activeMcpBulkAction = useMemo(() => {
     if (!draft || mcpServerIds.length === 0) return undefined;
@@ -743,6 +808,7 @@ export function AgentsPanel({}: { onOpenChange: (open: boolean) => void }) {
         <div className="flex min-w-0 items-center gap-2">
           <SegmentedControl
             value={scope}
+            disabled={saving}
             options={scopeOptions}
             onChange={(value) => {
               setScope(value);
@@ -757,6 +823,7 @@ export function AgentsPanel({}: { onOpenChange: (open: boolean) => void }) {
               size="sm"
               className="h-8 max-w-72"
               onClick={chooseProject}
+              disabled={saving}
             >
               <FolderOpen className="mr-2 h-3.5 w-3.5 shrink-0" />
               <span className="truncate">
@@ -776,6 +843,7 @@ export function AgentsPanel({}: { onOpenChange: (open: boolean) => void }) {
               void loadMcpServerIds();
             }}
             title={t("common.refresh")}
+            disabled={saving}
           >
             <RefreshCw
               className={cn(
@@ -789,7 +857,7 @@ export function AgentsPanel({}: { onOpenChange: (open: boolean) => void }) {
             size="sm"
             className="h-8"
             onClick={createAgent}
-            disabled={scope === "project" && !projectDir}
+            disabled={saving || (scope === "project" && !projectDir)}
           >
             <Plus className="mr-1.5 h-4 w-4" />
             {t("agents.add")}
@@ -864,9 +932,12 @@ export function AgentsPanel({}: { onOpenChange: (open: boolean) => void }) {
             ) : (
               <div className="py-1">
                 {filteredAgents.map((agent) => {
-                  const meta = asRecord(agent.frontmatter);
+                  const meta = {
+                    ...asRecord(agent.defaultFrontmatter),
+                    ...asRecord(agent.frontmatter),
+                  };
                   const active = draft?.originalId === agent.id;
-                  const mode = String(meta.mode ?? "subagent");
+                  const mode = String(meta.mode ?? "all");
                   const modelLabel =
                     typeof meta.model === "string" && meta.model
                       ? meta.model
@@ -881,6 +952,7 @@ export function AgentsPanel({}: { onOpenChange: (open: boolean) => void }) {
                     <button
                       type="button"
                       key={agent.id}
+                      disabled={saving}
                       onClick={() => selectDraft(toDraft(agent))}
                       className={cn(
                         "relative flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors",
@@ -894,7 +966,7 @@ export function AgentsPanel({}: { onOpenChange: (open: boolean) => void }) {
                       )}
                       <AgentColorSwatch id={agent.id} color={color} />
                       <span className="min-w-0 flex-1">
-                        <span className="flex items-center gap-1.5">
+                        <span className="flex flex-wrap items-center gap-1.5">
                           <span className="truncate text-[13px] font-medium">
                             {displayAgentId(agent.id)}
                           </span>
@@ -904,6 +976,14 @@ export function AgentsPanel({}: { onOpenChange: (open: boolean) => void }) {
                           >
                             {t(`agents.mode.${mode}`, { defaultValue: mode })}
                           </Badge>
+                          {agent.builtIn && (
+                            <Badge
+                              variant="secondary"
+                              className="shrink-0 whitespace-nowrap"
+                            >
+                              {t("agents.source.builtIn")}
+                            </Badge>
+                          )}
                           {isOmoSlimManaged && (
                             <Badge
                               variant="outline"
@@ -990,6 +1070,14 @@ export function AgentsPanel({}: { onOpenChange: (open: boolean) => void }) {
                         ? displayAgentId(draft.originalId)
                         : t("agents.newAgent")}
                     </h2>
+                    {isBuiltIn && (
+                      <Badge
+                        variant="secondary"
+                        className="shrink-0 whitespace-nowrap"
+                      >
+                        {t("agents.source.builtIn")}
+                      </Badge>
+                    )}
                     {isOmoSlimManaged && (
                       <Badge
                         variant="outline"
@@ -1009,7 +1097,20 @@ export function AgentsPanel({}: { onOpenChange: (open: boolean) => void }) {
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
-                  {draft.originalId && !isOmoSlimManaged && (
+                  {isBuiltIn && !isOmoSlimManaged && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="[&>svg]:size-4 [&>svg]:shrink-0"
+                      disabled={saving}
+                      onClick={() => setResetTarget(selectedAgent ?? null)}
+                    >
+                      <RotateCcw data-icon="inline-start" aria-hidden="true" />
+                      {t("agents.reset.button")}
+                    </Button>
+                  )}
+                  {draft.originalId && !isOmoSlimManaged && !isBuiltIn && (
                     <Button
                       type="button"
                       variant="ghost"
@@ -1055,8 +1156,14 @@ export function AgentsPanel({}: { onOpenChange: (open: boolean) => void }) {
                     </SettingsNote>
                   )}
 
+                  {isBuiltIn && (
+                    <SettingsNote variant="info">
+                      {t("agents.source.builtInHint")}
+                    </SettingsNote>
+                  )}
+
                   <fieldset
-                    disabled={isOmoSlimManaged}
+                    disabled={isOmoSlimManaged || saving}
                     className="space-y-5 border-0 p-0 disabled:opacity-70"
                   >
                     <SettingSection title={t("agents.sections.identity")} inset>
@@ -1067,6 +1174,7 @@ export function AgentsPanel({}: { onOpenChange: (open: boolean) => void }) {
                         >
                           <Input
                             id="agent-id"
+                            disabled={isBuiltIn}
                             value={draft.id}
                             onChange={(event) =>
                               updateDraft("id", event.target.value)
@@ -1081,6 +1189,13 @@ export function AgentsPanel({}: { onOpenChange: (open: boolean) => void }) {
                         >
                           <Textarea
                             id="agent-description"
+                            placeholder={
+                              isBuiltIn
+                                ? t(
+                                    `agents.builtInDescriptions.${draft.originalId}`,
+                                  )
+                                : undefined
+                            }
                             value={draft.description}
                             onChange={(event) =>
                               updateDraft("description", event.target.value)
@@ -1311,14 +1426,30 @@ export function AgentsPanel({}: { onOpenChange: (open: boolean) => void }) {
                               }
                             >
                               <SegmentedControl
-                                value={draft.permissions[key] ?? "ask"}
-                                options={permissionOptions}
-                                onChange={(action) =>
-                                  updateDraft("permissions", {
-                                    ...draft.permissions,
-                                    [key]: action,
-                                  })
+                                value={
+                                  draft.permissions[key] ??
+                                  (isBuiltIn ? "inherit" : "ask")
                                 }
+                                options={
+                                  isBuiltIn
+                                    ? mcpPermissionOptions
+                                    : permissionOptions
+                                }
+                                onChange={(action: PermissionSelection) => {
+                                  const permissions = { ...draft.permissions };
+                                  const permissionExtras = {
+                                    ...draft.permissionExtras,
+                                  };
+                                  delete permissionExtras[key];
+                                  if (action === "inherit")
+                                    delete permissions[key];
+                                  else permissions[key] = action;
+                                  setDraft({
+                                    ...draft,
+                                    permissions,
+                                    permissionExtras,
+                                  });
+                                }}
                               />
                             </SettingRow>
                           );
@@ -1395,7 +1526,11 @@ export function AgentsPanel({}: { onOpenChange: (open: boolean) => void }) {
                           updateDraft("prompt", event.target.value)
                         }
                         className="min-h-[240px] font-mono text-[12.5px] leading-6"
-                        placeholder={t("agents.form.promptPlaceholder")}
+                        placeholder={t(
+                          isBuiltIn
+                            ? "agents.form.builtInPromptPlaceholder"
+                            : "agents.form.promptPlaceholder",
+                        )}
                       />
                     </SettingSection>
 
@@ -1439,6 +1574,17 @@ export function AgentsPanel({}: { onOpenChange: (open: boolean) => void }) {
         </section>
       </div>
 
+      <ConfirmDialog
+        isOpen={Boolean(resetTarget)}
+        title={t("agents.reset.title")}
+        message={t("agents.reset.message", {
+          name: resetTarget?.id,
+          scope: t(`agents.scope.${scope}`),
+        })}
+        confirmText={t("agents.reset.button")}
+        onConfirm={() => void confirmReset()}
+        onCancel={() => setResetTarget(null)}
+      />
       <ConfirmDialog
         isOpen={Boolean(deleteTarget)}
         title={t("agents.delete.title")}

@@ -2564,7 +2564,9 @@
     "source": {
       "omoSlim": "OMO Slim",
       "managedByOmoSlim": "由 OMO Slim 管理",
-      "readOnlyHint": "此 Agent 由 OMO Slim 管理，在這裡僅供查看。請在 OMO Slim 設定中調整它。"
+      "readOnlyHint": "此 Agent 由 OMO Slim 管理，在這裡僅供查看。請在 OMO Slim 設定中調整它。",
+      "builtIn": "內建",
+      "builtInHint": "在目前範圍自訂此內建 Agent，未設定的欄位繼承 OpenCode 預設值及其他設定層。還原預設會清除目前範圍的覆寫設定；專案仍會繼承全域設定。"
     },
     "sections": {
       "identity": "基本資訊",
@@ -2603,7 +2605,8 @@
       "promptPlaceholder": "寫入此 Agent 的系統提示詞…",
       "advanced": "進階 frontmatter 欄位",
       "advancedHint": "僅顯示表單未管理的頂層欄位，必須是 JSON 物件。",
-      "restartHint": "儲存後請重新啟動 OpenCode 以完整載入 Agent。"
+      "restartHint": "儲存後請重新啟動 OpenCode 以完整載入 Agent。",
+      "builtInPromptPlaceholder": "填寫自訂系統提示詞；點選「還原預設」可重新使用內建提示詞。"
     },
     "permissions": {
       "title": "工具權限",
@@ -2669,11 +2672,26 @@
     },
     "notifications": {
       "saved": "Agent 已儲存",
-      "deleted": "Agent 已刪除"
+      "deleted": "Agent 已刪除",
+      "reset": "已還原內建 Agent 預設設定，請重新啟動 OpenCode。"
     },
     "delete": {
       "title": "刪除 Agent",
       "message": "確定刪除 Agent「{{name}}」嗎？對應的 Markdown 檔案將被移除。"
+    },
+    "reset": {
+      "button": "還原預設",
+      "title": "還原內建 Agent 預設設定",
+      "message": "確定清除「{{name}}」在「{{scope}}」範圍內的所有自訂設定嗎？未儲存的修改也會捨棄，其他範圍的設定仍會生效。請重新啟動 OpenCode 以重新載入 Agent。"
+    },
+    "builtInDescriptions": {
+      "build": "用於開發和執行工具的預設 Agent。",
+      "plan": "用於規劃與分析的 Agent。",
+      "general": "處理複雜問題和多步驟任務的通用子 Agent。",
+      "explore": "用於搜尋和探索程式碼庫的子 Agent。",
+      "compaction": "自動壓縮上下文的隱藏系統 Agent。",
+      "title": "自動產生工作階段標題的隱藏系統 Agent。",
+      "summary": "自動總結工作階段的隱藏系統 Agent。"
     }
   },
   "modelTest": {

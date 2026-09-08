@@ -2592,7 +2592,9 @@
     "source": {
       "omoSlim": "OMO Slim",
       "managedByOmoSlim": "Managed by OMO Slim",
-      "readOnlyHint": "This Agent is managed by OMO Slim and is read-only here. Adjust it in the OMO Slim configuration."
+      "readOnlyHint": "This Agent is managed by OMO Slim and is read-only here. Adjust it in the OMO Slim configuration.",
+      "builtIn": "Built-in",
+      "builtInHint": "Customize this built-in agent in the selected scope. Unset fields inherit OpenCode defaults and other configuration layers. Reset removes this scope’s overrides; global settings still apply to projects."
     },
     "sections": {
       "identity": "Identity",
@@ -2631,7 +2633,8 @@
       "promptPlaceholder": "Write the system prompt for this agent…",
       "advanced": "Advanced frontmatter fields",
       "advancedHint": "Only top-level fields not managed by this form appear here. Must be a JSON object.",
-      "restartHint": "Restart OpenCode after saving to fully reload the agent definition."
+      "restartHint": "Restart OpenCode after saving to fully reload the agent definition.",
+      "builtInPromptPlaceholder": "Enter a custom system prompt. Restore defaults to use the built-in prompt again."
     },
     "permissions": {
       "title": "Tool permissions",
@@ -2697,11 +2700,26 @@
     },
     "notifications": {
       "saved": "Agent saved",
-      "deleted": "Agent deleted"
+      "deleted": "Agent deleted",
+      "reset": "Built-in agent defaults restored. Restart OpenCode to apply."
     },
     "delete": {
       "title": "Delete agent",
       "message": "Delete agent “{{name}}”? Its Markdown file will be removed."
+    },
+    "reset": {
+      "button": "Restore defaults",
+      "title": "Restore built-in agent defaults",
+      "message": "Remove all custom settings for “{{name}}” in the {{scope}} scope? Unsaved changes will also be discarded. Other scopes remain in effect. Restart OpenCode to reload the agent."
+    },
+    "builtInDescriptions": {
+      "build": "Default agent for development and tool execution.",
+      "plan": "Planning and analysis agent.",
+      "general": "General-purpose subagent for complex, multi-step tasks.",
+      "explore": "Subagent for searching and exploring codebases.",
+      "compaction": "Hidden system agent for compacting context.",
+      "title": "Hidden system agent for generating session titles.",
+      "summary": "Hidden system agent for summarizing sessions."
     }
   },
   "modelTest": {

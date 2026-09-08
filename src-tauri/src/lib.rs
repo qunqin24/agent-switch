@@ -1527,6 +1527,7 @@ pub fn run() {
             commands::list_opencode_mcp_server_ids,
             commands::save_opencode_agent,
             commands::delete_opencode_agent,
+            commands::reset_opencode_agent,
             // Workspace files (OpenClaw)
             commands::read_workspace_file,
             commands::write_workspace_file,

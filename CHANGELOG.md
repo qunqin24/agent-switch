@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.17.3] - 2026-09-08
+
+### Added
+
+- OpenCode Agent 管理新增 7 个核心内置 Agent，支持在全局与项目范围内编辑，并显示“内置”标识。
+- 内置 Agent 新增“恢复默认”按钮，清除当前作用域的自定义配置；项目恢复后仍继承全局设置。
+
+### Fixed
+
+- 编辑内置 Agent 时仅保存修改的字段，保留 OpenCode 自身的默认提示词、权限和动态规则；兼容已有 JSON、JSONC 与 Markdown 配置。
+- 补齐内置 Agent 管理的简体中文、繁体中文、英文及日文文案，修正“恢复默认”按钮图标尺寸。
+
 ## [3.17.2] - 2026-08-27
 
 ### Added

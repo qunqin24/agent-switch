@@ -8,7 +8,10 @@ export interface OpenCodeAgentDocument {
   filePath: string;
   frontmatter: Record<string, unknown>;
   prompt: string;
+  hasPromptOverride?: boolean;
   lastModified?: number | null;
+  builtIn?: boolean;
+  defaultFrontmatter?: Record<string, unknown> | null;
   managedBy?: "omo-slim" | null;
 }
 
@@ -39,6 +42,10 @@ export const opencodeAgentsApi = {
       agent,
       originalId,
     });
+  },
+
+  reset(location: AgentLocation, id: string): Promise<void> {
+    return invoke("reset_opencode_agent", { ...location, id });
   },
 
   delete(location: AgentLocation, id: string): Promise<void> {

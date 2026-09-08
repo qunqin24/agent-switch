@@ -1,3 +1,5 @@
+mod builtin;
+
 use crate::config::atomic_write;
 use crate::error::AppError;
 use crate::opencode_config::get_opencode_dir;
@@ -14,8 +16,14 @@ pub struct OpenCodeAgentDocument {
     pub file_path: String,
     pub frontmatter: Value,
     pub prompt: String,
+    #[serde(default)]
+    pub has_prompt_override: bool,
     pub last_modified: Option<i64>,
     pub managed_by: Option<String>,
+    #[serde(default)]
+    pub built_in: bool,
+    #[serde(default)]
+    pub default_frontmatter: Option<Value>,
 }
 
 const OMO_SLIM_SOURCE: &str = "omo-slim";
@@ -168,8 +176,11 @@ fn list_agents_in_dir(
                 file_path: path.to_string_lossy().to_string(),
                 frontmatter,
                 prompt,
+                has_prompt_override: true,
                 last_modified: file_modified_millis(&path),
                 managed_by: None,
+                built_in: false,
+                default_frontmatter: None,
             })
         })
         .collect()
@@ -213,6 +224,13 @@ fn save_agent_in_dir(
     if let Some(original_id) = original_id {
         validate_agent_id(original_id)?;
     }
+    if builtin::defaults(&agent.id).is_some()
+        || original_id.is_some_and(|id| builtin::defaults(id).is_some())
+    {
+        return Err(AppError::InvalidInput(
+            "Built-in Agent IDs cannot be created or renamed".into(),
+        ));
+    }
     std::fs::create_dir_all(agents_dir).map_err(|error| AppError::io(agents_dir, error))?;
 
     let target_path = agents_dir.join(format!("{}.md", agent.id));
@@ -247,8 +265,11 @@ fn save_agent_in_dir(
         file_path: target_path.to_string_lossy().to_string(),
         frontmatter,
         prompt,
+        has_prompt_override: true,
         last_modified: file_modified_millis(&target_path),
         managed_by: None,
+        built_in: false,
+        default_frontmatter: None,
     })
 }
 
@@ -276,7 +297,13 @@ pub async fn list_opencode_agents(
     #[allow(non_snake_case)] projectDir: Option<String>,
 ) -> Result<Vec<OpenCodeAgentDocument>, String> {
     let agents_dir = resolve_agents_dir(&scope, projectDir.as_deref()).map_err(String::from)?;
-    let mut agents = list_agents_in_dir(&agents_dir, &scope).map_err(String::from)?;
+    let mut agents = builtin::list(&agents_dir, &scope).map_err(String::from)?;
+    agents.extend(
+        list_agents_in_dir(&agents_dir, &scope)
+            .map_err(String::from)?
+            .into_iter()
+            .filter(|agent| builtin::defaults(&agent.id).is_none()),
+    );
     let managed_ids = OmoService::slim_managed_agent_ids();
     mark_managed_agents(&mut agents, &scope, &managed_ids);
     Ok(agents)
@@ -302,6 +329,17 @@ pub async fn save_opencode_agent(
     if let Some(original_id) = originalId.as_deref() {
         ensure_agent_mutable(&scope, original_id, &managed_ids).map_err(String::from)?;
     }
+    if builtin::defaults(&agent.id).is_some() {
+        if originalId.as_deref() != Some(agent.id.as_str()) {
+            return Err("Built-in Agent IDs cannot be created or renamed".into());
+        }
+        builtin::write(&agents_dir, &scope, &agent.id, Some(&agent)).map_err(String::from)?;
+        return builtin::list(&agents_dir, &scope)
+            .map_err(String::from)?
+            .into_iter()
+            .find(|item| item.id == agent.id)
+            .ok_or_else(|| "Built-in Agent not found".into());
+    }
     save_agent_in_dir(&agents_dir, &scope, agent, originalId.as_deref()).map_err(String::from)
 }
 
@@ -314,7 +352,22 @@ pub async fn delete_opencode_agent(
     let agents_dir = resolve_agents_dir(&scope, projectDir.as_deref()).map_err(String::from)?;
     let managed_ids = OmoService::slim_managed_agent_ids();
     ensure_agent_mutable(&scope, &id, &managed_ids).map_err(String::from)?;
+    if builtin::defaults(&id).is_some() {
+        return Err("Built-in Agents cannot be deleted; restore defaults instead".into());
+    }
     delete_agent_in_dir(&agents_dir, &id).map_err(String::from)
+}
+
+#[tauri::command]
+pub async fn reset_opencode_agent(
+    scope: String,
+    #[allow(non_snake_case)] projectDir: Option<String>,
+    id: String,
+) -> Result<(), String> {
+    let agents_dir = resolve_agents_dir(&scope, projectDir.as_deref()).map_err(String::from)?;
+    ensure_agent_mutable(&scope, &id, &OmoService::slim_managed_agent_ids())
+        .map_err(String::from)?;
+    builtin::write(&agents_dir, &scope, &id, None).map_err(String::from)
 }
 
 #[cfg(test)]
@@ -350,8 +403,11 @@ mod tests {
                 "model": "openai/gpt-5.6"
             }),
             prompt: "Review carefully.".into(),
+            has_prompt_override: true,
             last_modified: None,
             managed_by: None,
+            built_in: false,
+            default_frontmatter: None,
         };
         save_agent_in_dir(&agents_dir, "global", agent.clone(), None).unwrap();
 
@@ -393,8 +449,11 @@ mod tests {
                 "mode": "subagent"
             }),
             prompt: "Original prompt.".into(),
+            has_prompt_override: true,
             last_modified: None,
             managed_by: None,
+            built_in: false,
+            default_frontmatter: None,
         };
         save_agent_in_dir(&agents_dir, "global", original, None).unwrap();
 
@@ -407,8 +466,11 @@ mod tests {
                 "mode": "subagent"
             }),
             prompt: "Replacement prompt.".into(),
+            has_prompt_override: true,
             last_modified: None,
             managed_by: None,
+            built_in: false,
+            default_frontmatter: None,
         };
         let error = save_agent_in_dir(&agents_dir, "global", duplicate, None).unwrap_err();
 
@@ -428,8 +490,11 @@ mod tests {
             file_path: String::new(),
             frontmatter: json!({}),
             prompt: String::new(),
+            has_prompt_override: true,
             last_modified: None,
             managed_by: None,
+            built_in: false,
+            default_frontmatter: None,
         }];
 
         mark_managed_agents(&mut agents, "global", &managed_ids);
