@@ -15,7 +15,7 @@ use tokio::time::{timeout, Duration};
 
 use crate::app_config::AppType;
 
-const PROVIDED_SKILL_DISCOVERY_TIMEOUT: Duration = Duration::from_secs(15);
+const PROVIDED_SKILL_DISCOVERY_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -52,6 +52,35 @@ struct OpenCodeSkillRecord {
     #[serde(default)]
     description: Option<String>,
     location: String,
+}
+
+fn parse_opencode_v2_skill_records(output: &[u8]) -> Result<Vec<OpenCodeSkillRecord>> {
+    let response: serde_json::Value =
+        serde_json::from_slice(output).context("OpenCode returned invalid V2 Skill data")?;
+    let data = response
+        .get("data")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| anyhow!("OpenCode returned a Skill response without data"))?;
+    data.iter()
+        .map(|skill| {
+            Ok(OpenCodeSkillRecord {
+                name: skill
+                    .get("name")
+                    .and_then(serde_json::Value::as_str)
+                    .ok_or_else(|| anyhow!("OpenCode Skill has no name"))?
+                    .to_string(),
+                description: skill
+                    .get("description")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string),
+                location: skill
+                    .get("path")
+                    .and_then(serde_json::Value::as_str)
+                    .ok_or_else(|| anyhow!("OpenCode Skill has no path"))?
+                    .to_string(),
+            })
+        })
+        .collect()
 }
 
 #[derive(Debug, Deserialize)]
@@ -191,6 +220,7 @@ fn list_gemini_builtin_skills() -> Vec<CliProvidedSkill> {
 fn plugin_spec_from_value(value: &serde_json::Value) -> Option<&str> {
     value
         .as_str()
+        .or_else(|| value.get("package").and_then(serde_json::Value::as_str))
         .or_else(|| value.as_array()?.first()?.as_str())
         .map(str::trim)
         .filter(|value| !value.is_empty())
@@ -294,10 +324,9 @@ fn opencode_plugins_from_config(
     config: &serde_json::Value,
     config_dir: &Path,
 ) -> Vec<OpenCodePlugin> {
-    config
-        .get("plugin")
-        .and_then(serde_json::Value::as_array)
+    ["plugins"]
         .into_iter()
+        .filter_map(|key| config.get(key).and_then(serde_json::Value::as_array))
         .flatten()
         .filter_map(plugin_spec_from_value)
         .filter_map(|spec| {
@@ -327,6 +356,14 @@ fn record_directory(record: &OpenCodeSkillRecord) -> String {
     }
 
     let path = Path::new(&record.location);
+    if path.extension().and_then(|extension| extension.to_str()) == Some("md")
+        && path.file_name().and_then(|name| name.to_str()) != Some("SKILL.md")
+    {
+        return path
+            .file_stem()
+            .map(|stem| stem.to_string_lossy().to_string())
+            .unwrap_or_else(|| record.name.clone());
+    }
     let directory_path = if path.file_name().and_then(|name| name.to_str()) == Some("SKILL.md") {
         path.parent().unwrap_or(path)
     } else {
@@ -341,7 +378,7 @@ fn record_directory(record: &OpenCodeSkillRecord) -> String {
 
 fn record_skill_file(record: &OpenCodeSkillRecord) -> PathBuf {
     let path = PathBuf::from(&record.location);
-    if path.file_name().and_then(|name| name.to_str()) == Some("SKILL.md") {
+    if path.extension().and_then(|extension| extension.to_str()) == Some("md") {
         path
     } else {
         path.join("SKILL.md")
@@ -424,8 +461,8 @@ async fn list_opencode_provided_skills() -> Result<Vec<CliProvidedSkill>> {
     };
 
     let mut command = Command::new(executable);
+    command.args(["api", "--standalone", "skill.list"]);
     command
-        .args(["debug", "skill"])
         .env("NO_COLOR", "1")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -445,8 +482,7 @@ async fn list_opencode_provided_skills() -> Result<Vec<CliProvidedSkill>> {
         ));
     }
 
-    let records: Vec<OpenCodeSkillRecord> = serde_json::from_slice(&output.stdout)
-        .context("OpenCode returned invalid provided Skill data")?;
+    let records = parse_opencode_v2_skill_records(&output.stdout)?;
     let config = crate::opencode_config::read_opencode_config()
         .context("Failed to read OpenCode plugin configuration")?;
     let config_dir = crate::opencode_config::get_opencode_dir();
@@ -457,6 +493,19 @@ async fn list_opencode_provided_skills() -> Result<Vec<CliProvidedSkill>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parses_v2_skill_response() {
+        let output = br##"{"location":{},"data":[{"id":"skill_1","name":"review","description":"Review code","path":"/tmp/review.md","content":"# Review"}]}"##;
+        let records = parse_opencode_v2_skill_records(output).unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].name, "review");
+        assert_eq!(record_directory(&records[0]), "review");
+        assert_eq!(
+            record_skill_file(&records[0]),
+            PathBuf::from("/tmp/review.md")
+        );
+    }
 
     #[test]
     fn parses_codex_system_skill_frontmatter() {
@@ -479,6 +528,23 @@ mod tests {
             package_name_from_spec("@example/opencode-plugin@1.2.3").as_deref(),
             Some("@example/opencode-plugin")
         );
+        assert_eq!(
+            plugin_spec_from_value(
+                &serde_json::json!({"package":"oh-my-opencode-slim@2.2.17","options":{}})
+            ),
+            Some("oh-my-opencode-slim@2.2.17")
+        );
+    }
+
+    #[test]
+    fn finds_native_v2_plugins() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let plugins = opencode_plugins_from_config(
+            &serde_json::json!({"plugins":[{"package":"oh-my-opencode-slim@2.2.17","options":{}}]}),
+            dir.path(),
+        );
+        assert_eq!(plugins.len(), 1);
+        assert_eq!(plugins[0].name, "oh-my-opencode-slim");
     }
 
     #[test]

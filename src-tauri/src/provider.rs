@@ -180,7 +180,7 @@ impl Provider {
             ),
             // OpenCode (OMO) nests credentials under `options` (the SDK options object).
             AppType::OpenCode => {
-                let options = settings.get("options");
+                let options = settings.get("options").or_else(|| settings.get("settings"));
                 (
                     str_at(options.and_then(|o| o.get("baseURL"))),
                     str_at(options.and_then(|o| o.get("apiKey"))),
@@ -858,6 +858,9 @@ pub struct OpenCodeProviderConfig {
     /// 模型定义映射
     #[serde(default)]
     pub models: HashMap<String, OpenCodeModel>,
+
+    #[serde(flatten, default, skip_serializing_if = "HashMap::is_empty")]
+    pub extra: HashMap<String, Value>,
 }
 
 impl Default for OpenCodeProviderConfig {
@@ -867,6 +870,7 @@ impl Default for OpenCodeProviderConfig {
             name: None,
             options: OpenCodeProviderOptions::default(),
             models: HashMap::new(),
+            extra: HashMap::new(),
         }
     }
 }

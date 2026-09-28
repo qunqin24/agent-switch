@@ -92,7 +92,7 @@ pub(super) async fn fetch_upstream_latest_version(
         }
         "opencode" => {
             if let Some(version) =
-                fetch_npm_latest_for_tool(client, "opencode-ai", tool, local_version).await
+                fetch_npm_latest_for_tool(client, "@opencode/cli", tool, local_version).await
             {
                 Some(version)
             } else {

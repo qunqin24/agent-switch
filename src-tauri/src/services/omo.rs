@@ -280,6 +280,11 @@ impl OmoService {
         v: &OmoVariant,
         profile_data: Option<&OmoProfileData>,
     ) -> Result<(), AppError> {
+        if v.category == STANDARD.category {
+            return Err(AppError::Config(
+                "Oh My OpenCode standard does not support OpenCode V2; use OMO Slim instead".into(),
+            ));
+        }
         let merged = Self::build_config(v, profile_data);
         let config_path = Self::config_path(v);
 
@@ -542,6 +547,12 @@ impl OmoService {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn standard_plugin_cannot_be_activated_on_v2() {
+        let error = OmoService::write_profile_config(&STANDARD, None).unwrap_err();
+        assert!(error.to_string().contains("does not support OpenCode V2"));
+    }
 
     #[test]
     fn test_strip_jsonc_comments() {

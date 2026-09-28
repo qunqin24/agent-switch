@@ -31,6 +31,10 @@ fn should_sync_opencode_mcp() -> bool {
     opencode_config::get_opencode_dir().exists()
 }
 
+fn server_enabled(spec: &Value) -> bool {
+    spec.get("disabled") != Some(&Value::Bool(true))
+}
+
 // ============================================================================
 // Format Conversion: Agent Switch → OpenCode
 // ============================================================================
@@ -39,7 +43,7 @@ fn should_sync_opencode_mcp() -> bool {
 ///
 /// Conversion rules:
 /// - `stdio` → `local`, command+args → command array, env → environment
-/// - `sse`/`http` → `remote`, url preserved
+/// - `http` → `remote`, url preserved
 pub fn convert_to_opencode_format(spec: &Value) -> Result<Value, AppError> {
     let obj = spec
         .as_object()
@@ -71,11 +75,14 @@ pub fn convert_to_opencode_format(spec: &Value) -> Result<Value, AppError> {
                     result.insert("environment".into(), env.clone());
                 }
             }
+            if let Some(cwd) = obj.get("cwd") {
+                result.insert("cwd".into(), cwd.clone());
+            }
 
             // Add enabled flag (OpenCode expects this)
             result.insert("enabled".into(), json!(true));
         }
-        "sse" | "http" => {
+        "http" => {
             // Convert to "remote" type
             result.insert("type".into(), json!("remote"));
 
@@ -91,12 +98,21 @@ pub fn convert_to_opencode_format(spec: &Value) -> Result<Value, AppError> {
                     result.insert("headers".into(), headers.clone());
                 }
             }
+            if let Some(oauth) = obj.get("oauth") {
+                result.insert("oauth".into(), oauth.clone());
+            }
 
             // Add enabled flag
             result.insert("enabled".into(), json!(true));
         }
         _ => {
             return Err(AppError::McpValidation(format!("Unknown MCP type: {typ}")));
+        }
+    }
+
+    for key in ["codemode", "timeout", "protocol"] {
+        if let Some(value) = obj.get(key) {
+            result.insert(key.into(), value.clone());
         }
     }
 
@@ -148,10 +164,12 @@ pub fn convert_from_opencode_format(spec: &Value) -> Result<Value, AppError> {
                     result.insert("env".into(), env.clone());
                 }
             }
+            if let Some(cwd) = obj.get("cwd") {
+                result.insert("cwd".into(), cwd.clone());
+            }
         }
         "remote" => {
-            // Convert to "sse" type (default remote protocol)
-            result.insert("type".into(), json!("sse"));
+            result.insert("type".into(), json!("http"));
 
             // Preserve url
             if let Some(url) = obj.get("url") {
@@ -165,11 +183,20 @@ pub fn convert_from_opencode_format(spec: &Value) -> Result<Value, AppError> {
                     result.insert("headers".into(), headers.clone());
                 }
             }
+            if let Some(oauth) = obj.get("oauth") {
+                result.insert("oauth".into(), oauth.clone());
+            }
         }
         _ => {
             return Err(AppError::McpValidation(format!(
                 "Unknown OpenCode MCP type: {typ}"
             )));
+        }
+    }
+
+    for key in ["codemode", "timeout", "protocol"] {
+        if let Some(value) = obj.get(key) {
+            result.insert(key.into(), value.clone());
         }
     }
 
@@ -222,6 +249,7 @@ pub fn import_from_opencode(config: &mut MultiAppConfig) -> Result<usize, AppErr
     let mut errors = Vec::new();
 
     for (id, spec) in mcp_map {
+        let enabled = server_enabled(&spec);
         // Convert from OpenCode format to unified format
         let unified_spec = match convert_from_opencode_format(&spec) {
             Ok(s) => s,
@@ -240,14 +268,14 @@ pub fn import_from_opencode(config: &mut MultiAppConfig) -> Result<usize, AppErr
         }
 
         if let Some(existing) = servers.get_mut(&id) {
-            // Existing server: just enable OpenCode app
-            if !existing.apps.opencode {
-                existing.apps.opencode = true;
+            // Match the connection state recorded in OpenCode.
+            if existing.apps.opencode != enabled {
+                existing.apps.opencode = enabled;
                 changed += 1;
-                log::info!("MCP server '{id}' enabled for OpenCode");
+                log::info!("MCP server '{id}' connection state imported from OpenCode");
             }
         } else {
-            // New server: default to only OpenCode enabled
+            // New server: retain its OpenCode connection state.
             servers.insert(
                 id.clone(),
                 McpServer {
@@ -258,7 +286,7 @@ pub fn import_from_opencode(config: &mut MultiAppConfig) -> Result<usize, AppErr
                         claude: false,
                         codex: false,
                         gemini: false,
-                        opencode: true,
+                        opencode: enabled,
                         hermes: false,
                     },
                     description: None,
@@ -309,9 +337,9 @@ mod tests {
     }
 
     #[test]
-    fn test_convert_sse_to_remote() {
+    fn test_convert_http_to_remote() {
         let spec = json!({
-            "type": "sse",
+            "type": "http",
             "url": "https://example.com/mcp",
             "headers": { "Authorization": "Bearer xxx" }
         });
@@ -321,6 +349,19 @@ mod tests {
         assert_eq!(result["url"], "https://example.com/mcp");
         assert_eq!(result["headers"]["Authorization"], "Bearer xxx");
         assert_eq!(result["enabled"], true);
+    }
+
+    #[test]
+    fn rejects_sse_for_v2() {
+        let spec = json!({"type": "sse", "url": "https://example.com/sse"});
+        assert!(convert_to_opencode_format(&spec).is_err());
+    }
+
+    #[test]
+    fn v2_disabled_server_is_not_enabled_on_import() {
+        assert!(!server_enabled(&json!({"disabled": true})));
+        assert!(server_enabled(&json!({"disabled": false})));
+        assert!(server_enabled(&json!({})));
     }
 
     #[test]
@@ -340,16 +381,24 @@ mod tests {
     }
 
     #[test]
-    fn test_convert_remote_to_sse() {
+    fn test_convert_remote_to_http() {
         let spec = json!({
             "type": "remote",
             "url": "https://example.com/mcp",
-            "headers": { "Authorization": "Bearer xxx" }
+            "headers": { "Authorization": "Bearer xxx" },
+            "oauth": false,
+            "codemode": false,
+            "timeout": {"catalog": 30000},
+            "protocol": "auto"
         });
 
         let result = convert_from_opencode_format(&spec).unwrap();
-        assert_eq!(result["type"], "sse");
+        assert_eq!(result["type"], "http");
         assert_eq!(result["url"], "https://example.com/mcp");
         assert_eq!(result["headers"]["Authorization"], "Bearer xxx");
+        assert_eq!(convert_to_opencode_format(&result).unwrap()["oauth"], false);
+        assert_eq!(result["codemode"], false);
+        assert_eq!(result["timeout"]["catalog"], 30000);
+        assert_eq!(result["protocol"], "auto");
     }
 }

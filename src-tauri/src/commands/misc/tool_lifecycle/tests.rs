@@ -389,7 +389,7 @@ mod anchored_upgrade_windows {
         let cmd = anchored_command_from_paths("opencode", &bin_path, &bin_path);
         let pnpm_full = format!("{}\\pnpm.cmd", sub.to_string_lossy());
         let expected = format!(
-            "{} add -g opencode-ai@latest",
+            "{} add -g @opencode/cli@latest",
             expect_quoted_path(&pnpm_full)
         );
         assert_eq!(cmd.as_deref(), Some(expected.as_str()));
@@ -398,7 +398,7 @@ mod anchored_upgrade_windows {
     #[test]
     fn opencode_windows_static_fallback_skips_official_upgrade() {
         let cmd = static_fallback_command("opencode");
-        assert_eq!(cmd, "npm i -g opencode-ai@latest");
+        assert_eq!(cmd, "npm i -g @opencode/cli@latest");
         assert!(!cmd.contains("opencode upgrade"));
     }
 
@@ -725,8 +725,8 @@ mod windows_helpers {
             wsl_tool_action_shell_command("opencode", ToolLifecycleAction::Install).unwrap();
         assert!(
             opencode.starts_with(
-                "bash -c 'tmp=$(mktemp) && curl -fsSL https://opencode.ai/install "
-            ) && opencode.contains(" || npm i -g opencode-ai@latest"),
+                "bash -c 'tmp=$(mktemp) && curl -fsSL https://opencode.ai/v2/install "
+            ) && opencode.contains(" || npm i -g @opencode/cli@latest"),
             "WSL opencode install should prefer native POSIX installer with npm fallback: {opencode}"
         );
         assert!(!opencode.contains("| bash"));
@@ -835,6 +835,17 @@ mod anchored_upgrade {
             // 这里 real 是给上层 default_install + read 用,填同值即可。
             real: std::path::PathBuf::from(path),
         }
+    }
+
+    #[test]
+    fn opencode_v1_update_is_rejected() {
+        let mut old = inst("/tmp/opencode", true);
+        old.version = Some("1.18.29".into());
+        assert!(
+            reject_unsupported_opencode_version("opencode", std::slice::from_ref(&old)).is_err()
+        );
+        old.version = Some("2.0.18".into());
+        assert!(reject_unsupported_opencode_version("opencode", &[old]).is_ok());
     }
 
     #[test]
@@ -989,7 +1000,7 @@ mod anchored_upgrade {
         );
         assert_eq!(
             cmd.as_deref(),
-            Some("/Users/me/.bun/bin/opencode upgrade || /Users/me/.bun/bin/bun add -g opencode-ai@latest")
+            Some("/Users/me/.bun/bin/opencode upgrade || /Users/me/.bun/bin/bun add -g @opencode/cli@latest")
         );
     }
 
@@ -1018,7 +1029,7 @@ mod anchored_upgrade {
         );
         assert_eq!(
             cmd.as_deref(),
-            Some("'/Users/my name/.bun/bin/opencode' upgrade || '/Users/my name/.bun/bin/bun' add -g opencode-ai@latest")
+            Some("'/Users/my name/.bun/bin/opencode' upgrade || '/Users/my name/.bun/bin/bun' add -g @opencode/cli@latest")
         );
     }
 
@@ -1342,14 +1353,14 @@ mod install_strategy {
 
     #[test]
     fn opencode_install_prefers_native_with_npm_fallback() {
-        // SST 自家 install.sh 与 claude 同形态:bash 脚本、网络下载、装到 ~/.opencode/bin。
+        // OpenCode V2 的安装脚本与 claude 同形态：下载后执行，并保留 npm 兜底。
         let cmd = install_command_for("opencode");
         assert!(
-            cmd.contains("https://opencode.ai/install"),
+            cmd.contains("https://opencode.ai/v2/install"),
             "should include official installer URL: {cmd}"
         );
         assert!(
-            cmd.contains("opencode-ai@latest"),
+            cmd.contains("@opencode/cli@latest"),
             "should keep npm package as fallback: {cmd}"
         );
         assert!(cmd.contains("||"), "should chain fallback: {cmd}");
@@ -1399,7 +1410,7 @@ mod install_strategy {
         assert!(!static_fallback_command("gemini").contains("gemini update"));
         assert_eq!(
             static_fallback_command("opencode"),
-            "opencode upgrade || npm i -g opencode-ai@latest"
+            "opencode upgrade || npm i -g @opencode/cli@latest"
         );
         assert_eq!(
             static_fallback_command("openclaw"),

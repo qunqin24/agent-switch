@@ -5,7 +5,6 @@ use crate::services::OmoService;
 use crate::store::AppState;
 use serde::Serialize;
 use serde_json::Value;
-use std::collections::HashSet;
 use std::process::{Command, Output};
 
 #[cfg(target_os = "windows")]
@@ -26,103 +25,48 @@ pub struct OmoOpenCodeModel {
     pub limit: Option<Value>,
 }
 
-fn update_json_depth(line: &str, depth: &mut i32) {
-    let mut in_string = false;
-    let mut escaped = false;
-    for ch in line.chars() {
-        if in_string {
-            if escaped {
-                escaped = false;
-            } else if ch == '\\' {
-                escaped = true;
-            } else if ch == '"' {
-                in_string = false;
+fn parse_opencode_v2_models(stdout: &str) -> Result<Vec<OmoOpenCodeModel>, String> {
+    let response: Value = serde_json::from_str(stdout)
+        .map_err(|error| format!("OpenCode returned invalid model data: {error}"))?;
+    let data = response
+        .get("data")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "OpenCode returned a model response without data".to_string())?;
+    Ok(data
+        .iter()
+        .filter_map(|model| {
+            if model.get("enabled") == Some(&Value::Bool(false)) {
+                return None;
             }
-            continue;
-        }
-        match ch {
-            '"' => in_string = true,
-            '{' => *depth += 1,
-            '}' => *depth -= 1,
-            _ => {}
-        }
-    }
-}
-
-fn parse_opencode_verbose_models(stdout: &str) -> Vec<OmoOpenCodeModel> {
-    let mut result = Vec::new();
-    let mut seen = HashSet::new();
-    let mut pending_key: Option<String> = None;
-    let mut json_buffer = String::new();
-    let mut json_depth = 0;
-
-    for raw_line in stdout.lines() {
-        let line = raw_line.trim();
-        if json_depth == 0 {
-            if line.starts_with('{') && pending_key.is_some() {
-                json_buffer.clear();
-                json_buffer.push_str(line);
-                update_json_depth(line, &mut json_depth);
-            } else if line.contains('/') && !line.chars().any(char::is_whitespace) {
-                pending_key = Some(line.to_string());
-            }
-        } else {
-            json_buffer.push('\n');
-            json_buffer.push_str(line);
-            update_json_depth(line, &mut json_depth);
-        }
-
-        if json_depth != 0 || json_buffer.is_empty() {
-            continue;
-        }
-        let Some(value) = pending_key.take() else {
-            json_buffer.clear();
-            continue;
-        };
-        let Ok(metadata) = serde_json::from_str::<Value>(&json_buffer) else {
-            json_buffer.clear();
-            continue;
-        };
-        json_buffer.clear();
-
-        let provider_id = metadata
-            .get("providerID")
-            .and_then(Value::as_str)
-            .or_else(|| value.split_once('/').map(|(provider, _)| provider))
-            .unwrap_or_default()
-            .to_string();
-        let model_id = metadata
-            .get("id")
-            .and_then(Value::as_str)
-            .or_else(|| value.split_once('/').map(|(_, model)| model))
-            .unwrap_or_default()
-            .to_string();
-        if provider_id.is_empty() || model_id.is_empty() || !seen.insert(value.clone()) {
-            continue;
-        }
-        let name = metadata
-            .get("name")
-            .and_then(Value::as_str)
-            .unwrap_or(&model_id)
-            .to_string();
-        let variants = metadata
-            .get("variants")
-            .and_then(Value::as_object)
-            .map(|variants| variants.keys().cloned().collect())
-            .unwrap_or_default();
-
-        result.push(OmoOpenCodeModel {
-            value,
-            provider_id,
-            model_id,
-            name,
-            variants,
-            options: metadata.get("options").cloned(),
-            limit: metadata.get("limit").cloned(),
-        });
-    }
-
-    result
+            let provider_id = model.get("providerID")?.as_str()?.to_string();
+            let model_id = model.get("modelID")?.as_str()?.to_string();
+            let name = model
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or(&model_id)
+                .to_string();
+            let variants = model
+                .get("variants")
+                .and_then(Value::as_array)
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(|item| item.get("id").and_then(Value::as_str))
+                        .map(str::to_string)
+                        .collect()
+                })
+                .unwrap_or_default();
+            Some(OmoOpenCodeModel {
+                value: format!("{provider_id}/{model_id}"),
+                provider_id,
+                model_id,
+                name,
+                variants,
+                options: model.get("settings").cloned(),
+                limit: model.get("limit").cloned(),
+            })
+        })
+        .collect())
 }
 
 fn run_opencode_models_command() -> Result<Output, String> {
@@ -135,6 +79,7 @@ fn run_opencode_models_command() -> Result<Output, String> {
     } else {
         ":"
     };
+    let mut last_error = None;
 
     for path in &search_paths {
         let combined_path = format!("{}{}{}", path.display(), separator, current_path);
@@ -142,6 +87,8 @@ fn run_opencode_models_command() -> Result<Output, String> {
             if !executable.exists() {
                 continue;
             }
+
+            let args = ["api", "--standalone", "model.list"];
 
             #[cfg(target_os = "windows")]
             let output = {
@@ -153,7 +100,7 @@ fn run_opencode_models_command() -> Result<Output, String> {
                     Command::new("cmd")
                         .args(["/D", "/S", "/C"])
                         .arg(format!(
-                            "call \"{}\" models --pure --verbose",
+                            "call \"{}\" api --standalone model.list",
                             executable.display()
                         ))
                         .env("PATH", &combined_path)
@@ -161,7 +108,7 @@ fn run_opencode_models_command() -> Result<Output, String> {
                         .output()
                 } else {
                     Command::new(&executable)
-                        .args(["models", "--pure", "--verbose"])
+                        .args(args)
                         .env("PATH", &combined_path)
                         .creation_flags(CREATE_NO_WINDOW)
                         .output()
@@ -170,19 +117,24 @@ fn run_opencode_models_command() -> Result<Output, String> {
 
             #[cfg(not(target_os = "windows"))]
             let output = Command::new(&executable)
-                .args(["models", "--pure", "--verbose"])
+                .args(args)
                 .env("PATH", &combined_path)
                 .output();
 
-            if let Ok(output) = output {
-                if output.status.success() {
-                    return Ok(output);
+            match output {
+                Ok(output) if output.status.success() => return Ok(output),
+                Ok(output) => {
+                    last_error = Some(String::from_utf8_lossy(&output.stderr).trim().to_string());
                 }
+                Err(error) => last_error = Some(error.to_string()),
             }
         }
     }
 
-    Err("OpenCode CLI is unavailable or failed to list models".to_string())
+    Err(last_error
+        .filter(|error| !error.is_empty())
+        .map(|error| format!("OpenCode V2 failed to list models: {error}"))
+        .unwrap_or_else(|| "OpenCode V2 CLI is unavailable".to_string()))
 }
 
 #[tauri::command]
@@ -190,7 +142,7 @@ pub async fn list_opencode_models_for_omo() -> Result<Vec<OmoOpenCodeModel>, Str
     tauri::async_runtime::spawn_blocking(|| {
         let output = run_opencode_models_command()?;
         let stdout = String::from_utf8_lossy(&output.stdout);
-        let models = parse_opencode_verbose_models(&stdout);
+        let models = parse_opencode_v2_models(&stdout)?;
         if models.is_empty() {
             return Err("OpenCode returned an empty model catalog".to_string());
         }
@@ -207,39 +159,17 @@ pub async fn read_omo_local_file() -> Result<OmoLocalFileData, String> {
 
 #[cfg(test)]
 mod model_catalog_tests {
-    use super::parse_opencode_verbose_models;
+    use super::parse_opencode_v2_models;
 
     #[test]
-    fn parses_verbose_model_catalog_with_variants_and_limits() {
-        let output = r#"
-openai/gpt-5.6
-{
-  "id": "gpt-5.6",
-  "providerID": "openai",
-  "name": "GPT-5.6",
-  "options": {},
-  "limit": { "context": 1050000, "output": 128000 },
-  "variants": {
-    "low": { "reasoningEffort": "low" },
-    "high": { "reasoningEffort": "high" }
-  }
-}
-zhipuai-coding-plan/glm-5.2
-{
-  "id": "glm-5.2",
-  "providerID": "zhipuai-coding-plan",
-  "name": "GLM-5.2",
-  "limit": { "context": 1000000 },
-  "variants": { "high": {}, "max": {} }
-}
-"#;
-
-        let models = parse_opencode_verbose_models(output);
-        assert_eq!(models.len(), 2);
+    fn parses_v2_model_catalog_with_variants_and_limits() {
+        let output = r#"{"location":{},"data":[{"id":"openai/gpt-5.6","providerID":"openai","modelID":"gpt-5.6","name":"GPT-5.6","enabled":true,"variants":[{"id":"low","settings":{}},{"id":"high","settings":{}}],"settings":{"temperature":1},"limit":{"context":1000}},{"providerID":"openai","modelID":"disabled","enabled":false}]}"#;
+        let models = parse_opencode_v2_models(output).unwrap();
+        assert_eq!(models.len(), 1);
         assert_eq!(models[0].value, "openai/gpt-5.6");
-        assert_eq!(models[0].variants, vec!["low", "high"]);
-        assert_eq!(models[0].limit.as_ref().unwrap()["context"], 1050000);
-        assert_eq!(models[1].value, "zhipuai-coding-plan/glm-5.2");
+        assert_eq!(models[0].variants, ["low", "high"]);
+        assert_eq!(models[0].options.as_ref().unwrap()["temperature"], 1);
+        assert_eq!(models[0].limit.as_ref().unwrap()["context"], 1000);
     }
 }
 

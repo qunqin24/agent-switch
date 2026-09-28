@@ -997,7 +997,7 @@ base_url = "http://localhost:8080"
     #[serial]
     fn update_current_omo_variant_rewrites_config_from_saved_provider() {
         with_test_home(|state, home| {
-            for category in ["omo", "omo-slim"] {
+            for category in ["omo-slim"] {
                 let provider = opencode_omo_provider(&format!("{category}-current"), category);
                 state
                     .db
@@ -1705,6 +1705,12 @@ impl ProviderService {
                 _ => None,
             };
             if let Some((enable, disable)) = omo_pair {
+                if enable.category == crate::services::omo::STANDARD.category {
+                    return Err(AppError::Config(
+                        "Oh My OpenCode standard does not support OpenCode V2; use OMO Slim instead"
+                            .into(),
+                    ));
+                }
                 state
                     .db
                     .set_omo_provider_current(app_type.as_str(), id, enable.category)?;
@@ -2131,6 +2137,10 @@ impl ProviderService {
                 options.remove("apiKey");
                 options.remove("baseURL");
             }
+            if let Some(settings) = obj.get_mut("settings").and_then(|v| v.as_object_mut()) {
+                settings.remove("apiKey");
+                settings.remove("baseURL");
+            }
             // Keep npm and models as they might be common
         }
 
@@ -2523,10 +2533,11 @@ impl ProviderService {
                 Ok((api_key, base_url))
             }
             AppType::OpenCode => {
-                // OpenCode uses options.apiKey and options.baseURL
+                // Stored providers use V1 options; native V2 providers use settings.
                 let options = provider
                     .settings_config
                     .get("options")
+                    .or_else(|| provider.settings_config.get("settings"))
                     .and_then(|v| v.as_object())
                     .ok_or_else(|| {
                         AppError::localized(

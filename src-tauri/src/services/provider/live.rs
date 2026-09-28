@@ -808,13 +808,17 @@ pub(crate) fn write_live_snapshot(app_type: &AppType, provider: &Provider) -> Re
             // Defensive check: if settings_config is a full config structure, extract provider fragment
             let config_to_write = if let Some(obj) = provider.settings_config.as_object() {
                 // Detect full config structure (has $schema or top-level provider field)
-                if obj.contains_key("$schema") || obj.contains_key("provider") {
+                if obj.contains_key("$schema")
+                    || obj.contains_key("provider")
+                    || obj.contains_key("providers")
+                {
                     log::warn!(
                         "OpenCode provider '{}' has full config structure in settings_config, attempting to extract fragment",
                         provider.id
                     );
                     // Try to extract from provider.{id}
-                    obj.get("provider")
+                    obj.get("providers")
+                        .or_else(|| obj.get("provider"))
                         .and_then(|p| p.get(&provider.id))
                         .cloned()
                         .unwrap_or_else(|| provider.settings_config.clone())
@@ -843,6 +847,8 @@ pub(crate) fn write_live_snapshot(app_type: &AppType, provider: &Provider) -> Re
                     // Only write if config looks like a valid provider fragment
                     if config_to_write.get("npm").is_some()
                         || config_to_write.get("options").is_some()
+                        || config_to_write.get("package").is_some()
+                        || config_to_write.get("settings").is_some()
                     {
                         opencode_config::set_provider(&provider.id, config_to_write)?;
                         log::info!(
@@ -851,7 +857,7 @@ pub(crate) fn write_live_snapshot(app_type: &AppType, provider: &Provider) -> Re
                         );
                     } else {
                         return Err(AppError::Message(format!(
-                            "OpenCode provider '{}' has invalid config structure for live config (must contain 'npm' or 'options')",
+                            "OpenCode provider '{}' has invalid config structure for live config",
                             provider.id
                         )));
                     }

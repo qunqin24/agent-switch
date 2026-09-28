@@ -30,7 +30,7 @@ pub(crate) fn get_opencode_data_dir() -> PathBuf {
 }
 
 fn get_opencode_db_path() -> PathBuf {
-    get_opencode_base_dir().join("opencode.db")
+    crate::opencode_config::get_opencode_db_path()
 }
 
 /// Scan sessions from both the legacy JSON files and the newer SQLite database,
@@ -149,7 +149,7 @@ fn scan_sessions_sqlite() -> Vec<SessionMeta> {
             created_at: Some(created),
             last_active_at: Some(updated),
             source_path: Some(format!("sqlite:{db_display}:{session_id}")),
-            resume_command: Some(format!("opencode session resume {session_id}")),
+            resume_command: Some(crate::opencode_config::resume_command(&session_id)),
         });
     }
     sessions
@@ -398,6 +398,22 @@ pub fn delete_session_sqlite(session_id: &str, source: &str) -> Result<bool, Str
         return Err("SQLite path does not match expected OpenCode database".to_string());
     }
 
+    // V2 owns session cleanup (including child sessions and auxiliary tables).
+    // Deleting only rows from the SQLite tables leaves its service state inconsistent.
+    if !cfg!(test) {
+        let output = std::process::Command::new(crate::opencode_config::opencode_executable())
+            .args(["session", "delete", session_id])
+            .output()
+            .map_err(|error| format!("Failed to start OpenCode session deletion: {error}"))?;
+        if !output.status.success() {
+            return Err(format!(
+                "OpenCode session deletion failed: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            ));
+        }
+        return Ok(true);
+    }
+
     let conn =
         Connection::open(&db_path).map_err(|e| format!("Failed to open OpenCode database: {e}"))?;
 
@@ -473,7 +489,7 @@ fn parse_session(storage: &Path, path: &Path) -> Option<SessionMeta> {
         created_at,
         last_active_at: updated_at.or(created_at),
         source_path: Some(source_path),
-        resume_command: Some(format!("opencode session resume {session_id}")),
+        resume_command: Some(crate::opencode_config::resume_command(&session_id)),
     })
 }
 

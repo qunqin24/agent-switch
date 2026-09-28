@@ -7,7 +7,7 @@ pub(super) fn npm_package_for(tool: &str) -> Option<&'static str> {
         "claude" => Some("@anthropic-ai/claude-code"),
         "codex" => Some("@openai/codex"),
         "gemini" => Some("@google/gemini-cli"),
-        "opencode" => Some("opencode-ai"),
+        "opencode" => Some("@opencode/cli"),
         "openclaw" => Some("openclaw"),
         _ => None,
     }
@@ -538,6 +538,23 @@ pub(super) fn installs_anchored_command(
         // `codex update`——与该来源健康升级同一条路径（系统级 codex 的官方自升级）。
     }
     anchored_command_from_paths(tool, &inst.path, &real)
+}
+
+pub(super) fn reject_unsupported_opencode_version(
+    tool: &str,
+    installs: &[ToolInstallation],
+) -> Result<(), String> {
+    if tool == "opencode"
+        && default_install(installs)
+            .and_then(|install| install.version.as_deref())
+            .is_some_and(|version| !version.starts_with("2."))
+    {
+        return Err(
+            "OpenCode V1 is unsupported. Remove the V1 installation and install OpenCode V2."
+                .into(),
+        );
+    }
+    Ok(())
 }
 
 /// 静态命令（= 平台可安全静默执行的官方 CLI 自升级 || `npm i -g <pkg>@latest` /

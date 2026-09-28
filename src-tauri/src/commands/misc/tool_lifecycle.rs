@@ -363,7 +363,7 @@ pub(super) fn tool_display_name(tool: &str) -> &'static str {
 pub(super) const CLAUDE_INSTALL_UNIX: &str =
     "bash -c 'tmp=$(mktemp) && curl -fsSL https://claude.ai/install.sh -o $tmp && bash $tmp; status=$?; rm -f $tmp; exit $status'";
 pub(super) const OPENCODE_INSTALL_UNIX: &str =
-    "bash -c 'tmp=$(mktemp) && curl -fsSL https://opencode.ai/install -o $tmp && bash $tmp; status=$?; rm -f $tmp; exit $status'";
+    "bash -c 'tmp=$(mktemp) && curl -fsSL https://opencode.ai/v2/install -o $tmp && bash $tmp; status=$?; rm -f $tmp; exit $status'";
 pub(super) const GROK_INSTALL_UNIX: &str =
     "bash -c 'tmp=$(mktemp) && curl -fsSL https://x.ai/cli/install.sh -o $tmp && bash $tmp; status=$?; rm -f $tmp; exit $status'";
 pub(super) const GROK_UPDATE_UNIX: &str =
@@ -435,7 +435,7 @@ pub(super) fn npm_install_command_for(tool: &str) -> Option<&'static str> {
         "claude" => Some("npm i -g @anthropic-ai/claude-code@latest"),
         "codex" => Some("npm i -g @openai/codex@latest"),
         "gemini" => Some("npm i -g @google/gemini-cli@latest"),
-        "opencode" => Some("npm i -g opencode-ai@latest"),
+        "opencode" => Some("npm i -g @opencode/cli@latest"),
         "openclaw" => Some("npm i -g openclaw@latest"),
         _ => None,
     }
@@ -577,6 +577,15 @@ pub(super) fn build_tool_action_line(
         //    后者在 Windows target 给 hermes 返回 PowerShell installer,且 Windows batch
         //    语义也不适合跨 wsl.exe;这里统一替换为 POSIX 版安装/更新命令。
         if let Some(distro) = wsl_distro_for_tool(tool) {
+            if tool == "opencode" && matches!(action, ToolLifecycleAction::Update) {
+                if let ShellProbe::Found(version) =
+                    try_get_version_wsl(tool, &distro, wsl_shell, wsl_shell_flag)
+                {
+                    if !version.starts_with("2.") {
+                        return Err("OpenCode V1 is unsupported. Remove the V1 installation and install OpenCode V2.".into());
+                    }
+                }
+            }
             let command = wsl_tool_action_shell_command(tool, action)
                 .ok_or_else(|| format!("Unsupported tool action target: {tool}"))?;
             return build_wsl_tool_action_line(&distro, &command, wsl_shell, wsl_shell_flag);
@@ -589,6 +598,7 @@ pub(super) fn build_tool_action_line(
         let command = match action {
             ToolLifecycleAction::Update => {
                 let installs = enumerate_tool_installations(tool);
+                reject_unsupported_opencode_version(tool, &installs)?;
                 installs_anchored_command(tool, &installs)
                     .unwrap_or_else(|| static_fallback_command(tool))
             }
@@ -616,6 +626,7 @@ pub(super) fn build_tool_action_line(
         let command = match action {
             ToolLifecycleAction::Update => {
                 let installs = enumerate_tool_installations(tool);
+                reject_unsupported_opencode_version(tool, &installs)?;
                 installs_anchored_command(tool, &installs)
                     .unwrap_or_else(|| static_fallback_command(tool))
             }
