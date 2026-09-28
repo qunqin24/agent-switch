@@ -627,6 +627,7 @@ export interface OpenCodeMcpServerSpec {
   headers?: Record<string, string>;
   // 通用字段
   enabled?: boolean;
+  disabled?: boolean; // OpenCode V2 原生配置
 }
 
 // ============================================================================

@@ -95,8 +95,6 @@ const KNOWN_FIELDS = new Set([
   "mode",
   "model",
   "variant",
-  "temperature",
-  "top_p",
   "steps",
   "hidden",
   "disable",
@@ -106,13 +104,12 @@ const KNOWN_FIELDS = new Set([
 
 interface AgentDraft {
   id: string;
+  nativeV2: boolean;
   originalId?: string;
   description: string;
   mode: AgentMode;
   model: string;
   variant: string;
-  temperature: string;
-  topP: string;
   steps: string;
   hidden: boolean;
   disable: boolean;
@@ -125,12 +122,11 @@ interface AgentDraft {
 
 const emptyDraft = (): AgentDraft => ({
   id: "",
+  nativeV2: true,
   description: "",
   mode: "subagent",
   model: "",
   variant: "",
-  temperature: "",
-  topP: "",
   steps: "",
   hidden: false,
   disable: false,
@@ -176,6 +172,7 @@ const toDraft = (agent: OpenCodeAgentDocument): AgentDraft => {
   const mode = frontmatter.mode;
   return {
     id: agent.id,
+    nativeV2: agent.nativeV2 === true,
     originalId: agent.id,
     description:
       typeof frontmatter.description === "string"
@@ -187,12 +184,6 @@ const toDraft = (agent: OpenCodeAgentDocument): AgentDraft => {
         : "all",
     model: typeof frontmatter.model === "string" ? frontmatter.model : "",
     variant: typeof frontmatter.variant === "string" ? frontmatter.variant : "",
-    temperature:
-      typeof frontmatter.temperature === "number"
-        ? String(frontmatter.temperature)
-        : "",
-    topP:
-      typeof frontmatter.top_p === "number" ? String(frontmatter.top_p) : "",
     steps:
       typeof frontmatter.steps === "number" ? String(frontmatter.steps) : "",
     hidden: frontmatter.hidden === true,
@@ -226,11 +217,7 @@ const buildDocument = (
   };
   if (draft.model) frontmatter.model = draft.model;
   if (draft.variant) frontmatter.variant = draft.variant;
-  const temperature = optionalNumber(draft.temperature);
-  const topP = optionalNumber(draft.topP);
   const steps = optionalNumber(draft.steps);
-  if (temperature !== undefined) frontmatter.temperature = temperature;
-  if (topP !== undefined) frontmatter.top_p = topP;
   if (steps !== undefined) frontmatter.steps = steps;
   if (draft.hidden) frontmatter.hidden = true;
   if (draft.disable) frontmatter.disable = true;
@@ -240,6 +227,7 @@ const buildDocument = (
 
   return {
     id: draft.id.trim(),
+    nativeV2: draft.nativeV2,
     scope,
     filePath: "",
     frontmatter,
@@ -250,12 +238,11 @@ const buildDocument = (
 const draftFingerprint = (draft: AgentDraft) =>
   JSON.stringify({
     id: draft.id,
+    nativeV2: draft.nativeV2,
     description: draft.description,
     mode: draft.mode,
     model: draft.model,
     variant: draft.variant,
-    temperature: draft.temperature,
-    topP: draft.topP,
     steps: draft.steps,
     hidden: draft.hidden,
     disable: draft.disable,
@@ -1261,35 +1248,7 @@ export function AgentsPanel({}: { onOpenChange: (open: boolean) => void }) {
                           </FieldBlock>
                         </div>
 
-                        <div className="grid grid-cols-4 gap-3">
-                          <FieldBlock label={t("agents.form.temperature")}>
-                            <Input
-                              type="number"
-                              min="0"
-                              max="2"
-                              step="0.1"
-                              value={draft.temperature}
-                              onChange={(event) =>
-                                updateDraft("temperature", event.target.value)
-                              }
-                              placeholder="0.1"
-                              className="h-9"
-                            />
-                          </FieldBlock>
-                          <FieldBlock label={t("agents.form.topP")}>
-                            <Input
-                              type="number"
-                              min="0"
-                              max="1"
-                              step="0.1"
-                              value={draft.topP}
-                              onChange={(event) =>
-                                updateDraft("topP", event.target.value)
-                              }
-                              placeholder="1"
-                              className="h-9"
-                            />
-                          </FieldBlock>
+                        <div className="grid grid-cols-2 gap-3">
                           <FieldBlock label={t("agents.form.steps")}>
                             <Input
                               type="number"

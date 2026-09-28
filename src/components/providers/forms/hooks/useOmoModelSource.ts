@@ -27,7 +27,7 @@ interface OmoModelBuild {
   usedFallbackSource: boolean;
 }
 
-const OMO_MODEL_CATALOG_CACHE_KEY = "agentswitch:omo-model-catalog:v1";
+const OMO_MODEL_CATALOG_CACHE_KEY = "agentswitch:omo-model-catalog:v2";
 
 interface OmoModelCatalogCache {
   version: 1;

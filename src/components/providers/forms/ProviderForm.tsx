@@ -677,10 +677,12 @@ function ProviderFormFull({
         preset,
       }));
     } else if (appId === "opencode") {
-      return opencodeProviderPresets.map<PresetEntry>((preset, index) => ({
-        id: `opencode-${index}`,
-        preset,
-      }));
+      return opencodeProviderPresets
+        .filter((preset) => preset.category !== "omo")
+        .map<PresetEntry>((preset, index) => ({
+          id: `opencode-${index}`,
+          preset,
+        }));
     } else if (appId === "openclaw") {
       return openclawProviderPresets.map<PresetEntry>((preset, index) => ({
         id: `openclaw-${index}`,

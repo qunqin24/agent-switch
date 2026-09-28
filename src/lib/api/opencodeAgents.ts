@@ -11,6 +11,7 @@ export interface OpenCodeAgentDocument {
   hasPromptOverride?: boolean;
   lastModified?: number | null;
   builtIn?: boolean;
+  nativeV2?: boolean;
   defaultFrontmatter?: Record<string, unknown> | null;
   managedBy?: "omo-slim" | null;
 }

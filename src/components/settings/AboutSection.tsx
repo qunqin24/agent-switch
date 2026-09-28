@@ -138,7 +138,7 @@ npm i -g @openai/codex@latest
 # Gemini CLI
 npm i -g @google/gemini-cli@latest
 # OpenCode
-${posixScriptInstallCommand("https://opencode.ai/install")} || npm i -g opencode-ai@latest
+${posixScriptInstallCommand("https://opencode.ai/v2/install")} || npm i -g @opencode/cli@latest
 # OpenClaw
 npm i -g openclaw@latest
 # Hermes
@@ -153,7 +153,7 @@ npm i -g @openai/codex@latest
 # Gemini CLI
 npm i -g @google/gemini-cli@latest
 # OpenCode
-npm i -g opencode-ai@latest
+npm i -g @opencode/cli@latest
 # OpenClaw
 npm i -g openclaw@latest
 # Hermes
@@ -1029,8 +1029,12 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
             const usesHomebrewCaskChannel =
               tool?.latest_version_source === "homebrew_cask";
             const installedButBroken = Boolean(tool?.installed_but_broken);
+            const unsupportedOpenCode =
+              toolName === "opencode" &&
+              typeof tool?.version === "string" &&
+              !tool.version.startsWith("2.");
             const action: ToolLifecycleAction | null =
-              isToolVersionLoading || installedButBroken
+              isToolVersionLoading || installedButBroken || unsupportedOpenCode
                 ? null
                 : !tool?.version
                   ? "install"
@@ -1178,6 +1182,10 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
                     {isToolVersionLoading ? (
                       <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium">
                         {t("common.loading")}
+                      </span>
+                    ) : unsupportedOpenCode ? (
+                      <span className="rounded-full border border-yellow-500/20 bg-yellow-500/10 px-2 py-0.5 text-[10px] text-yellow-600 dark:text-yellow-400 font-medium">
+                        {t("settings.opencodeV2Required")}
                       </span>
                     ) : tool?.version ? (
                       isOutdated ? (

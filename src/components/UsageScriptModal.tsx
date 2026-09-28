@@ -263,7 +263,7 @@ const UsageScriptModal: React.FC<UsageScriptModalProps> = ({
           };
         } else if (appId === "opencode") {
           // OpenCode (OMO): 凭据嵌在 options.{baseURL, apiKey}（SDK options 对象）
-          const options = (config as any).options || {};
+          const options = (config as any).options || (config as any).settings || {};
           return {
             apiKey: options.apiKey,
             baseUrl: options.baseURL,
